@@ -45,21 +45,6 @@ class ChatDetailPage extends HookConsumerWidget {
       return null;
     }, []);
 
-    // Scroll to bottom on new messages
-    useEffect(() {
-      // Small delay to allow layout to update
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (scrollController.hasClients) {
-          scrollController.animateTo(
-            scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-      return null;
-    }, [messages.value.length]);
-
     // Fetch history if needed
     useEffect(() {
       if (existingConversation == null) {
@@ -244,10 +229,11 @@ class ChatDetailPage extends HookConsumerWidget {
           Expanded(
             child: ListView.builder(
               controller: scrollController,
+              reverse: true,
               padding: const EdgeInsets.all(16),
               itemCount: messages.value.length + (remainingQuota.value == 0 ? 1 : 0),
               itemBuilder: (context, index) {
-                if (index == messages.value.length) {
+                if (remainingQuota.value == 0 && index == 0) {
                   return Container(
                     margin: const EdgeInsets.symmetric(vertical: 16),
                     padding: const EdgeInsets.all(12),
@@ -269,7 +255,9 @@ class ChatDetailPage extends HookConsumerWidget {
                     ),
                   );
                 }
-                final msg = messages.value[index];
+                
+                final listIndex = remainingQuota.value == 0 ? index - 1 : index;
+                final msg = messages.value[messages.value.length - 1 - listIndex];
                 final isUser = msg.role == 'user';
                 return Align(
                   alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,

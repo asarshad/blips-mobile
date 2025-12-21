@@ -13,6 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:blips_mobile/features/feed/providers/video_player_provider.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 const _videoFallbackImage =
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800';
@@ -139,7 +141,7 @@ class _NavBarIcon extends StatelessWidget {
   }
 }
 
-class _FeedTab<T extends FeedEntry> extends HookWidget {
+class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   const _FeedTab({
     required this.feed,
     required this.builder,
@@ -153,8 +155,25 @@ class _FeedTab<T extends FeedEntry> extends HookWidget {
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
+    final videoManager = ref.watch(videoPlayerManagerProvider);
+
+    useEffect(() {
+      if (feed.hasValue && feed.value!.isNotEmpty && T == VideoFeedEntry) {
+        final entries = feed.value!;
+        // Play first
+        final firstEntry = entries[0] as VideoFeedEntry;
+        videoManager.play(firstEntry.link);
+        
+        // Preload second
+        if (entries.length > 1) {
+          final secondEntry = entries[1] as VideoFeedEntry;
+          videoManager.initController(secondEntry.link);
+        }
+      }
+      return null;
+    }, [feed.hasValue]);
 
     return SafeArea(
       bottom: false,
@@ -174,6 +193,40 @@ class _FeedTab<T extends FeedEntry> extends HookWidget {
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
+            onPageChanged: (index) {
+              // Only handle preloading for videos
+              if (T == VideoFeedEntry) {
+                // 1. Play current
+                final currentEntry = entries[index] as VideoFeedEntry;
+                videoManager.play(currentEntry.link);
+
+                // 2. Pause previous
+                if (index > 0) {
+                  final prevEntry = entries[index - 1] as VideoFeedEntry;
+                  videoManager.pause(prevEntry.link);
+                }
+                if (index < entries.length - 1) {
+                  final nextEntry = entries[index + 1] as VideoFeedEntry;
+                  videoManager.pause(nextEntry.link);
+                }
+
+                // 3. Preload next 2
+                if (index + 1 < entries.length) {
+                  final nextEntry = entries[index + 1] as VideoFeedEntry;
+                  videoManager.initController(nextEntry.link);
+                }
+                if (index + 2 < entries.length) {
+                  final nextNextEntry = entries[index + 2] as VideoFeedEntry;
+                  videoManager.initController(nextNextEntry.link);
+                }
+
+                // 4. Dispose old (keep previous one for smooth back swipe)
+                if (index > 1) {
+                  final oldEntry = entries[index - 2] as VideoFeedEntry;
+                  videoManager.disposeController(oldEntry.link);
+                }
+              }
+            },
             itemCount: entries.length,
             itemBuilder: (context, index) => SizedBox.expand(
               child: builder(entries[index]),
@@ -425,56 +478,93 @@ class _FloatingChatBubbles extends StatelessWidget {
   }
 }
 
-class _VideoCard extends HookWidget {
+class _VideoCard extends HookConsumerWidget {
   const _VideoCard({required this.entry});
 
   final VideoFeedEntry entry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final screenshotController = useMemoized(() => ScreenshotController());
     final showBubbles = useState(false);
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
     final dateLabel =
         DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
+    final videoManager = ref.watch(videoPlayerManagerProvider);
+    final controller = videoManager.getController(entry.link);
+    final isInitialized = videoManager.isInitialized(entry.link);
+    final isPlayerReady = useState(false);
+
+    // Trigger init if not ready (fallback for first item or jumps)
+    useEffect(() {
+      if (controller == null) {
+        videoManager.initController(entry.link);
+      }
+      return null;
+    }, [entry.link]);
+
     Widget buildFrame({bool showActions = true}) {
       return Stack(
         children: [
           _FeedCardFrame(
             media: Stack(
-              fit: StackFit.expand,
+              alignment: Alignment.center,
               children: [
-                Image.network(
-                  preview,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey.shade900,
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.broken_image_outlined,
-                        size: 32, color: Colors.white54),
-                  ),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.transparent, Colors.black54],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+                // Always show thumbnail as background/placeholder
+                Positioned.fill(
+                  child: Image.network(
+                    preview,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey.shade900,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image_outlined,
+                          size: 32, color: Colors.white54),
                     ),
                   ),
                 ),
-                const Align(
-                  child: CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.white24,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      size: 42,
-                      color: Colors.white,
+                
+                // Show video when ready
+                if (controller != null)
+                  Positioned.fill(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: 1600,
+                        height: 900,
+                        child: YoutubePlayer(
+                          controller: controller,
+                          showVideoProgressIndicator: false,
+                          onReady: () {
+                            isPlayerReady.value = true;
+                            if (videoManager.shouldPlay(entry.link)) {
+                              controller.play();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Gradient overlay
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.transparent, Colors.black54],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
                     ),
                   ),
                 ),
+
+                // Loading indicator
+                if (!isPlayerReady.value)
+                  const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
               ],
             ),
             category: entry.category,
@@ -490,9 +580,19 @@ class _VideoCard extends HookWidget {
                       showBubbles.value = false;
                       return;
                     }
-                    final uri = Uri.parse(entry.link);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
+                    
+                    if (controller != null) {
+                      if (controller.value.isPlaying) {
+                        videoManager.pause(entry.link);
+                      } else {
+                        videoManager.play(entry.link);
+                      }
+                    } else {
+                      // Fallback to opening URL if video failed
+                      final uri = Uri.parse(entry.link);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      }
                     }
                   }
                 : null,
@@ -545,6 +645,67 @@ class _VideoCard extends HookWidget {
     }
 
     return buildFrame();
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black45,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white70),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleActionButton extends StatelessWidget {
+  const _CircleActionButton({
+    required this.icon,
+    required this.onTap,
+    this.color = Colors.black45,
+    this.iconColor = Colors.white,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+    );
   }
 }
 
