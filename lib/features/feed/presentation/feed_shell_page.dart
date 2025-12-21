@@ -504,6 +504,18 @@ class _VideoCard extends HookConsumerWidget {
       return null;
     }, [entry.link]);
 
+    // Sync play state
+    useEffect(() {
+      if (controller != null && isPlayerReady.value) {
+        if (videoManager.shouldPlay(entry.link)) {
+          controller.play();
+        } else {
+          controller.pause();
+        }
+      }
+      return null;
+    }, [videoManager.shouldPlay(entry.link), isPlayerReady.value, controller]);
+
     Widget buildFrame({bool showActions = true}) {
       return Stack(
         children: [

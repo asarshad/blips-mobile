@@ -67,12 +67,12 @@ class VideoPlayerManager extends ChangeNotifier {
   }
 
   void play(String url) {
+    _autoPlayUrls.add(url);
     final controller = _controllers[url];
     if (controller != null) {
       controller.play();
-    } else {
-      _autoPlayUrls.add(url);
     }
+    Future.microtask(() => notifyListeners());
   }
 
   void pause(String url) {
@@ -81,6 +81,7 @@ class VideoPlayerManager extends ChangeNotifier {
     if (controller != null) {
       controller.pause();
     }
+    Future.microtask(() => notifyListeners());
   }
 
   void disposeController(String url) {
