@@ -9,6 +9,7 @@ class VideoPlayerManager extends ChangeNotifier {
   final Map<String, bool> _isInitialized = {};
   final Set<String> _autoPlayUrls = {};
   final Set<String> _pendingUrls = {};
+  final Set<String> _markedForDisposal = {};
 
   bool isInitialized(String url) => _isInitialized[url] ?? false;
   bool shouldPlay(String url) => _autoPlayUrls.contains(url);
@@ -16,6 +17,9 @@ class VideoPlayerManager extends ChangeNotifier {
   YoutubePlayerController? getController(String url) => _controllers[url];
 
   Future<YoutubePlayerController?> initController(String url) async {
+    // If we are requesting it, unmark from disposal
+    _markedForDisposal.remove(url);
+
     if (_controllers.containsKey(url)) {
       return _controllers[url];
     }
@@ -42,15 +46,17 @@ class VideoPlayerManager extends ChangeNotifier {
         ),
       );
 
+      // Check if it was marked for disposal while we were creating it
+      if (_markedForDisposal.contains(url)) {
+        controller.dispose();
+        return null;
+      }
+
       _controllers[url] = controller;
       _isInitialized[url] = true;
       
       if (_autoPlayUrls.contains(url)) {
         controller.play();
-      } else {
-        // Preload/Cue the video
-        // Note: The player might not actually load until attached to a widget
-        // But we prepare the controller.
       }
 
       // Schedule notification to avoid build-phase updates
@@ -85,6 +91,7 @@ class VideoPlayerManager extends ChangeNotifier {
   }
 
   void disposeController(String url) {
+    _markedForDisposal.add(url);
     _autoPlayUrls.remove(url);
     final controller = _controllers[url];
     if (controller != null) {

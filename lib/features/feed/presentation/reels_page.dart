@@ -26,6 +26,8 @@ class ReelsPage extends HookConsumerWidget {
     useEffect(() {
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
+        // Init first item
+        videoManager.initController(entries[0].link);
         // Preload second
         if (entries.length > 1) {
           videoManager.initController(entries[1].link);
@@ -53,7 +55,10 @@ class ReelsPage extends HookConsumerWidget {
             onPageChanged: (index) {
               currentIndex.value = index;
 
-              // 1. Preload next 2
+              // 1. Ensure current is initialized
+              videoManager.initController(entries[index].link);
+
+              // 2. Preload next 2
               if (index + 1 < entries.length) {
                 videoManager.initController(entries[index + 1].link);
               }
@@ -61,7 +66,7 @@ class ReelsPage extends HookConsumerWidget {
                 videoManager.initController(entries[index + 2].link);
               }
 
-              // 2. Dispose old
+              // 3. Dispose old
               if (index > 1) {
                 videoManager.disposeController(entries[index - 2].link);
               }
@@ -119,14 +124,6 @@ class _ReelItem extends HookConsumerWidget {
     }
 
     final isPlayerReady = useState(false);
-
-    // Trigger init if not ready
-    useEffect(() {
-      if (controller == null) {
-        videoManager.initController(entry.link);
-      }
-      return null;
-    }, [entry.link]);
 
     // Sync play state
     useEffect(() {

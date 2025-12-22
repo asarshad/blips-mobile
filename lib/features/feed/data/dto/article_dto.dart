@@ -98,10 +98,7 @@ class ArticleTagDto {
 extension ArticleDtoX on ArticleDto {
   /// Converts the DTO to an [ArticleFeedEntry] instance.
   ArticleFeedEntry toDomain() {
-    var summaryText = (summary ?? '').trim();
-    if (summaryText == 'Summary unavailable.' || summaryText == 'Summary unavailable at the moment.') {
-      summaryText = '';
-    }
+    final summaryText = (summary ?? '').trim();
     final category = tags.isNotEmpty ? tags.first.name : 'Technology';
     return ArticleFeedEntry(
       id: id,

@@ -824,7 +824,7 @@ class _FeedCardFrame extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Flexible(
+                        Expanded(
                           child: Text(
                             source,
                             style: TextStyle(
@@ -835,7 +835,6 @@ class _FeedCardFrame extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Spacer(),
                         if (showActions) ...[
                           InkWell(
                             onTap: onOpenLink,
