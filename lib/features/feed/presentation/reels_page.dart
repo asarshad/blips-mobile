@@ -71,6 +71,11 @@ class ReelsPage extends HookConsumerWidget {
               if (index > 1) {
                 videoManager.disposeController(entries[index - 2].link);
               }
+
+              // 4. Pagination: Load more when we get close to the end
+              if (index >= entries.length - 3) {
+                Future.microtask(() => ref.read(reelsFeedProvider.notifier).loadMore());
+              }
             },
             itemCount: entries.length,
             itemBuilder: (context, index) => _ReelItem(

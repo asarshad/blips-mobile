@@ -34,21 +34,23 @@ class FeedShellPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentIndex = useState(0);
-    final articleFeed = ref.watch(articleFeedProvider);
-    final videoFeed = ref.watch(videoFeedProvider);
+    final articleFeed = ref.watch(filteredArticleFeedProvider);
+    final videoFeed = ref.watch(filteredVideoFeedProvider);
 
     final tabs = [
       _FeedTab<ArticleFeedEntry>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
         builder: (entry) => _ArticleCard(entry: entry),
-        onRefresh: () => ref.invalidate(feedItemsProvider),
+        onRefresh: () => ref.invalidate(paginatedFeedProvider),
+        onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
       _FeedTab<VideoFeedEntry>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
         builder: (entry) => _VideoCard(entry: entry, isVisible: currentIndex.value == 1),
-        onRefresh: () => ref.invalidate(feedItemsProvider),
+        onRefresh: () => ref.invalidate(paginatedFeedProvider),
+        onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
       ReelsPage(isVisible: currentIndex.value == 2),
       const ChatPage(),
@@ -159,12 +161,14 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     required this.builder,
     required this.emptyLabel,
     required this.onRefresh,
+    this.onLoadMore,
   });
 
   final AsyncValue<List<T>> feed;
   final Widget Function(T entry) builder;
   final String emptyLabel;
   final VoidCallback onRefresh;
+  final VoidCallback? onLoadMore;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -237,6 +241,11 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
                   final oldEntry = entries[index - 2] as VideoFeedEntry;
                   videoManager.disposeController(oldEntry.link);
                 }
+              }
+
+              // Pagination
+              if (onLoadMore != null && index >= entries.length - 3) {
+                Future.microtask(() => onLoadMore!());
               }
             },
             itemCount: entries.length,

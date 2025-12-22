@@ -14,14 +14,21 @@ class FeedRepository {
   Future<List<FeedEntry>> fetchFeed({
     int articleLimit = 15,
     int videoLimit = 10,
+    int page = 1,
   }) async {
     final articlesFuture = _dio.get<Map<String, dynamic>>(
       '/articles/recent',
-      queryParameters: {'limit': articleLimit},
+      queryParameters: {
+        'limit': articleLimit,
+        'page': page,
+      },
     );
     final videosFuture = _dio.get<Map<String, dynamic>>(
       '/videos/recent',
-      queryParameters: {'limit': videoLimit},
+      queryParameters: {
+        'limit': videoLimit,
+        'page': page,
+      },
     );
 
     final responses = await Future.wait([articlesFuture, videosFuture]);
@@ -44,10 +51,13 @@ class FeedRepository {
   }
 
   /// Fetches recent reels (short videos).
-  Future<List<ReelFeedEntry>> fetchReels({int limit = 10}) async {
+  Future<List<ReelFeedEntry>> fetchReels({int page = 1, int limit = 20}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/videos/reels',
-      queryParameters: {'limit': limit},
+      queryParameters: {
+        'page': page,
+        'limit': limit,
+      },
     );
     final videosJson = response.data?['videos'] as List<dynamic>? ?? const [];
     return videosJson
