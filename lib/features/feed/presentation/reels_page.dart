@@ -20,30 +20,12 @@ class ReelsPage extends HookConsumerWidget {
     final reelsFeed = ref.watch(reelsFeedProvider);
     final controller = usePageController();
     final videoManager = ref.watch(videoPlayerManagerProvider);
-    final currentLink = useRef<String?>(null);
+    final currentIndex = useState(0);
 
-    // Handle visibility changes
-    useEffect(() {
-      final link = currentLink.value;
-      if (link != null) {
-        if (isVisible) {
-          videoManager.play(link);
-        } else {
-          videoManager.pause(link);
-        }
-      }
-      return null;
-    }, [isVisible]);
-
+    // Preload initial items
     useEffect(() {
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
-        // Play first if visible
-        if (isVisible) {
-          videoManager.play(entries[0].link);
-        }
-        currentLink.value = entries[0].link;
-        
         // Preload second
         if (entries.length > 1) {
           videoManager.initController(entries[1].link);
@@ -69,25 +51,9 @@ class ReelsPage extends HookConsumerWidget {
             controller: controller,
             scrollDirection: Axis.vertical,
             onPageChanged: (index) {
-              // 1. Play current
-              final currentEntry = entries[index];
-              currentLink.value = currentEntry.link;
-              
-              if (isVisible) {
-                videoManager.play(currentEntry.link);
-              }
+              currentIndex.value = index;
 
-              // 2. Pause previous
-              if (index > 0) {
-                final prevEntry = entries[index - 1];
-                videoManager.pause(prevEntry.link);
-              }
-              if (index < entries.length - 1) {
-                final nextEntry = entries[index + 1];
-                videoManager.pause(nextEntry.link);
-              }
-
-              // 3. Preload next 2
+              // 1. Preload next 2
               if (index + 1 < entries.length) {
                 videoManager.initController(entries[index + 1].link);
               }
@@ -95,13 +61,17 @@ class ReelsPage extends HookConsumerWidget {
                 videoManager.initController(entries[index + 2].link);
               }
 
-              // 4. Dispose old
+              // 2. Dispose old
               if (index > 1) {
                 videoManager.disposeController(entries[index - 2].link);
               }
             },
             itemCount: entries.length,
-            itemBuilder: (context, index) => _ReelItem(entry: entries[index]),
+            itemBuilder: (context, index) => _ReelItem(
+              entry: entries[index],
+              isActive: index == currentIndex.value,
+              isVisible: isVisible,
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -128,9 +98,15 @@ class ReelsPage extends HookConsumerWidget {
 }
 
 class _ReelItem extends HookConsumerWidget {
-  const _ReelItem({required this.entry});
+  const _ReelItem({
+    required this.entry,
+    required this.isActive,
+    required this.isVisible,
+  });
 
   final ReelFeedEntry entry;
+  final bool isActive;
+  final bool isVisible;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -149,14 +125,14 @@ class _ReelItem extends HookConsumerWidget {
     // Sync play state
     useEffect(() {
       if (controller != null && isPlayerReady.value) {
-        if (videoManager.shouldPlay(entry.link)) {
+        if (isActive && isVisible) {
           controller.play();
         } else {
           controller.pause();
         }
       }
       return null;
-    }, [videoManager.shouldPlay(entry.link), isPlayerReady.value, controller]);
+    }, [isActive, isVisible, isPlayerReady.value, controller]);
 
     return Stack(
       fit: StackFit.expand,
@@ -173,7 +149,7 @@ class _ReelItem extends HookConsumerWidget {
                 showVideoProgressIndicator: false,
                 onReady: () {
                   isPlayerReady.value = true;
-                  if (videoManager.shouldPlay(entry.link)) {
+                  if (isActive && isVisible) {
                     controller.play();
                   }
                 },
