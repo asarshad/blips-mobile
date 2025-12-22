@@ -52,6 +52,7 @@ class ReelsPage extends HookConsumerWidget {
           return PageView.builder(
             controller: controller,
             scrollDirection: Axis.vertical,
+            allowImplicitScrolling: true,
             onPageChanged: (index) {
               currentIndex.value = index;
 
@@ -117,21 +118,26 @@ class _ReelItem extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final videoManager = ref.watch(videoPlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
+    final isPlayerReady = useState(false);
     
     // Listen to controller changes to update UI (play/pause icon)
-    if (controller != null) {
-      useListenable(controller);
-    }
+    // We use a dummy listenable when controller is null to maintain hook consistency
+    final dummyListenable = useMemoized(() => ChangeNotifier());
+    useListenable(controller ?? dummyListenable);
 
-    final isPlayerReady = useState(false);
-
-    // Sync play state
+    // Sync play state and check if already playing
     useEffect(() {
-      if (controller != null && isPlayerReady.value) {
-        if (isActive && isVisible) {
-          controller.play();
-        } else {
-          controller.pause();
+      if (controller != null) {
+        if (controller.value.isPlaying) {
+           isPlayerReady.value = true;
+        }
+        
+        if (isPlayerReady.value) {
+          if (isActive && isVisible) {
+            controller.play();
+          } else {
+            controller.pause();
+          }
         }
       }
       return null;
@@ -168,13 +174,22 @@ class _ReelItem extends HookConsumerWidget {
                   },
                 ),
               ),
-            )
-          else
-            Image.network(
-              entry.thumbnailUrl ?? '',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(color: Colors.black),
             ),
+
+          // Thumbnail Layer - Fades out when video is ready
+          IgnorePointer(
+            ignoring: true,
+            child: AnimatedOpacity(
+              opacity: isPlayerReady.value ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              child: Image.network(
+                entry.thumbnailUrl ?? '',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.black),
+              ),
+            ),
+          ),
 
           // Gradient Overlay
           const DecoratedBox(
