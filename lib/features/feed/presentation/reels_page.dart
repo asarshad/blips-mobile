@@ -4,22 +4,45 @@ import 'package:blips_mobile/features/feed/providers/video_player_provider.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ReelsPage extends HookConsumerWidget {
-  const ReelsPage({super.key});
+  const ReelsPage({
+    super.key,
+    this.isVisible = true,
+  });
+
+  final bool isVisible;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reelsFeed = ref.watch(reelsFeedProvider);
     final controller = usePageController();
     final videoManager = ref.watch(videoPlayerManagerProvider);
+    final currentLink = useRef<String?>(null);
+
+    // Handle visibility changes
+    useEffect(() {
+      final link = currentLink.value;
+      if (link != null) {
+        if (isVisible) {
+          videoManager.play(link);
+        } else {
+          videoManager.pause(link);
+        }
+      }
+      return null;
+    }, [isVisible]);
 
     useEffect(() {
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
-        // Play first
-        videoManager.play(entries[0].link);
+        // Play first if visible
+        if (isVisible) {
+          videoManager.play(entries[0].link);
+        }
+        currentLink.value = entries[0].link;
         
         // Preload second
         if (entries.length > 1) {
@@ -48,7 +71,11 @@ class ReelsPage extends HookConsumerWidget {
             onPageChanged: (index) {
               // 1. Play current
               final currentEntry = entries[index];
-              videoManager.play(currentEntry.link);
+              currentLink.value = currentEntry.link;
+              
+              if (isVisible) {
+                videoManager.play(currentEntry.link);
+              }
 
               // 2. Pause previous
               if (index > 0) {
@@ -172,6 +199,27 @@ class _ReelItem extends HookConsumerWidget {
           ),
         ),
 
+        // Action Buttons
+        Positioned(
+          right: 16,
+          bottom: 120,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ReelActionButton(
+                icon: Icons.open_in_new,
+                label: 'Open',
+                onTap: () async {
+                  final uri = Uri.parse(entry.link);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
         // Info Layer
         Positioned(
           left: 16,
@@ -233,6 +281,54 @@ class _ReelItem extends HookConsumerWidget {
             child: CircularProgressIndicator(color: Colors.white),
           ),
       ],
+    );
+  }
+}
+
+class _ReelActionButton extends StatelessWidget {
+  const _ReelActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Icon(icon, color: Colors.white, size: 28),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              shadows: [
+                Shadow(
+                  color: Colors.black,
+                  offset: Offset(0, 1),
+                  blurRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

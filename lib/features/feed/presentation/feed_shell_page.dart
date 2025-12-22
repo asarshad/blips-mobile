@@ -47,10 +47,10 @@ class FeedShellPage extends HookConsumerWidget {
       _FeedTab<VideoFeedEntry>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
-        builder: (entry) => _VideoCard(entry: entry),
+        builder: (entry) => _VideoCard(entry: entry, isVisible: currentIndex.value == 1),
         onRefresh: () => ref.invalidate(feedItemsProvider),
       ),
-      const ReelsPage(),
+      ReelsPage(isVisible: currentIndex.value == 2),
       const ChatPage(),
       const SettingsPage(),
     ];
@@ -171,9 +171,9 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     useEffect(() {
       if (feed.hasValue && feed.value!.isNotEmpty && T == VideoFeedEntry) {
         final entries = feed.value!;
-        // Play first
+        // Initialize first controller but don't play
         final firstEntry = entries[0] as VideoFeedEntry;
-        videoManager.play(firstEntry.link);
+        videoManager.initController(firstEntry.link);
         
         // Preload second
         if (entries.length > 1) {
@@ -205,9 +205,9 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
             onPageChanged: (index) {
               // Only handle preloading for videos
               if (T == VideoFeedEntry) {
-                // 1. Play current
+                // 1. Initialize current (but don't auto-play)
                 final currentEntry = entries[index] as VideoFeedEntry;
-                videoManager.play(currentEntry.link);
+                videoManager.initController(currentEntry.link);
 
                 // 2. Pause previous
                 if (index > 0) {
@@ -336,6 +336,14 @@ class _ArticleCard extends HookWidget {
                     final uri = Uri.parse(entry.url);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
+                    }
+                  }
+                : null,
+            onOpenLink: showActions
+                ? () async {
+                    final uri = Uri.parse(entry.url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
                   }
                 : null,
@@ -488,9 +496,13 @@ class _FloatingChatBubbles extends StatelessWidget {
 }
 
 class _VideoCard extends HookConsumerWidget {
-  const _VideoCard({required this.entry});
+  const _VideoCard({
+    required this.entry,
+    this.isVisible = true,
+  });
 
   final VideoFeedEntry entry;
+  final bool isVisible;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -504,6 +516,14 @@ class _VideoCard extends HookConsumerWidget {
     final controller = videoManager.getController(entry.link);
     final isInitialized = videoManager.isInitialized(entry.link);
     final isPlayerReady = useState(false);
+
+    // Handle visibility
+    useEffect(() {
+      if (!isVisible) {
+        videoManager.pause(entry.link);
+      }
+      return null;
+    }, [isVisible]);
 
     // Trigger init if not ready (fallback for first item or jumps)
     useEffect(() {
@@ -614,6 +634,14 @@ class _VideoCard extends HookConsumerWidget {
                       if (await canLaunchUrl(uri)) {
                         await launchUrl(uri);
                       }
+                    }
+                  }
+                : null,
+            onOpenLink: showActions
+                ? () async {
+                    final uri = Uri.parse(entry.link);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
                   }
                 : null,
@@ -742,6 +770,7 @@ class _FeedCardFrame extends StatelessWidget {
     this.onTap,
     this.onShare,
     this.onChat,
+    this.onOpenLink,
     this.showActions = true,
   });
 
@@ -755,6 +784,7 @@ class _FeedCardFrame extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
+  final VoidCallback? onOpenLink;
   final bool showActions;
 
   @override
@@ -814,12 +844,24 @@ class _FeedCardFrame extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        if (showActions)
+                        if (showActions) ...[
+                          InkWell(
+                            onTap: onOpenLink,
+                            customBorder: const CircleBorder(),
+                            child: const Padding(
+                              padding: EdgeInsets.fromLTRB(8, 8, 4, 8),
+                              child: Icon(
+                                Icons.open_in_new,
+                                color: Color(0xFF9CA3AF),
+                                size: 20,
+                              ),
+                            ),
+                          ),
                           InkWell(
                             onTap: onShare,
                             customBorder: const CircleBorder(),
                             child: const Padding(
-                              padding: EdgeInsets.fromLTRB(8, 8, 4, 8),
+                              padding: EdgeInsets.fromLTRB(4, 8, 4, 8),
                               child: Icon(
                                 Icons.share_outlined,
                                 color: Color(0xFF9CA3AF),
@@ -827,6 +869,7 @@ class _FeedCardFrame extends StatelessWidget {
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 10),
