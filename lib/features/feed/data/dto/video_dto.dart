@@ -97,4 +97,19 @@ extension VideoDtoX on VideoDto {
       readTime: durationMinutes,
     );
   }
+
+  /// Converts the DTO into a [ReelFeedEntry] instance.
+  ReelFeedEntry toReelDomain() {
+    final summaryText = (summary ?? 'Summary unavailable.').trim();
+    return ReelFeedEntry(
+      id: id,
+      title: title,
+      summary: summaryText.isEmpty ? 'Summary unavailable.' : summaryText,
+      videoUrl: videoUrl,
+      link: sourceUrl,
+      thumbnailUrl: thumbnailUrl,
+      source: source ?? 'YouTube',
+      publishedAt: resolvePublishedDate(createdAt, createdAt),
+    );
+  }
 }

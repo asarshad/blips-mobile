@@ -28,3 +28,10 @@ final videoFeedProvider =
   final mergedFeed = await ref.watch(feedItemsProvider.future);
   return mergedFeed.whereType<VideoFeedEntry>().toList(growable: false);
 });
+
+/// Loads the reels feed.
+final reelsFeedProvider =
+    FutureProvider.autoDispose<List<ReelFeedEntry>>((ref) async {
+  final repository = ref.watch(feedRepositoryProvider);
+  return repository.fetchReels();
+});

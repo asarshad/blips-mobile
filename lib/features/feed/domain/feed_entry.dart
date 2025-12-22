@@ -117,12 +117,56 @@ class VideoFeedEntry extends FeedEntry {
   final String? thumbnailUrl;
 }
 
+/// Reel variant shown for short videos.
+class ReelFeedEntry extends FeedEntry {
+  /// Creates a reel entry.
+  ReelFeedEntry({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.videoUrl,
+    required this.link,
+    required this.source,
+    required this.publishedAt,
+    this.thumbnailUrl,
+  });
+
+  /// Unique video identifier.
+  @override
+  final int id;
+
+  /// Video title shown on the card.
+  @override
+  final String title;
+
+  /// Summary snippet displayed below the title.
+  @override
+  final String summary;
+
+  /// Direct video playback URL (e.g., mp4 or stream).
+  final String videoUrl;
+
+  /// External link for opening the video in the browser/app.
+  final String link;
+
+  /// Channel/publisher name.
+  final String source;
+
+  /// Publish timestamp used for ordering.
+  @override
+  final DateTime publishedAt;
+
+  /// Optional thumbnail preview.
+  final String? thumbnailUrl;
+}
+
 /// Pattern-matching helper that replaces the Freezed `when` utility.
 extension FeedEntryMatch on FeedEntry {
   /// Maps the entry to a type [T] based on its concrete subtype.
   T when<T>({
     required T Function(ArticleFeedEntry article) article,
     required T Function(VideoFeedEntry video) video,
+    required T Function(ReelFeedEntry reel) reel,
   }) {
     final entry = this;
     if (entry is ArticleFeedEntry) {
@@ -130,6 +174,9 @@ extension FeedEntryMatch on FeedEntry {
     }
     if (entry is VideoFeedEntry) {
       return video(entry);
+    }
+    if (entry is ReelFeedEntry) {
+      return reel(entry);
     }
     throw StateError('Unhandled FeedEntry subtype: $entry');
   }

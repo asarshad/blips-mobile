@@ -42,4 +42,18 @@ class FeedRepository {
     return [...articles, ...videos]
       ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
   }
+
+  /// Fetches recent reels (short videos).
+  Future<List<ReelFeedEntry>> fetchReels({int limit = 10}) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/videos/reels',
+      queryParameters: {'limit': limit},
+    );
+    final videosJson = response.data?['videos'] as List<dynamic>? ?? const [];
+    return videosJson
+        .cast<Map<String, dynamic>>()
+        .map(VideoDto.fromJson)
+        .map((dto) => dto.toReelDomain())
+        .toList();
+  }
 }

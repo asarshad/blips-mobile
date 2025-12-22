@@ -75,5 +75,6 @@ extension FeedEntryMapper on FeedEntry {
   T map<T>({
     required T Function(ArticleFeedEntry article) article,
     required T Function(VideoFeedEntry video) video,
-  }) => when(article: article, video: video);
+    required T Function(ReelFeedEntry reel) reel,
+  }) => when(article: article, video: video, reel: reel);
 }

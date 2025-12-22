@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:blips_mobile/features/feed/presentation/reels_page.dart';
 import 'package:blips_mobile/features/feed/providers/video_player_provider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -49,6 +50,7 @@ class FeedShellPage extends HookConsumerWidget {
         builder: (entry) => _VideoCard(entry: entry),
         onRefresh: () => ref.invalidate(feedItemsProvider),
       ),
+      const ReelsPage(),
       const ChatPage(),
       const SettingsPage(),
     ];
@@ -84,12 +86,19 @@ class FeedShellPage extends HookConsumerWidget {
                 onTap: () => currentIndex.value = 1,
               ),
               _NavBarIcon(
+                icon: Icons.video_library_outlined,
+                selectedIcon: Icons.video_library,
+                label: 'Reels',
+                isSelected: currentIndex.value == 2,
+                onTap: () => currentIndex.value = 2,
+              ),
+              _NavBarIcon(
                 icon: Icons.chat_bubble_outline,
                 selectedIcon: Icons.chat_bubble,
                 label: 'Chat',
-                isSelected: currentIndex.value == 2,
+                isSelected: currentIndex.value == 3,
                 onTap: () {
-                  currentIndex.value = 2;
+                  currentIndex.value = 3;
                   // Refresh chat list when entering the tab
                   ref.invalidate(chatListProvider);
                 },
@@ -98,8 +107,8 @@ class FeedShellPage extends HookConsumerWidget {
                 icon: Icons.settings_outlined,
                 selectedIcon: Icons.settings,
                 label: 'Settings',
-                isSelected: currentIndex.value == 3,
-                onTap: () => currentIndex.value = 3,
+                isSelected: currentIndex.value == 4,
+                onTap: () => currentIndex.value = 4,
               ),
             ],
           ),
