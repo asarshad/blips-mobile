@@ -84,6 +84,11 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> deleteAllChats() async {
+    final db = await instance.database;
+    await db.delete('messages');
+  }
+
   Future<void> deleteMessage(String id) async {
     final db = await instance.database;
     await db.delete(

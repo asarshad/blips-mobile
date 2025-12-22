@@ -25,14 +25,38 @@ class ChatRepository {
         try {
           // Fetch article details
           print('Repo: Fetching article details for $id');
-          final articleResponse = await _dio.get<Map<String, dynamic>>('/articles/$id');
           
-          if (articleResponse.data == null) {
-            print('Repo: Article response data is null for $id');
+          Map<String, dynamic>? data;
+          
+          if (id < 0) {
+             // It's a video
+             final videoId = -id;
+             final response = await _dio.get<Map<String, dynamic>>('/videos/$videoId');
+             if (response.data != null) {
+                 final v = response.data!;
+                 data = {
+                     'id': id, // Keep negative ID
+                     'title': v['title'],
+                     'source_url': v['video_url'] ?? v['source_url'] ?? '',
+                     'summary': v['summary'],
+                     'image_url': v['thumbnail_url'],
+                     'published_date': v['published_date'],
+                     'created_at': v['created_at'],
+                     'read_time_minutes': (v['duration_seconds'] as int? ?? 0) ~/ 60,
+                     'tags': [],
+                 };
+             }
+          } else {
+             final response = await _dio.get<Map<String, dynamic>>('/articles/$id');
+             data = response.data;
+          }
+          
+          if (data == null) {
+            print('Repo: Response data is null for $id');
             continue;
           }
 
-          final articleDto = ArticleDto.fromJson(articleResponse.data!);
+          final articleDto = ArticleDto.fromJson(data);
           final article = articleDto.toDomain();
           
           // Fetch local messages
@@ -45,6 +69,13 @@ class ChatRepository {
               article: article,
               messages: messages,
             ));
+          }
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 404) {
+            print('Repo: Article $id not found (404). Deleting local chat history.');
+            await _db.deleteChat(id);
+          } else {
+            print('Repo: Failed to load chat for article $id: $e');
           }
         } catch (e, stack) {
           print('Repo: Failed to load chat for article $id: $e');
@@ -101,17 +132,26 @@ class ChatRepository {
     
     // 3. Call API
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
-        '/ai/respond',
-        data: {
-          'article_id': articleId,
+      final isVideo = articleId < 0;
+      final payload = <String, dynamic>{
           'message': message,
           'sender': 'user',
           'history': previousHistory.map((m) => {
             'role': m.role,
             'content': m.content,
           }).toList(),
-        },
+      };
+      
+      if (isVideo) {
+          payload['video_id'] = -articleId;
+          payload['article_id'] = null;
+      } else {
+          payload['article_id'] = articleId;
+      }
+
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/ai/respond',
+        data: payload,
       );
       
       final aiContent = response.data?['response'] as String;

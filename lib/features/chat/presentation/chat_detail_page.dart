@@ -156,11 +156,12 @@ class ChatDetailPage extends HookConsumerWidget {
       return null;
     }, [isHistoryLoaded.value, remainingQuota.value]);
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
         titleSpacing: 0,
         title: InkWell(
           onTap: () async {
@@ -181,9 +182,9 @@ class ChatDetailPage extends HookConsumerWidget {
                   errorBuilder: (_, __, ___) => Container(
                     width: 32,
                     height: 32,
-                    color: Colors.grey.shade800,
-                    child: const Icon(Icons.article,
-                        size: 16, color: Colors.white54),
+                    color: colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.article,
+                        size: 16, color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -201,8 +202,7 @@ class ChatDetailPage extends HookConsumerWidget {
                     ),
                     Text(
                       article.source,
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.white54),
+                      style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -238,9 +238,9 @@ class ChatDetailPage extends HookConsumerWidget {
                     margin: const EdgeInsets.symmetric(vertical: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.yellow.withOpacity(0.1),
+                      color: Colors.yellow.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.yellow.withOpacity(0.3)),
+                      border: Border.all(color: Colors.yellow.withValues(alpha: 0.3)),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -268,7 +268,7 @@ class ChatDetailPage extends HookConsumerWidget {
                       maxWidth: MediaQuery.of(context).size.width * 0.8,
                     ),
                     decoration: BoxDecoration(
-                      color: isUser ? const Color(0xFF1D4ED8) : const Color(0xFF374151),
+                      color: isUser ? colorScheme.primary : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(16).copyWith(
                         bottomRight: isUser ? Radius.zero : null,
                         bottomLeft: !isUser ? Radius.zero : null,
@@ -276,7 +276,9 @@ class ChatDetailPage extends HookConsumerWidget {
                     ),
                     child: Text(
                       msg.content,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: isUser ? colorScheme.onPrimary : colorScheme.onSurface,
+                      ),
                     ),
                   ),
                 );
@@ -284,20 +286,20 @@ class ChatDetailPage extends HookConsumerWidget {
             ),
           ),
           if (isLoading.value)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
               child: LinearProgressIndicator(
                 backgroundColor: Colors.transparent,
-                color: Color(0xFF1D4ED8),
+                color: colorScheme.primary,
               ),
             ),
           Container(
             padding: const EdgeInsets.all(16).copyWith(
               bottom: MediaQuery.of(context).padding.bottom + 16,
             ),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1F2937),
-              border: Border(top: BorderSide(color: Colors.white10)),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              border: Border(top: BorderSide(color: theme.dividerColor)),
             ),
             child: Row(
               children: [
@@ -305,20 +307,20 @@ class ChatDetailPage extends HookConsumerWidget {
                   child: TextField(
                     controller: textController,
                     enabled: remainingQuota.value != 0,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: colorScheme.onSurface),
                     decoration: InputDecoration(
                       hintText: remainingQuota.value == 0 
                           ? 'Daily limit reached' 
                           : 'Type a message...',
-                      hintStyle: const TextStyle(color: Colors.white38),
+                      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
                       fillColor: remainingQuota.value == 0 
-                          ? Colors.white.withOpacity(0.05) 
-                          : Colors.black26,
+                          ? colorScheme.surface.withValues(alpha: 0.5) 
+                          : colorScheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 10,
@@ -332,8 +334,8 @@ class ChatDetailPage extends HookConsumerWidget {
                   onPressed: remainingQuota.value == 0 ? null : () => sendMessage(),
                   icon: const Icon(Icons.send),
                   color: remainingQuota.value == 0 
-                      ? Colors.white24 
-                      : const Color(0xFF1D4ED8),
+                      ? colorScheme.onSurface.withValues(alpha: 0.3) 
+                      : colorScheme.primary,
                 ),
               ],
             ),

@@ -19,21 +19,20 @@ class ChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chatListAsync = ref.watch(chatListProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Your Conversations'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
       ),
       body: chatListAsync.when(
         data: (chats) {
           if (chats.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'No conversations yet.',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
               ),
             );
           }
@@ -66,7 +65,7 @@ class ChatPage extends ConsumerWidget {
         error: (error, stack) => Center(
           child: Text(
             'Error loading chats: $error',
-            style: const TextStyle(color: Colors.red),
+            style: TextStyle(color: theme.colorScheme.error),
           ),
         ),
       ),
@@ -89,6 +88,8 @@ class _ChatListItem extends StatelessWidget {
     final timeLabel = lastMessage != null
         ? DateFormat('MMM d, h:mm a').format(lastMessage.timestamp.toLocal())
         : '';
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Dismissible(
       key: ValueKey(chat.articleId),
@@ -97,30 +98,28 @@ class _ChatListItem extends StatelessWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: Colors.red,
+          color: colorScheme.error,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete, color: Colors.white),
+        child: Icon(Icons.delete, color: colorScheme.onError),
       ),
       confirmDismiss: (direction) async {
         return await showDialog(
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              backgroundColor: const Color(0xFF1F2937),
-              title: const Text("Confirm", style: TextStyle(color: Colors.white)),
+              title: const Text("Confirm"),
               content: const Text(
                 "Are you sure you want to delete this conversation?",
-                style: TextStyle(color: Colors.white70),
               ),
               actions: <Widget>[
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text("Cancel", style: TextStyle(color: Colors.white)),
+                  child: const Text("Cancel"),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                  child: Text("Delete", style: TextStyle(color: colorScheme.error)),
                 ),
               ],
             );
@@ -142,8 +141,15 @@ class _ChatListItem extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1F2937),
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,8 +164,8 @@ class _ChatListItem extends StatelessWidget {
                 errorBuilder: (_, __, ___) => Container(
                   width: 60,
                   height: 60,
-                  color: Colors.grey.shade800,
-                  child: const Icon(Icons.article, color: Colors.white54),
+                  color: colorScheme.surfaceContainerHighest,
+                  child: Icon(Icons.article, color: colorScheme.onSurfaceVariant),
                 ),
               ),
             ),
@@ -172,8 +178,8 @@ class _ChatListItem extends StatelessWidget {
                     chat.article.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -183,16 +189,16 @@ class _ChatListItem extends StatelessWidget {
                     lastMessage?.content ?? '',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     timeLabel,
-                    style: const TextStyle(
-                      color: Colors.white38,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                       fontSize: 12,
                     ),
                   ),
@@ -200,26 +206,24 @@ class _ChatListItem extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white54),
+              icon: Icon(Icons.delete_outline, color: colorScheme.onSurfaceVariant),
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (BuildContext context) {
                     return AlertDialog(
-                      backgroundColor: const Color(0xFF1F2937),
-                      title: const Text("Delete Chat", style: TextStyle(color: Colors.white)),
+                      title: const Text("Delete Chat"),
                       content: const Text(
                         "Are you sure you want to delete this conversation?",
-                        style: TextStyle(color: Colors.white70),
                       ),
                       actions: <Widget>[
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text("Cancel", style: TextStyle(color: Colors.white)),
+                          child: const Text("Cancel"),
                         ),
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                          child: Text("Delete", style: TextStyle(color: colorScheme.error)),
                         ),
                       ],
                     );

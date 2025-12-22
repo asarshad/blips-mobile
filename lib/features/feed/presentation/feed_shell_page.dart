@@ -56,13 +56,13 @@ class FeedShellPage extends HookConsumerWidget {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: IndexedStack(
         index: currentIndex.value,
         children: tabs,
       ),
       bottomNavigationBar: Container(
-        color: const Color(0xFF020817),
+        color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
         padding: EdgeInsets.only(
           bottom: MediaQuery.paddingOf(context).bottom,
         ),
@@ -86,8 +86,8 @@ class FeedShellPage extends HookConsumerWidget {
                 onTap: () => currentIndex.value = 1,
               ),
               _NavBarIcon(
-                icon: Icons.video_library_outlined,
-                selectedIcon: Icons.video_library,
+                icon: Icons.movie_filter_outlined,
+                selectedIcon: Icons.movie_filter,
                 label: 'Reels',
                 isSelected: currentIndex.value == 2,
                 onTap: () => currentIndex.value = 2,
@@ -135,6 +135,7 @@ class _NavBarIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).bottomNavigationBarTheme;
     return InkWell(
       onTap: onTap,
       customBorder: const CircleBorder(),
@@ -143,7 +144,9 @@ class _NavBarIcon extends StatelessWidget {
         child: Icon(
           isSelected ? selectedIcon : icon,
           size: 26,
-          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF9CA3AF),
+          color: isSelected
+              ? theme.selectedItemColor
+              : theme.unselectedItemColor,
         ),
       ),
     );
@@ -276,16 +279,12 @@ class _FeedMessageState extends StatelessWidget {
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
-                ?.copyWith(color: Colors.white70),
+                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: onAction,
-            style: FilledButton.styleFrom(backgroundColor: Colors.white),
-            child: Text(
-              actionLabel,
-              style: const TextStyle(color: Colors.black87),
-            ),
+            child: Text(actionLabel),
           ),
         ],
       ),
@@ -300,7 +299,6 @@ class _ArticleCard extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenshotController = useMemoized(() => ScreenshotController());
     final showBubbles = useState(false);
     final dateLabel =
         DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
@@ -353,33 +351,11 @@ class _ArticleCard extends HookWidget {
                   }
                 : null,
             onShare: showActions
-                ? () async {
-                    try {
-                      // Hide bubbles before screenshot
-                      showBubbles.value = false;
-                      
-                      final image = await screenshotController.captureFromWidget(
-                        Theme(
-                          data: Theme.of(context),
-                          child: SizedBox(
-                            width: MediaQuery.of(context).size.width,
-                            height: MediaQuery.of(context).size.height * 0.8,
-                            child: buildFrame(showActions: false),
-                          ),
-                        ),
-                        delay: const Duration(milliseconds: 10),
-                        context: context,
-                      );
-                      final directory = await getTemporaryDirectory();
-                      final file = File('${directory.path}/share.png');
-                      await file.writeAsBytes(image);
-                      await Share.shareXFiles(
-                        [XFile(file.path)],
-                        text: 'Check out this article: ${entry.url}',
-                      );
-                    } catch (e) {
-                      debugPrint('Error sharing: $e');
-                    }
+                ? () {
+                    Share.share(
+                      'Check out this article: ${entry.url}',
+                      subject: entry.title,
+                    );
                   }
                 : null,
           ),
@@ -433,8 +409,9 @@ class _FloatingChatBubbles extends StatelessWidget {
                       articleEntry = entry as ArticleFeedEntry;
                     } else {
                       final video = entry as VideoFeedEntry;
+                      // Use negative ID to indicate it's a video
                       articleEntry = ArticleFeedEntry(
-                        id: video.id,
+                        id: -video.id,
                         title: video.title,
                         summary: video.summary,
                         source: video.source,
@@ -461,7 +438,7 @@ class _FloatingChatBubbles extends StatelessWidget {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1D4ED8).withOpacity(0.95),
+                      color: const Color(0xFF1D4ED8).withValues(alpha: 0.95),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(20),
                         topRight: Radius.circular(20),
@@ -469,11 +446,11 @@ class _FloatingChatBubbles extends StatelessWidget {
                         bottomRight: Radius.circular(4),
                       ),
                       border: Border.all(
-                        color: const Color(0xFF1D4ED8).withOpacity(0.5),
+                        color: const Color(0xFF1D4ED8).withValues(alpha: 0.5),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -506,7 +483,6 @@ class _VideoCard extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final screenshotController = useMemoized(() => ScreenshotController());
     final showBubbles = useState(false);
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
     final dateLabel =
@@ -514,6 +490,12 @@ class _VideoCard extends HookConsumerWidget {
 
     final videoManager = ref.watch(videoPlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
+    
+    // Listen to controller changes to update UI (play/pause icon)
+    if (controller != null) {
+      useListenable(controller);
+    }
+
     final isInitialized = videoManager.isInitialized(entry.link);
     final isPlayerReady = useState(false);
 
@@ -601,6 +583,24 @@ class _VideoCard extends HookConsumerWidget {
                   ),
                 ),
 
+                // Play button overlay
+                if (controller != null && !controller.value.isPlaying && isPlayerReady.value)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 72,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+
                 // Loading indicator
                 if (!isPlayerReady.value)
                   const Center(
@@ -651,31 +651,11 @@ class _VideoCard extends HookConsumerWidget {
                   }
                 : null,
             onShare: showActions
-                ? () async {
-                    try {
-                      showBubbles.value = false;
-                      final image = await screenshotController.captureFromWidget(
-                        Theme(
-                          data: Theme.of(context),
-                          child: SizedBox(
-                            width: MediaQuery.of(context).size.width,
-                            height: MediaQuery.of(context).size.height * 0.8,
-                            child: buildFrame(showActions: false),
-                          ),
-                        ),
-                        delay: const Duration(milliseconds: 10),
-                        context: context,
-                      );
-                      final directory = await getTemporaryDirectory();
-                      final file = File('${directory.path}/share.png');
-                      await file.writeAsBytes(image);
-                      await Share.shareXFiles(
-                        [XFile(file.path)],
-                        text: 'Check out this video: ${entry.link}',
-                      );
-                    } catch (e) {
-                      debugPrint('Error sharing: $e');
-                    }
+                ? () {
+                    Share.share(
+                      'Check out this video: ${entry.link}',
+                      subject: entry.title,
+                    );
                   }
                 : null,
           ),
@@ -789,14 +769,23 @@ class _FeedCardFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1F2937),
+          color: theme.cardColor, // Use theme card color
           borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         width: double.infinity,
         height: double.infinity,
@@ -821,13 +810,13 @@ class _FeedCardFrame extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0E7490).withOpacity(0.2),
+                            color: colorScheme.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            category.toUpperCase(),
-                            style: const TextStyle(
-                              color: Color(0xFF22D3EE),
+                            (category == 'Artificial Intelligence' ? 'AI' : category).toUpperCase(),
+                            style: TextStyle(
+                              color: colorScheme.primary,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -838,8 +827,8 @@ class _FeedCardFrame extends StatelessWidget {
                         Flexible(
                           child: Text(
                             source,
-                            style: const TextStyle(
-                              color: Color(0xFF9CA3AF),
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
@@ -851,11 +840,11 @@ class _FeedCardFrame extends StatelessWidget {
                           InkWell(
                             onTap: onOpenLink,
                             customBorder: const CircleBorder(),
-                            child: const Padding(
-                              padding: EdgeInsets.fromLTRB(8, 8, 4, 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
                               child: Icon(
                                 Icons.open_in_new,
-                                color: Color(0xFF9CA3AF),
+                                color: colorScheme.onSurfaceVariant,
                                 size: 20,
                               ),
                             ),
@@ -863,11 +852,11 @@ class _FeedCardFrame extends StatelessWidget {
                           InkWell(
                             onTap: onShare,
                             customBorder: const CircleBorder(),
-                            child: const Padding(
-                              padding: EdgeInsets.fromLTRB(4, 8, 4, 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
                               child: Icon(
                                 Icons.share_outlined,
-                                color: Color(0xFF9CA3AF),
+                                color: colorScheme.onSurfaceVariant,
                                 size: 20,
                               ),
                             ),
@@ -881,7 +870,7 @@ class _FeedCardFrame extends StatelessWidget {
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.headlineSmall?.copyWith(
-                        color: const Color(0xFFF8FAFC),
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                         height: 1.4,
                         fontSize: 16,
@@ -892,33 +881,33 @@ class _FeedCardFrame extends StatelessWidget {
                       child: Text(
                         summary,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: const Color(0xFFD1D5DB),
+                          color: colorScheme.onSurfaceVariant,
                           height: 1.4,
                           fontSize: 14,
                         ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Divider(color: Color(0xFF374151), height: 1),
+                    Divider(color: theme.colorScheme.onSurface.withValues(alpha: 0.1), height: 1),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today_outlined,
-                            size: 14, color: Color(0xFF9CA3AF)),
+                        Icon(Icons.calendar_today_outlined,
+                            size: 14, color: colorScheme.onSurfaceVariant),
                         const SizedBox(width: 6),
                         Text(
                           date,
-                          style: const TextStyle(
-                              color: Color(0xFF9CA3AF), fontSize: 13),
+                          style: TextStyle(
+                              color: colorScheme.onSurfaceVariant, fontSize: 13),
                         ),
                         const SizedBox(width: 16),
-                        const Icon(Icons.access_time,
-                            size: 14, color: Color(0xFF9CA3AF)),
+                        Icon(Icons.access_time,
+                            size: 14, color: colorScheme.onSurfaceVariant),
                         const SizedBox(width: 6),
                         Text(
                           readTime,
-                          style: const TextStyle(
-                              color: Color(0xFF9CA3AF), fontSize: 13),
+                          style: TextStyle(
+                              color: colorScheme.onSurfaceVariant, fontSize: 13),
                         ),
                         const Spacer(),
                         if (showActions)
@@ -930,12 +919,12 @@ class _FeedCardFrame extends StatelessWidget {
                               child: Container(
                                 width: 34,
                                 height: 34,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF1D4ED8),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary,
                                   shape: BoxShape.circle,
                                 ),
                                 child:
-                                    const Icon(Icons.bolt, color: Colors.white),
+                                    Icon(Icons.bolt, color: colorScheme.onPrimary),
                               ),
                             ),
                           ),

@@ -80,14 +80,17 @@ class VideoDto {
 extension VideoDtoX on VideoDto {
   /// Converts the DTO into a [VideoFeedEntry] instance.
   FeedEntry toDomain() {
-    final summaryText = (summary ?? 'Summary unavailable.').trim();
+    var summaryText = (summary ?? '').trim();
+    if (summaryText == 'Summary unavailable.' || summaryText == 'Summary unavailable at the moment.') {
+      summaryText = '';
+    }
     final durationMinutes = durationSeconds == null
         ? computeReadTime(summaryText)
         : (durationSeconds! / 60).ceil();
     return VideoFeedEntry(
       id: id,
       title: title,
-      summary: summaryText.isEmpty ? 'Summary unavailable.' : summaryText,
+      summary: summaryText,
       videoUrl: videoUrl,
       link: sourceUrl,
       thumbnailUrl: thumbnailUrl,
@@ -100,11 +103,14 @@ extension VideoDtoX on VideoDto {
 
   /// Converts the DTO into a [ReelFeedEntry] instance.
   ReelFeedEntry toReelDomain() {
-    final summaryText = (summary ?? 'Summary unavailable.').trim();
+    var summaryText = (summary ?? '').trim();
+    if (summaryText == 'Summary unavailable.' || summaryText == 'Summary unavailable at the moment.') {
+      summaryText = '';
+    }
     return ReelFeedEntry(
       id: id,
       title: title,
-      summary: summaryText.isEmpty ? 'Summary unavailable.' : summaryText,
+      summary: summaryText,
       videoUrl: videoUrl,
       link: sourceUrl,
       thumbnailUrl: thumbnailUrl,

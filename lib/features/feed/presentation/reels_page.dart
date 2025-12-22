@@ -112,6 +112,12 @@ class _ReelItem extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final videoManager = ref.watch(videoPlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
+    
+    // Listen to controller changes to update UI (play/pause icon)
+    if (controller != null) {
+      useListenable(controller);
+    }
+
     final isPlayerReady = useState(false);
 
     // Trigger init if not ready
@@ -185,19 +191,9 @@ class _ReelItem extends HookConsumerWidget {
             ),
           ),
 
-          // Play/Pause Indicator (Optional, but good UX)
-          if (controller != null && !controller.value.isPlaying && isPlayerReady.value)
-            const Center(
-              child: Icon(
-                Icons.play_arrow,
-                size: 64,
-                color: Colors.white54,
-              ),
-            ),
-
           // Action Buttons
           Positioned(
-            right: 16,
+            right: 4,
             bottom: 120,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -256,17 +252,19 @@ class _ReelItem extends HookConsumerWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  entry.summary,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.3,
+                if (entry.summary.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    entry.summary,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      height: 1.3,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ],
             ),
           ),
