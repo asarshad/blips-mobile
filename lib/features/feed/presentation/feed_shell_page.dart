@@ -835,12 +835,15 @@ class _FeedCardFrame extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          source,
-                          style: const TextStyle(
-                            color: Color(0xFF9CA3AF),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Text(
+                            source,
+                            style: const TextStyle(
+                              color: Color(0xFF9CA3AF),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const Spacer(),

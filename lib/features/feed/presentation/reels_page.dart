@@ -134,129 +134,150 @@ class _ReelItem extends HookConsumerWidget {
       return null;
     }, [isActive, isVisible, isPlayerReady.value, controller]);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Video Layer
-        if (controller != null)
-          FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: 1080, // Aspect ratio 9:16
-              height: 1920,
-              child: YoutubePlayer(
-                controller: controller,
-                showVideoProgressIndicator: false,
-                onReady: () {
-                  isPlayerReady.value = true;
-                  if (isActive && isVisible) {
-                    controller.play();
-                  }
-                },
+    return GestureDetector(
+      onTap: () {
+        if (controller != null) {
+          if (controller.value.isPlaying) {
+            controller.pause();
+          } else {
+            controller.play();
+          }
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Video Layer
+          if (controller != null)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: 1080, // Aspect ratio 9:16
+                height: 1920,
+                child: YoutubePlayer(
+                  controller: controller,
+                  showVideoProgressIndicator: false,
+                  onReady: () {
+                    isPlayerReady.value = true;
+                    if (isActive && isVisible) {
+                      controller.play();
+                    }
+                  },
+                ),
+              ),
+            )
+          else
+            Image.network(
+              entry.thumbnailUrl ?? '',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(color: Colors.black),
+            ),
+
+          // Gradient Overlay
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.transparent, Colors.black87],
+                begin: Alignment.center,
+                end: Alignment.bottomCenter,
+                stops: [0.6, 1.0],
               ),
             ),
-          )
-        else
-          Image.network(
-            entry.thumbnailUrl ?? '',
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(color: Colors.black),
           ),
 
-        // Gradient Overlay
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.transparent, Colors.black87],
-              begin: Alignment.center,
-              end: Alignment.bottomCenter,
-              stops: [0.6, 1.0],
+          // Play/Pause Indicator (Optional, but good UX)
+          if (controller != null && !controller.value.isPlaying && isPlayerReady.value)
+            const Center(
+              child: Icon(
+                Icons.play_arrow,
+                size: 64,
+                color: Colors.white54,
+              ),
+            ),
+
+          // Action Buttons
+          Positioned(
+            right: 16,
+            bottom: 120,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ReelActionButton(
+                  icon: Icons.open_in_new,
+                  label: 'Open',
+                  onTap: () async {
+                    final uri = Uri.parse(entry.link);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+              ],
             ),
           ),
-        ),
 
-        // Action Buttons
-        Positioned(
-          right: 16,
-          bottom: 120,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ReelActionButton(
-                icon: Icons.open_in_new,
-                label: 'Open',
-                onTap: () async {
-                  final uri = Uri.parse(entry.link);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-
-        // Info Layer
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 32,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      entry.source,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+          // Info Layer
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 32,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        entry.source,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  entry.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                entry.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                entry.summary,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.3,
+                const SizedBox(height: 8),
+                Text(
+                  entry.summary,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.3,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
 
-        // Loading Indicator
-        if (!isPlayerReady.value)
-          const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
-      ],
+          // Loading Indicator
+          if (!isPlayerReady.value)
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+        ],
+      ),
     );
   }
 }
