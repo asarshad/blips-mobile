@@ -34,10 +34,26 @@ class FeedShellPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentIndex = useState(0);
+    final horizontalPageController = usePageController();
     final articleFeed = ref.watch(filteredArticleFeedProvider);
     final videoFeed = ref.watch(filteredVideoFeedProvider);
 
-    final tabs = [
+    // Sync page controller with bottom nav
+    useEffect(() {
+      if (horizontalPageController.hasClients &&
+          horizontalPageController.page?.round() != currentIndex.value &&
+          currentIndex.value < 3) {
+        horizontalPageController.animateToPage(
+          currentIndex.value,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+      return null;
+    }, [currentIndex.value]);
+
+    // Swipeable feed tabs (Articles, Videos, Reels)
+    final swipeableTabs = [
       _FeedTab<ArticleFeedEntry>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
@@ -53,23 +69,35 @@ class FeedShellPage extends HookConsumerWidget {
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
       ReelsPage(isVisible: currentIndex.value == 2),
+    ];
+
+    // Non-swipeable tabs (Chat, Settings)
+    final nonSwipeableTabs = [
       const ChatPage(),
       const SettingsPage(),
     ];
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: IndexedStack(
-        index: currentIndex.value,
-        children: tabs,
-      ),
+      body: currentIndex.value < 3
+          ? PageView(
+              controller: horizontalPageController,
+              onPageChanged: (index) {
+                currentIndex.value = index;
+              },
+              children: swipeableTabs,
+            )
+          : IndexedStack(
+              index: currentIndex.value - 3,
+              children: nonSwipeableTabs,
+            ),
       bottomNavigationBar: Container(
         color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
         padding: EdgeInsets.only(
           bottom: MediaQuery.paddingOf(context).bottom,
         ),
         child: SizedBox(
-          height: 35,
+          height: 30,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -809,7 +837,7 @@ class _FeedCardFrame extends StatelessWidget {
             Expanded(
               flex: 65,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(15, 10, 15, 10),
+                padding: const EdgeInsets.fromLTRB(15, 10, 15, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -891,13 +919,13 @@ class _FeedCardFrame extends StatelessWidget {
                         style: textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           height: 1.4,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 0),
                     Divider(color: theme.colorScheme.onSurface.withValues(alpha: 0.1), height: 1),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 0),
                     Row(
                       children: [
                         Icon(Icons.calendar_today_outlined,

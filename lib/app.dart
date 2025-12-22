@@ -44,15 +44,15 @@ class BlipsApp extends ConsumerWidget {
         brightness: Brightness.dark,
         surface: const Color(0xFF1E293B),
       ),
-      scaffoldBackgroundColor: Colors.black,
+      scaffoldBackgroundColor: const Color(0xFF0F172A),
       cardColor: const Color(0xFF1E293B),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0F172A),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0F172A),
         selectedItemColor: baseColor,
         unselectedItemColor: Colors.grey,
       ),

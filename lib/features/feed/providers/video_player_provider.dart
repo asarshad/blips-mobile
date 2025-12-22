@@ -40,9 +40,11 @@ class VideoPlayerManager extends ChangeNotifier {
           mute: false,
           hideControls: true,
           hideThumbnail: true,
+          showLiveFullscreenButton: false,
           disableDragSeek: true,
           loop: true,
-          forceHD: true,
+          forceHD: false,
+          enableCaption: false,
         ),
       );
 

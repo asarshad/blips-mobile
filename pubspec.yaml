@@ -57,6 +57,20 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   very_good_analysis: ^10.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+
+flutter_launcher_icons:
+  ios: true
+  android: false
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#0F172A"
+  image: "assets/splash/splash_logo.png"
+  ios: true
+  android: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

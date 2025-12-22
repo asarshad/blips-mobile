@@ -1,0 +1,34 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with rounded corners for iOS -->
+  <rect width="1024" height="1024" rx="224" fill="#0F172A"/>
+  
+  <!-- Gradient definition -->
+  <defs>
+    <linearGradient id="blipGradient" x1="200" y1="200" x2="824" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#0E7490"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Stylized "B" made of news/feed cards stacked -->
+  <!-- Top card -->
+  <rect x="280" y="220" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
+  <rect x="320" y="260" width="200" height="16" rx="8" fill="white" opacity="0.9"/>
+  <rect x="320" y="292" width="140" height="12" rx="6" fill="white" opacity="0.5"/>
+  <rect x="320" y="316" width="180" height="12" rx="6" fill="white" opacity="0.5"/>
+  
+  <!-- Middle card (slightly offset) -->
+  <rect x="280" y="420" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
+  <rect x="320" y="460" width="180" height="16" rx="8" fill="white" opacity="0.9"/>
+  <rect x="320" y="492" width="160" height="12" rx="6" fill="white" opacity="0.5"/>
+  <rect x="320" y="516" width="200" height="12" rx="6" fill="white" opacity="0.5"/>
+  
+  <!-- Bottom card -->
+  <rect x="280" y="620" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
+  <rect x="320" y="660" width="220" height="16" rx="8" fill="white" opacity="0.9"/>
+  <rect x="320" y="692" width="120" height="12" rx="6" fill="white" opacity="0.5"/>
+  <rect x="320" y="716" width="170" height="12" rx="6" fill="white" opacity="0.5"/>
+  
+  <!-- Notification dot / "blip" indicator -->
+  <circle cx="700" cy="280" r="40" fill="#F97316"/>
+</svg>

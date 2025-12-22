@@ -124,24 +124,46 @@ class _ReelItem extends HookConsumerWidget {
     final videoManager = ref.watch(videoPlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
     final isPlayerReady = useState(false);
+    final isVideoPlaying = useState(false);
     
     // Listen to controller changes to update UI (play/pause icon)
     // We use a dummy listenable when controller is null to maintain hook consistency
     final dummyListenable = useMemoized(() => ChangeNotifier());
     useListenable(controller ?? dummyListenable);
 
-    // Sync play state and check if already playing
+    // Track when video is actually playing (not just ready)
     useEffect(() {
       if (controller != null) {
-        if (controller.value.isPlaying) {
-           isPlayerReady.value = true;
+        void listener() {
+          final playing = controller.value.isPlaying;
+          if (playing && !isVideoPlaying.value) {
+            // Small delay to ensure video frame is visible before hiding thumbnail
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (controller.value.isPlaying) {
+                isVideoPlaying.value = true;
+              }
+            });
+          } else if (!playing && !isActive) {
+            // Reset when paused and not active (swiped away)
+            isVideoPlaying.value = false;
+          }
         }
-        
-        if (isPlayerReady.value) {
-          if (isActive && isVisible) {
-            controller.play();
-          } else {
-            controller.pause();
+        controller.addListener(listener);
+        return () => controller.removeListener(listener);
+      }
+      return null;
+    }, [controller, isActive]);
+
+    // Sync play state
+    useEffect(() {
+      if (controller != null && isPlayerReady.value) {
+        if (isActive && isVisible) {
+          controller.play();
+        } else {
+          controller.pause();
+          // Reset playing state when not active
+          if (!isActive) {
+            isVideoPlaying.value = false;
           }
         }
       }
@@ -181,12 +203,12 @@ class _ReelItem extends HookConsumerWidget {
               ),
             ),
 
-          // Thumbnail Layer - Fades out when video is ready
+          // Thumbnail Layer - Fades out only when video is actually playing
           IgnorePointer(
             ignoring: true,
             child: AnimatedOpacity(
-              opacity: isPlayerReady.value ? 0.0 : 1.0,
-              duration: const Duration(milliseconds: 300),
+              opacity: isVideoPlaying.value ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 400),
               curve: Curves.easeOut,
               child: Image.network(
                 entry.thumbnailUrl ?? '',
@@ -286,8 +308,8 @@ class _ReelItem extends HookConsumerWidget {
             ),
           ),
 
-          // Loading Indicator
-          if (!isPlayerReady.value)
+          // Loading Indicator - only show when active and not yet playing
+          if (isActive && !isVideoPlaying.value)
             const Center(
               child: CircularProgressIndicator(color: Colors.white),
             ),
