@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
@@ -13,9 +14,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:blips_mobile/features/feed/presentation/reels_page.dart';
-import 'package:blips_mobile/features/feed/providers/video_player_provider.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:blips_mobile/features/feed/presentation/optimized_reels_page.dart';
+import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:video_player/video_player.dart';
 
 const _videoFallbackImage =
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800';
@@ -37,12 +38,32 @@ class FeedShellPage extends HookConsumerWidget {
     final horizontalPageController = usePageController();
     final articleFeed = ref.watch(filteredArticleFeedProvider);
     final videoFeed = ref.watch(filteredVideoFeedProvider);
+    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final reelsFeed = ref.watch(reelsFeedProvider);
+
+    // Preload first reel when app opens (regardless of current tab)
+    useEffect(() {
+      if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
+        final firstReelUrl = reelsFeed.value!.first.link;
+        videoManager.preload(firstReelUrl);
+        debugPrint('Preloading first reel on app start: $firstReelUrl');
+      }
+      return null;
+    }, [reelsFeed.hasValue]);
+
+    // Pause all videos when navigating away from video tabs (1=Videos, 2=Reels)
+    useEffect(() {
+      final isOnVideoTab = currentIndex.value == 1 || currentIndex.value == 2;
+      if (!isOnVideoTab) {
+        videoManager.pauseAll();
+      }
+      return null;
+    }, [currentIndex.value]);
 
     // Sync page controller with bottom nav
     useEffect(() {
       if (horizontalPageController.hasClients &&
-          horizontalPageController.page?.round() != currentIndex.value &&
-          currentIndex.value < 3) {
+          horizontalPageController.page?.round() != currentIndex.value) {
         horizontalPageController.animateToPage(
           currentIndex.value,
           duration: const Duration(milliseconds: 300),
@@ -52,8 +73,8 @@ class FeedShellPage extends HookConsumerWidget {
       return null;
     }, [currentIndex.value]);
 
-    // Swipeable feed tabs (Articles, Videos, Reels)
-    final swipeableTabs = [
+    // All tabs in one swipeable PageView
+    final allTabs = [
       _FeedTab<ArticleFeedEntry>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
@@ -68,29 +89,20 @@ class FeedShellPage extends HookConsumerWidget {
         onRefresh: () => ref.invalidate(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
-      ReelsPage(isVisible: currentIndex.value == 2),
-    ];
-
-    // Non-swipeable tabs (Chat, Settings)
-    final nonSwipeableTabs = [
+      OptimizedReelsPage(isVisible: currentIndex.value == 2),
       const ChatPage(),
       const SettingsPage(),
     ];
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: currentIndex.value < 3
-          ? PageView(
-              controller: horizontalPageController,
-              onPageChanged: (index) {
-                currentIndex.value = index;
-              },
-              children: swipeableTabs,
-            )
-          : IndexedStack(
-              index: currentIndex.value - 3,
-              children: nonSwipeableTabs,
-            ),
+      body: PageView(
+        controller: horizontalPageController,
+        onPageChanged: (index) {
+          currentIndex.value = index;
+        },
+        children: allTabs,
+      ),
       bottomNavigationBar: Container(
         color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
         padding: EdgeInsets.only(
@@ -201,19 +213,19 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
-    final videoManager = ref.watch(videoPlayerManagerProvider);
+    final videoManager = ref.watch(optimizedVideoManagerProvider);
 
     useEffect(() {
       if (feed.hasValue && feed.value!.isNotEmpty && T == VideoFeedEntry) {
         final entries = feed.value!;
-        // Initialize first controller but don't play
+        // Preload first video
         final firstEntry = entries[0] as VideoFeedEntry;
-        videoManager.initController(firstEntry.link);
+        videoManager.preload(firstEntry.link);
         
         // Preload second
         if (entries.length > 1) {
           final secondEntry = entries[1] as VideoFeedEntry;
-          videoManager.initController(secondEntry.link);
+          videoManager.preload(secondEntry.link);
         }
       }
       return null;
@@ -240,34 +252,34 @@ class _FeedTab<T extends FeedEntry> extends HookConsumerWidget {
             onPageChanged: (index) {
               // Only handle preloading for videos
               if (T == VideoFeedEntry) {
-                // 1. Initialize current (but don't auto-play)
+                // 1. Preload current
                 final currentEntry = entries[index] as VideoFeedEntry;
-                videoManager.initController(currentEntry.link);
+                videoManager.preload(currentEntry.link);
 
-                // 2. Pause previous
+                // 2. Pause previous and next (not current)
                 if (index > 0) {
                   final prevEntry = entries[index - 1] as VideoFeedEntry;
-                  videoManager.pause(prevEntry.link);
+                  videoManager.pauseVideo(prevEntry.link);
                 }
                 if (index < entries.length - 1) {
                   final nextEntry = entries[index + 1] as VideoFeedEntry;
-                  videoManager.pause(nextEntry.link);
+                  videoManager.pauseVideo(nextEntry.link);
                 }
 
                 // 3. Preload next 2
                 if (index + 1 < entries.length) {
                   final nextEntry = entries[index + 1] as VideoFeedEntry;
-                  videoManager.initController(nextEntry.link);
+                  videoManager.preload(nextEntry.link);
                 }
                 if (index + 2 < entries.length) {
                   final nextNextEntry = entries[index + 2] as VideoFeedEntry;
-                  videoManager.initController(nextNextEntry.link);
+                  videoManager.preload(nextNextEntry.link);
                 }
 
-                // 4. Dispose old (keep previous one for smooth back swipe)
+                // 4. Release old (keep previous one for smooth back swipe)
                 if (index > 1) {
                   final oldEntry = entries[index - 2] as VideoFeedEntry;
-                  videoManager.disposeController(oldEntry.link);
+                  videoManager.releaseVideo(oldEntry.link);
                 }
               }
 
@@ -525,44 +537,32 @@ class _VideoCard extends HookConsumerWidget {
     final dateLabel =
         DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
-    final videoManager = ref.watch(videoPlayerManagerProvider);
+    final videoManager = ref.watch(optimizedVideoManagerProvider);
     final controller = videoManager.getController(entry.link);
+    final playerState = videoManager.getPlayerState(entry.link);
     
     // Listen to controller changes to update UI (play/pause icon)
-    if (controller != null) {
-      useListenable(controller);
-    }
+    final dummyListenable = useMemoized(ChangeNotifier.new);
+    useListenable(controller ?? dummyListenable);
 
-    final isInitialized = videoManager.isInitialized(entry.link);
-    final isPlayerReady = useState(false);
+    final isPlayerReady = playerState == PlayerState.ready ||
+        playerState == PlayerState.playing ||
+        playerState == PlayerState.paused;
+    final isLoading = playerState == PlayerState.loading || playerState == null;
 
     // Handle visibility
     useEffect(() {
       if (!isVisible) {
-        videoManager.pause(entry.link);
+        videoManager.pauseVideo(entry.link);
       }
       return null;
     }, [isVisible]);
 
-    // Trigger init if not ready (fallback for first item or jumps)
+    // Preload video when card appears
     useEffect(() {
-      if (controller == null) {
-        videoManager.initController(entry.link);
-      }
+      videoManager.preload(entry.link);
       return null;
     }, [entry.link]);
-
-    // Sync play state
-    useEffect(() {
-      if (controller != null && isPlayerReady.value) {
-        if (videoManager.shouldPlay(entry.link)) {
-          controller.play();
-        } else {
-          controller.pause();
-        }
-      }
-      return null;
-    }, [videoManager.shouldPlay(entry.link), isPlayerReady.value, controller]);
 
     Widget buildFrame({bool showActions = true}) {
       return Stack(
@@ -586,23 +586,14 @@ class _VideoCard extends HookConsumerWidget {
                 ),
                 
                 // Show video when ready
-                if (controller != null)
+                if (controller != null && controller.value.isInitialized)
                   Positioned.fill(
                     child: FittedBox(
                       fit: BoxFit.cover,
                       child: SizedBox(
-                        width: 1600,
-                        height: 900,
-                        child: YoutubePlayer(
-                          controller: controller,
-                          showVideoProgressIndicator: false,
-                          onReady: () {
-                            isPlayerReady.value = true;
-                            if (videoManager.shouldPlay(entry.link)) {
-                              controller.play();
-                            }
-                          },
-                        ),
+                        width: controller.value.size.width,
+                        height: controller.value.size.height,
+                        child: VideoPlayer(controller),
                       ),
                     ),
                   ),
@@ -621,7 +612,7 @@ class _VideoCard extends HookConsumerWidget {
                 ),
 
                 // Play button overlay
-                if (controller != null && !controller.value.isPlaying && isPlayerReady.value)
+                if (controller != null && !controller.value.isPlaying && isPlayerReady)
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(20),
@@ -639,7 +630,7 @@ class _VideoCard extends HookConsumerWidget {
                   ),
 
                 // Loading indicator
-                if (!isPlayerReady.value)
+                if (isLoading)
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
@@ -659,11 +650,11 @@ class _VideoCard extends HookConsumerWidget {
                       return;
                     }
                     
-                    if (controller != null) {
+                    if (controller != null && controller.value.isInitialized) {
                       if (controller.value.isPlaying) {
-                        videoManager.pause(entry.link);
+                        videoManager.pauseVideo(entry.link);
                       } else {
-                        videoManager.play(entry.link);
+                        videoManager.playVideo(entry.link);
                       }
                     } else {
                       // Fallback to opening URL if video failed

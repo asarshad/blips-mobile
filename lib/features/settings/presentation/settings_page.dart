@@ -1,8 +1,12 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+/// Check if running in debug/dev mode
+const bool kIsDevMode = !kReleaseMode;
 
 /// Settings surface for feature toggles and account controls.
 class SettingsPage extends ConsumerWidget {
@@ -116,6 +120,58 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
 
+          // About section - only visible in dev/debug mode
+          if (kIsDevMode) ...[
+            const SizedBox(height: 24),
+            _SectionHeader(title: 'ABOUT (DEV)'),
+            Card(
+              elevation: 0,
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                children: [
+                  _AboutTile(
+                    title: 'App Version',
+                    value: '1.0.0 (Dev Build)',
+                    icon: Icons.info_outline,
+                  ),
+                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  _AboutTile(
+                    title: 'Author',
+                    value: 'Asif Arshad',
+                    icon: Icons.person_outline,
+                  ),
+                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  _AboutTile(
+                    title: 'Framework',
+                    value: 'Flutter 3.x',
+                    icon: Icons.flutter_dash,
+                  ),
+                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  _AboutTile(
+                    title: 'State Management',
+                    value: 'Riverpod + Hooks',
+                    icon: Icons.account_tree_outlined,
+                  ),
+                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  _AboutTile(
+                    title: 'Backend',
+                    value: 'FastAPI + PostgreSQL',
+                    icon: Icons.cloud_outlined,
+                  ),
+                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  _AboutTile(
+                    title: 'Video Player',
+                    value: 'video_player + youtube_explode',
+                    icon: Icons.play_circle_outline,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -245,6 +301,53 @@ class _ThemeRadioTile extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AboutTile extends StatelessWidget {
+  const _AboutTile({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: colorScheme.primary.withValues(alpha: 0.7),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
