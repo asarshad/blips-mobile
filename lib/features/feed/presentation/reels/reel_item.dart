@@ -51,7 +51,7 @@ class ReelItem extends HookConsumerWidget {
     final isError = playerState == PlayerState.error;
 
     return GestureDetector(
-      onTap: () => _handleTap(controller, videoManager),
+      onTap: () => _handleTap(controller, videoManager, playerState),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -68,8 +68,8 @@ class ReelItem extends HookConsumerWidget {
           // Gradient Overlay
           const _GradientOverlay(),
 
-          // Play indicator
-          if (controller != null && !controller.value.isPlaying && isActive)
+          // Play indicator - show when paused OR when there's an error (tap to retry)
+          if (isActive && (controller == null || !controller.value.isPlaying))
             const _PlayIndicator(),
 
           // Action Buttons
@@ -124,13 +124,26 @@ class ReelItem extends HookConsumerWidget {
   void _handleTap(
     VideoPlayerController? controller,
     OptimizedVideoPlayerManager videoManager,
+    PlayerState? playerState,
   ) {
-    if (controller != null) {
-      if (controller.value.isPlaying) {
-        videoManager.pauseVideo(entry.link);
-      } else {
-        videoManager.playVideo(entry.link);
-      }
+    // If error state, retry loading
+    if (playerState == PlayerState.error) {
+      debugPrint('Retrying failed video: ${entry.link}');
+      videoManager.retryVideo(entry.link);
+      return;
+    }
+    
+    // If no controller yet, try to play (will trigger load)
+    if (controller == null) {
+      videoManager.playVideo(entry.link);
+      return;
+    }
+    
+    // Toggle play/pause
+    if (controller.value.isPlaying) {
+      videoManager.pauseVideo(entry.link);
+    } else {
+      videoManager.playVideo(entry.link);
     }
   }
 }
@@ -334,6 +347,11 @@ class _ErrorIndicator extends StatelessWidget {
           Text(
             'Failed to load video',
             style: TextStyle(color: Colors.grey[400]),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap to retry',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
       ),

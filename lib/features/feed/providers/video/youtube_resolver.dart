@@ -31,13 +31,26 @@ class YoutubeUrlResolver {
     }
 
     try {
+      debugPrint('YoutubeResolver: Fetching manifest for videoId=$videoId');
       final manifest =
           await _youtubeExplode.videos.streamsClient.getManifest(videoId);
 
       // Prefer muxed streams for faster loading (video + audio combined)
       // Choose medium quality for balance of speed and quality
-      final streams = manifest.muxed.toList()
-        ..sort((a, b) => b.bitrate.compareTo(a.bitrate));
+      final streams = manifest.muxed.toList();
+      
+      if (streams.isEmpty) {
+        debugPrint('YoutubeResolver: No muxed streams for $videoId, trying audio-only');
+        // Fallback: some videos only have separate audio/video streams
+        final audioStreams = manifest.audioOnly.toList();
+        if (audioStreams.isEmpty) {
+          throw Exception('No playable streams found for video $videoId');
+        }
+        // For now, we need muxed streams - audio-only won't work for video display
+        throw Exception('Video $videoId has no muxed streams (may be restricted)');
+      }
+      
+      streams.sort((a, b) => b.bitrate.compareTo(a.bitrate));
 
       // Find a good quality stream (720p or lower for fast loading)
       final stream = streams.firstWhere(
@@ -47,11 +60,12 @@ class YoutubeUrlResolver {
         orElse: () => streams.first,
       );
 
+      debugPrint('YoutubeResolver: Found stream ${stream.videoResolution.height}p for $videoId');
       final streamUrl = stream.url.toString();
       _cache[url] = streamUrl;
       return streamUrl;
     } catch (e) {
-      debugPrint('Error resolving YouTube URL: $e');
+      debugPrint('YoutubeResolver ERROR for $url: $e');
       rethrow;
     }
   }
@@ -97,6 +111,11 @@ class YoutubeUrlResolver {
   /// Clears the URL cache.
   void clearCache() {
     _cache.clear();
+  }
+
+  /// Clears a specific URL from cache.
+  void clearUrlFromCache(String url) {
+    _cache.remove(url);
   }
 
   /// Disposes resources.

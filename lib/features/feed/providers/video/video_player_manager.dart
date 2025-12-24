@@ -107,6 +107,7 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
         existingPlayer.metrics?.playingTime = DateTime.now();
         _notifyListenersSafe();
       }
+      // If not ready yet, isVisible=true ensures it will autoplay when ready
       return;
     }
 
@@ -142,6 +143,20 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
       _urlToPlayer.remove(url);
       _notifyListenersSafe();
     }
+  }
+
+  /// Retries loading a failed video.
+  Future<void> retryVideo(String url) async {
+    if (_isDisposed) return;
+    
+    // Clear the URL from cache so it gets re-resolved
+    _urlResolver.clearUrlFromCache(url);
+    
+    // Release any existing player assignment
+    await releaseVideo(url);
+    
+    // Try playing again
+    await playVideo(url);
   }
 
   Future<void> _assignAndPreparePlayer(
@@ -228,8 +243,12 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
 
       _notifyListenersSafe();
 
-      // Auto-play if this is the active video
-      if (autoPlay && url == _currentActiveUrl && player.isVisible) {
+      // Auto-play if this video should be playing
+      // Check both: explicit autoPlay request OR isVisible (set by playVideo while loading)
+      final shouldAutoPlay = (autoPlay || player.isVisible) && 
+                             url == _currentActiveUrl;
+      if (shouldAutoPlay) {
+        debugPrint('Auto-playing video $url (autoPlay=$autoPlay, isVisible=${player.isVisible})');
         await controller.play();
         player.state = PlayerState.playing;
         metrics.playingTime = DateTime.now();
