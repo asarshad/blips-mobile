@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+// Neon IDE theme colors (Dracula-inspired)
+const _neonCyan = Color(0xFF80FFEA);
+const _neonPink = Color(0xFFFF79C6);
+const _neonGreen = Color(0xFF50FA7B);
+const _neonPurple = Color(0xFFBD93F9);
+const _neonOrange = Color(0xFFFFB86C);
+const _neonYellow = Color(0xFFF1FA8C);
+const _neonTextPrimary = Color(0xFFF8F8F2);
+const _neonTextMuted = Color(0xFF6272A4);
+
 /// Shared card frame used by article and video cards.
 /// Provides consistent layout with media, metadata, and action buttons.
 class FeedCardFrame extends StatelessWidget {
@@ -124,29 +134,39 @@ class FeedCardFrame extends StatelessWidget {
   }
 
   Widget _buildTitle(TextTheme textTheme, ColorScheme colorScheme) {
+    // Check if we're using neon theme
+    final isNeon = colorScheme.primary == _neonPink;
+    
     return Text(
       title,
       maxLines: 3,
       overflow: TextOverflow.ellipsis,
       style: textTheme.headlineSmall?.copyWith(
-        color: colorScheme.onSurface,
+        color: isNeon ? _neonCyan : colorScheme.onSurface,
         fontWeight: FontWeight.bold,
         height: 1.4,
         fontSize: 16,
+        fontFamily: isNeon ? 'JetBrains Mono' : null, // Monospace for code feel
+        letterSpacing: isNeon ? 0.3 : 0,
       ),
     );
   }
 
   Widget _buildSummary(TextTheme textTheme, ColorScheme colorScheme) {
+    // Check if we're using neon theme
+    final isNeon = colorScheme.primary == _neonPink;
+    
     return Expanded(
-      child: Text(
-        summary,
-        style: textTheme.bodyLarge?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          height: 1.4,
-          fontSize: 13,
-        ),
-      ),
+      child: isNeon 
+          ? _NeonSummaryText(summary: summary) 
+          : Text(
+              summary,
+              style: textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.4,
+                fontSize: 13,
+              ),
+            ),
     );
   }
 
@@ -258,4 +278,106 @@ class _ActionIcon extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Neon-themed summary text with code-like syntax highlighting.
+/// 
+/// Highlights:
+/// - Tech terms and keywords in cyan
+/// - Quoted text in green (strings)
+/// - Numbers in orange
+/// - Company names in purple
+class _NeonSummaryText extends StatelessWidget {
+  const _NeonSummaryText({required this.summary});
+  
+  final String summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      overflow: TextOverflow.fade,
+      text: TextSpan(
+        style: const TextStyle(
+          color: _neonTextPrimary,
+          fontSize: 13,
+          height: 1.5,
+          fontFamily: 'JetBrains Mono',
+          letterSpacing: 0.2,
+        ),
+        children: _buildHighlightedSpans(summary),
+      ),
+    );
+  }
+  
+  List<TextSpan> _buildHighlightedSpans(String text) {
+    final spans = <TextSpan>[];
+    
+    // Keywords to highlight (tech terms)
+    final techKeywords = RegExp(
+      r'\b(AI|API|GPT|ML|LLM|GPU|CPU|iOS|Android|Flutter|React|Python|JavaScript|'
+      r'TypeScript|Rust|Go|Swift|Kotlin|Java|C\+\+|AWS|Azure|Google|Apple|Microsoft|'
+      r'Meta|OpenAI|Anthropic|Tesla|NVIDIA|AMD|Intel|Samsung|blockchain|crypto|'
+      r'neural|machine learning|deep learning|cloud|server|database|algorithm|'
+      r'quantum|robotics|autonomous|startup|tech)\b',
+      caseSensitive: false,
+    );
+    
+    // Numbers pattern
+    final numbersPattern = RegExp(r'\b\d+(?:\.\d+)?%?|\$\d+(?:\.\d+)?[BMK]?\b');
+    
+    // Quoted strings pattern
+    final quotedPattern = RegExp(r'"[^"]*"|"[^"]*"');
+    
+    int lastEnd = 0;
+    final allMatches = <_HighlightMatch>[];
+    
+    // Collect all matches
+    for (final match in techKeywords.allMatches(text)) {
+      allMatches.add(_HighlightMatch(match.start, match.end, _neonCyan, text.substring(match.start, match.end)));
+    }
+    for (final match in numbersPattern.allMatches(text)) {
+      allMatches.add(_HighlightMatch(match.start, match.end, _neonOrange, text.substring(match.start, match.end)));
+    }
+    for (final match in quotedPattern.allMatches(text)) {
+      allMatches.add(_HighlightMatch(match.start, match.end, _neonGreen, text.substring(match.start, match.end)));
+    }
+    
+    // Sort by position
+    allMatches.sort((a, b) => a.start.compareTo(b.start));
+    
+    // Remove overlapping matches (keep first)
+    final filteredMatches = <_HighlightMatch>[];
+    for (final match in allMatches) {
+      if (filteredMatches.isEmpty || match.start >= filteredMatches.last.end) {
+        filteredMatches.add(match);
+      }
+    }
+    
+    // Build spans
+    for (final match in filteredMatches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      spans.add(TextSpan(
+        text: match.text,
+        style: TextStyle(color: match.color, fontWeight: FontWeight.w500),
+      ));
+      lastEnd = match.end;
+    }
+    
+    // Add remaining text
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+    
+    return spans.isEmpty ? [TextSpan(text: text)] : spans;
+  }
+}
+
+class _HighlightMatch {
+  _HighlightMatch(this.start, this.end, this.color, this.text);
+  final int start;
+  final int end;
+  final Color color;
+  final String text;
 }

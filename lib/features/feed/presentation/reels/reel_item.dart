@@ -261,10 +261,17 @@ class _ActionButtons extends StatelessWidget {
   }
 }
 
-class _InfoLayer extends StatelessWidget {
+class _InfoLayer extends StatefulWidget {
   const _InfoLayer({required this.entry});
 
   final ReelFeedEntry entry;
+
+  @override
+  State<_InfoLayer> createState() => _InfoLayerState();
+}
+
+class _InfoLayerState extends State<_InfoLayer> {
+  bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -276,10 +283,10 @@ class _InfoLayer extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _SourceBadge(source: entry.source),
+          _SourceBadge(source: widget.entry.source),
           const SizedBox(height: 12),
           Text(
-            entry.title,
+            widget.entry.title,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -289,18 +296,46 @@ class _InfoLayer extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (entry.summary.isNotEmpty) ...[
+          if (widget.entry.summary.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              entry.summary,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                height: 1.3,
+            GestureDetector(
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              child: AnimatedCrossFade(
+                firstChild: Text(
+                  widget.entry.summary,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                secondChild: Text(
+                  widget.entry.summary,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.3,
+                  ),
+                ),
+                crossFadeState: _isExpanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 200),
               ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
             ),
+            if (widget.entry.summary.length > 80) ...[
+              const SizedBox(height: 4),
+              Text(
+                _isExpanded ? 'tap to collapse' : 'tap to expand...',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
         ],
       ),

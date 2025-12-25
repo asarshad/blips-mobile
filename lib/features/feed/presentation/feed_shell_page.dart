@@ -81,15 +81,18 @@ class FeedShellPage extends HookConsumerWidget {
     ValueNotifier<bool> splashRemoved,
   ) {
     useEffect(() {
-      // Remove splash screen once articles are loaded (or error)
-      if (!splashRemoved.value &&
-          (articleFeed.hasValue || articleFeed.hasError)) {
-        FlutterNativeSplash.remove();
-        splashRemoved.value = true;
-        debugPrint('Splash screen removed - feed data loaded');
+      // Remove splash immediately after first frame renders
+      // Don't wait for API - app should feel responsive
+      if (!splashRemoved.value) {
+        // Small delay to ensure Flutter UI is ready
+        Future.delayed(const Duration(milliseconds: 100), () {
+          FlutterNativeSplash.remove();
+          splashRemoved.value = true;
+          debugPrint('Splash screen removed - UI ready');
+        });
       }
       return null;
-    }, [articleFeed.hasValue, articleFeed.hasError]);
+    }, []);
   }
 
   void _useReelPreloading(

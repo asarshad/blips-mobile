@@ -174,12 +174,15 @@ class _VideoMedia extends StatelessWidget {
         // Video player when ready
         if (controller != null && controller!.value.isInitialized)
           Positioned.fill(
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: controller!.value.size.width,
-                height: controller!.value.size.height,
-                child: VideoPlayer(controller!),
+            child: ClipRect(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: controller!.value.size.width,
+                  height: controller!.value.size.height,
+                  child: VideoPlayer(controller!),
+                ),
               ),
             ),
           ),
