@@ -11,17 +11,18 @@ import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Root shell page that hosts all main app tabs.
-/// 
+///
 /// Contains:
 /// - Articles feed (index 0)
 /// - Videos feed (index 1)
 /// - Reels feed (index 2)
 /// - Chat (index 3)
 /// - Settings (index 4)
-/// 
+///
 /// All tabs are swipeable horizontally for quick navigation.
 class FeedShellPage extends HookConsumerWidget {
   const FeedShellPage({super.key});
@@ -33,12 +34,16 @@ class FeedShellPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentIndex = useState(0);
     final pageController = usePageController();
+    final splashRemoved = useState(false);
 
     // Watch providers
     final articleFeed = ref.watch(filteredArticleFeedProvider);
     final videoFeed = ref.watch(filteredVideoFeedProvider);
     final videoManager = ref.watch(optimizedVideoManagerProvider);
     final reelsFeed = ref.watch(reelsFeedProvider);
+
+    // Remove splash once feed data is available
+    _useSplashRemoval(articleFeed, splashRemoved);
 
     // Preload first reel on app start
     _useReelPreloading(reelsFeed, videoManager);
@@ -69,6 +74,22 @@ class FeedShellPage extends HookConsumerWidget {
         },
       ),
     );
+  }
+
+  void _useSplashRemoval(
+    AsyncValue<List<ArticleFeedEntry>> articleFeed,
+    ValueNotifier<bool> splashRemoved,
+  ) {
+    useEffect(() {
+      // Remove splash screen once articles are loaded (or error)
+      if (!splashRemoved.value &&
+          (articleFeed.hasValue || articleFeed.hasError)) {
+        FlutterNativeSplash.remove();
+        splashRemoved.value = true;
+        debugPrint('Splash screen removed - feed data loaded');
+      }
+      return null;
+    }, [articleFeed.hasValue, articleFeed.hasError]);
   }
 
   void _useReelPreloading(

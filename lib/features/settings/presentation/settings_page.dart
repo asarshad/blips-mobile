@@ -3,7 +3,6 @@ import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 /// Check if running in debug/dev mode
 const bool kIsDevMode = !kReleaseMode;
@@ -21,15 +20,19 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
+    final themeVariant = ref.watch(themeVariantProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final isNeonTheme = themeVariant == AppThemeVariant.neon;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Settings',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            letterSpacing: isNeonTheme ? 1.5 : 0,
+          ),
         ),
         centerTitle: true,
       ),
@@ -42,32 +45,65 @@ class SettingsPage extends ConsumerWidget {
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              side: BorderSide(
+                color: isNeonTheme
+                    ? colorScheme.primary.withValues(alpha: 0.3)
+                    : colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
             ),
             child: Column(
               children: [
-                _ThemeRadioTile(
+                _ThemeVariantTile(
                   title: 'System Default',
-                  value: ThemeMode.system,
-                  groupValue: themeMode,
+                  subtitle: 'Follow device settings',
+                  icon: Icons.brightness_auto,
+                  value: AppThemeVariant.system,
+                  groupValue: themeVariant,
                   onChanged: (val) =>
-                      ref.read(themeModeProvider.notifier).setThemeMode(val),
+                      ref.read(themeVariantProvider.notifier).setVariant(val),
                 ),
-                Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                _ThemeRadioTile(
+                Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _ThemeVariantTile(
                   title: 'Light Mode',
-                  value: ThemeMode.light,
-                  groupValue: themeMode,
+                  subtitle: 'Clean and bright',
+                  icon: Icons.light_mode,
+                  value: AppThemeVariant.light,
+                  groupValue: themeVariant,
                   onChanged: (val) =>
-                      ref.read(themeModeProvider.notifier).setThemeMode(val),
+                      ref.read(themeVariantProvider.notifier).setVariant(val),
                 ),
-                Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                _ThemeRadioTile(
+                Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _ThemeVariantTile(
                   title: 'Dark Mode',
-                  value: ThemeMode.dark,
-                  groupValue: themeMode,
+                  subtitle: 'Easy on the eyes',
+                  icon: Icons.dark_mode,
+                  value: AppThemeVariant.dark,
+                  groupValue: themeVariant,
                   onChanged: (val) =>
-                      ref.read(themeModeProvider.notifier).setThemeMode(val),
+                      ref.read(themeVariantProvider.notifier).setVariant(val),
+                ),
+                Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _ThemeVariantTile(
+                  title: 'Neon Mode',
+                  subtitle: 'Cyberpunk aesthetic for devs 🚀',
+                  icon: Icons.terminal,
+                  value: AppThemeVariant.neon,
+                  groupValue: themeVariant,
+                  onChanged: (val) =>
+                      ref.read(themeVariantProvider.notifier).setVariant(val),
+                  isNeon: true,
                 ),
               ],
             ),
@@ -79,7 +115,8 @@ class SettingsPage extends ConsumerWidget {
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              side: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: _SettingsTile(
               title: 'Clear Chat History',
@@ -101,7 +138,8 @@ class SettingsPage extends ConsumerWidget {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(foregroundColor: colorScheme.error),
+                        style: TextButton.styleFrom(
+                            foregroundColor: colorScheme.error),
                         child: const Text('Delete'),
                       ),
                     ],
@@ -129,7 +167,8 @@ class SettingsPage extends ConsumerWidget {
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                side: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
               ),
               child: Column(
                 children: [
@@ -138,31 +177,51 @@ class SettingsPage extends ConsumerWidget {
                     value: '1.0.0 (Dev Build)',
                     icon: Icons.info_outline,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Author',
                     value: 'Asif Arshad',
                     icon: Icons.person_outline,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Framework',
                     value: 'Flutter 3.x',
                     icon: Icons.flutter_dash,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'State Management',
                     value: 'Riverpod + Hooks',
                     icon: Icons.account_tree_outlined,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Backend',
                     value: 'FastAPI + PostgreSQL',
                     icon: Icons.cloud_outlined,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Video Player',
                     value: 'video_player + youtube_explode',
@@ -175,13 +234,6 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 }
 
@@ -259,47 +311,126 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
-class _ThemeRadioTile extends StatelessWidget {
-  const _ThemeRadioTile({
+class _ThemeVariantTile extends StatelessWidget {
+  const _ThemeVariantTile({
     required this.title,
+    this.subtitle,
+    required this.icon,
     required this.value,
     required this.groupValue,
     required this.onChanged,
+    this.isNeon = false,
   });
 
   final String title;
-  final ThemeMode value;
-  final ThemeMode groupValue;
-  final ValueChanged<ThemeMode> onChanged;
+  final String? subtitle;
+  final IconData icon;
+  final AppThemeVariant value;
+  final AppThemeVariant groupValue;
+  final ValueChanged<AppThemeVariant> onChanged;
+  final bool isNeon;
 
   @override
   Widget build(BuildContext context) {
     final isSelected = value == groupValue;
     final colorScheme = Theme.of(context).colorScheme;
-    
+
+    // IDE-inspired neon colors (Dracula theme palette)
+    const neonPink = Color(0xFFFF79C6);
+    const neonPurple = Color(0xFFBD93F9);
+    const neonCyan = Color(0xFF80FFEA);
+
     return InkWell(
       onTap: () => onChanged(value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+      child: Container(
+        decoration: isNeon && isSelected
+            ? BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    neonPurple.withValues(alpha: 0.1),
+                    neonPink.withValues(alpha: 0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              )
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isNeon
+                      ? (isSelected
+                          ? neonPurple.withValues(alpha: 0.2)
+                          : Colors.transparent)
+                      : (isSelected
+                          ? colorScheme.primary.withValues(alpha: 0.1)
+                          : Colors.transparent),
+                  borderRadius: BorderRadius.circular(8),
+                  border: isNeon
+                      ? Border.all(
+                          color: isSelected
+                              ? neonPink
+                              : neonPurple.withValues(alpha: 0.3),
+                          width: isSelected ? 1.5 : 1,
+                        )
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: isNeon
+                      ? (isSelected ? neonPink : neonPurple.withValues(alpha: 0.7))
+                      : (isSelected
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant),
                 ),
               ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check,
-                color: colorScheme.primary,
-                size: 20,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w400,
+                        color: isNeon && isSelected
+                            ? neonCyan
+                            : (isSelected
+                                ? colorScheme.primary
+                                : colorScheme.onSurface),
+                        letterSpacing: isNeon ? 0.5 : 0,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isNeon
+                              ? neonPurple.withValues(alpha: 0.7)
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-          ],
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  color: isNeon ? neonPink : colorScheme.primary,
+                  size: 22,
+                ),
+            ],
+          ),
         ),
       ),
     );
