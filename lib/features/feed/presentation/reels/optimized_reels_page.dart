@@ -9,7 +9,7 @@ import 'reel_item.dart';
 import 'video_performance_overlay.dart';
 
 /// Optimized Reels page with video player pooling and preloading.
-/// 
+///
 /// Achieves near-instant playback (target: <200ms time-to-first-frame)
 /// through intelligent preloading and player pooling.
 class OptimizedReelsPage extends HookConsumerWidget {
@@ -92,7 +92,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
           final link = entries[currentIndex.value].link;
           videoManager.playVideo(link);
         } else {
-          videoManager.pauseAll();
+          // Release all resources when leaving reels tab
+          videoManager.releaseAll();
+          debugPrint('Reels tab hidden: released all video resources');
         }
       }
       return null;
@@ -140,6 +142,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           },
           itemCount: entries.length,
           itemBuilder: (context, index) => ReelItem(
+            key: ValueKey(entries[index].link),
             entry: entries[index],
             isActive: index == currentIndex.value,
             isVisible: isVisible,

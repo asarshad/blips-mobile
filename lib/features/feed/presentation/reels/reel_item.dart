@@ -3,13 +3,14 @@ import 'package:blips_mobile/features/feed/providers/optimized_video_provider.da
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import 'reel_action_button.dart';
 
 /// Individual reel item with video playback.
-/// 
+///
 /// Shows thumbnail while loading, then transitions to video.
 /// Tap to play/pause.
 class ReelItem extends HookConsumerWidget {
@@ -23,10 +24,10 @@ class ReelItem extends HookConsumerWidget {
 
   /// The reel entry data.
   final ReelFeedEntry entry;
-  
+
   /// Whether this reel is the currently active one in the PageView.
   final bool isActive;
-  
+
   /// Whether the reels page is currently visible.
   final bool isVisible;
 
@@ -37,6 +38,7 @@ class ReelItem extends HookConsumerWidget {
     final playerState = videoManager.getPlayerState(entry.link);
     final showThumbnail = useState(true);
     final isMounted = useIsMounted();
+    final isTextExpanded = useState(false);
 
     // Track when video is actually playing to hide thumbnail
     _useThumbnailVisibility(
@@ -46,48 +48,64 @@ class ReelItem extends HookConsumerWidget {
       isMounted: isMounted,
     );
 
-    final isLoading =
-        playerState == PlayerState.loading || playerState == null;
+    final isLoading = playerState == PlayerState.loading || playerState == null;
     final isError = playerState == PlayerState.error;
 
-    return GestureDetector(
-      onTap: () => _handleTap(controller, videoManager, playerState),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Video Layer
-          if (controller != null && controller.value.isInitialized)
-            _VideoLayer(controller: controller),
+    // Show video when initialized and has been played (position > 0) or is currently playing/buffering
+    // This keeps video visible when paused
+    final showVideo = controller != null &&
+        controller.value.isInitialized &&
+        (controller.value.position > Duration.zero ||
+         controller.value.isPlaying || 
+         controller.value.isBuffering);
 
-          // Thumbnail Layer
-          _ThumbnailLayer(
-            thumbnailUrl: entry.thumbnailUrl,
-            isVisible: showThumbnail.value,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Video Layer (tappable for play/pause)
+        GestureDetector(
+          onTap: () => _handleTap(controller, videoManager, playerState),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Video Layer - only show when actually playing
+              if (showVideo) _VideoLayer(controller: controller),
+
+              // Thumbnail Layer
+              _ThumbnailLayer(
+                thumbnailUrl: entry.thumbnailUrl,
+                isVisible: showThumbnail.value,
+              ),
+
+              // Gradient Overlay
+              const _GradientOverlay(),
+
+              // Play indicator - show when paused OR when there's an error (tap to retry)
+              if (isActive &&
+                  (controller == null || !controller.value.isPlaying))
+                const _PlayIndicator(),
+
+              // Loading Indicator
+              if (isActive && isLoading)
+                const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+
+              // Error indicator
+              if (isError) const _ErrorIndicator(),
+            ],
           ),
+        ),
 
-          // Gradient Overlay
-          const _GradientOverlay(),
+        // Action Buttons
+        _ActionButtons(entry: entry),
 
-          // Play indicator - show when paused OR when there's an error (tap to retry)
-          if (isActive && (controller == null || !controller.value.isPlaying))
-            const _PlayIndicator(),
-
-          // Action Buttons
-          _ActionButtons(entry: entry),
-
-          // Info Layer
-          _InfoLayer(entry: entry),
-
-          // Loading Indicator
-          if (isActive && isLoading)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-
-          // Error indicator
-          if (isError) const _ErrorIndicator(),
-        ],
-      ),
+        // Info Layer (not tappable for play/pause, but text is tappable for expand/collapse)
+        _InfoLayer(
+          entry: entry,
+          isTextExpanded: isTextExpanded,
+        ),
+      ],
     );
   }
 
@@ -104,9 +122,9 @@ class ReelItem extends HookConsumerWidget {
             if (!isMounted()) return;
 
             final isPlaying = controller.value.isPlaying;
-            final hasPosition = controller.value.position > Duration.zero;
 
-            if (isPlaying && hasPosition && showThumbnail.value) {
+            // Hide thumbnail as soon as video starts playing
+            if (isPlaying && showThumbnail.value) {
               showThumbnail.value = false;
             } else if (!isActive && !showThumbnail.value) {
               showThumbnail.value = true;
@@ -132,13 +150,13 @@ class ReelItem extends HookConsumerWidget {
       videoManager.retryVideo(entry.link);
       return;
     }
-    
+
     // If no controller yet, try to play (will trigger load)
     if (controller == null) {
       videoManager.playVideo(entry.link);
       return;
     }
-    
+
     // Toggle play/pause
     if (controller.value.isPlaying) {
       videoManager.pauseVideo(entry.link);
@@ -246,6 +264,17 @@ class _ActionButtons extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ReelActionButton(
+            icon: Icons.share,
+            label: 'Share',
+            onTap: () {
+              Share.share(
+                'Check out this reel: ${entry.link}\n\nShared via Blips',
+                subject: entry.title,
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          ReelActionButton(
             icon: Icons.open_in_new,
             label: 'Open',
             onTap: () async {
@@ -261,20 +290,20 @@ class _ActionButtons extends StatelessWidget {
   }
 }
 
-class _InfoLayer extends StatefulWidget {
-  const _InfoLayer({required this.entry});
+class _InfoLayer extends HookWidget {
+  const _InfoLayer({
+    required this.entry,
+    required this.isTextExpanded,
+  });
 
   final ReelFeedEntry entry;
-
-  @override
-  State<_InfoLayer> createState() => _InfoLayerState();
-}
-
-class _InfoLayerState extends State<_InfoLayer> {
-  bool _isExpanded = false;
+  final ValueNotifier<bool> isTextExpanded;
 
   @override
   Widget build(BuildContext context) {
+    // Watch the value notifier
+    final expanded = useValueListenable(isTextExpanded);
+    
     return Positioned(
       left: 16,
       right: 16,
@@ -283,59 +312,41 @@ class _InfoLayerState extends State<_InfoLayer> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _SourceBadge(source: widget.entry.source),
-          const SizedBox(height: 12),
-          Text(
-            widget.entry.title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          IgnorePointer(
+            child: _SourceBadge(source: entry.source),
           ),
-          if (widget.entry.summary.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          IgnorePointer(
+            child: Text(
+              entry.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                height: 1.2,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (entry.summary.isNotEmpty) ...[
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: () => setState(() => _isExpanded = !_isExpanded),
-              child: AnimatedCrossFade(
-                firstChild: Text(
-                  widget.entry.summary,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.3,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                isTextExpanded.value = !isTextExpanded.value;
+              },
+              child: Text(
+                entry.summary,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.3,
                 ),
-                secondChild: Text(
-                  widget.entry.summary,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.3,
-                  ),
-                ),
-                crossFadeState: _isExpanded
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                duration: const Duration(milliseconds: 200),
+                maxLines: expanded ? null : 2,
+                overflow: expanded ? null : TextOverflow.ellipsis,
               ),
             ),
-            if (widget.entry.summary.length > 80) ...[
-              const SizedBox(height: 4),
-              Text(
-                _isExpanded ? 'tap to collapse' : 'tap to expand...',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
           ],
         ],
       ),

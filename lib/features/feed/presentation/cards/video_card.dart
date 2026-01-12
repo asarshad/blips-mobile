@@ -29,7 +29,8 @@ class VideoCard extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final showBubbles = useState(false);
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
-    final dateLabel = DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
+    final dateLabel =
+        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
     final videoManager = ref.watch(optimizedVideoManagerProvider);
     final controller = videoManager.getController(entry.link);
@@ -52,10 +53,12 @@ class VideoCard extends HookConsumerWidget {
       return null;
     }, [isVisible]);
 
-    // Preload video when card appears
+    // Cleanup: release video resources when this card is disposed
     useEffect(() {
-      videoManager.preload(entry.link);
-      return null;
+      return () {
+        debugPrint('VideoCard disposed for ${entry.link}, releasing resources');
+        videoManager.releaseVideo(entry.link);
+      };
     }, [entry.link]);
 
     return Stack(
@@ -113,11 +116,8 @@ class VideoCard extends HookConsumerWidget {
         videoManager.playVideo(entry.link);
       }
     } else {
-      // Fallback to opening URL if video failed
-      final uri = Uri.parse(entry.link);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      }
+      // No controller yet, start loading and playing
+      await videoManager.playVideo(entry.link);
     }
   }
 
@@ -130,7 +130,7 @@ class VideoCard extends HookConsumerWidget {
 
   void _shareVideo(VideoFeedEntry entry) {
     Share.share(
-      'Check out this video: ${entry.link}',
+      'Check out this video: ${entry.link}\n\nShared via Blips',
       subject: entry.title,
     );
   }
@@ -151,33 +151,33 @@ class _VideoMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Thumbnail background
-        Positioned.fill(
-          child: Image.network(
-            thumbnailUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey.shade900,
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.broken_image_outlined,
-                size: 32,
-                color: Colors.white54,
+    return ClipRect(
+      clipBehavior: Clip.hardEdge,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Thumbnail background
+          Positioned.fill(
+            child: Image.network(
+              thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey.shade900,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  size: 32,
+                  color: Colors.white54,
+                ),
               ),
             ),
           ),
-        ),
 
-        // Video player when ready
-        if (controller != null && controller!.value.isInitialized)
-          Positioned.fill(
-            child: ClipRect(
+          // Video player when ready
+          if (controller != null && controller!.value.isInitialized)
+            Positioned.fill(
               child: FittedBox(
                 fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
                 child: SizedBox(
                   width: controller!.value.size.width,
                   height: controller!.value.size.height,
@@ -185,33 +185,32 @@ class _VideoMedia extends StatelessWidget {
                 ),
               ),
             ),
-          ),
 
-        // Gradient overlay
-        const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.transparent, Colors.black54],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+          // Gradient overlay
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.black54],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
             ),
           ),
-        ),
 
-        // Play button overlay
-        if (controller != null &&
-            !controller!.value.isPlaying &&
-            isPlayerReady)
-          _PlayButton(),
+          // Play button overlay - show when no controller or not playing, but not when loading
+          if ((controller == null && !isLoading) || 
+              (controller != null && !controller!.value.isPlaying && !isLoading))
+            _PlayButton(),
 
-        // Loading indicator
-        if (isLoading)
-          const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
-      ],
+          // Loading indicator - show when loading (with or without controller)
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+        ],
+      ),
     );
   }
 }

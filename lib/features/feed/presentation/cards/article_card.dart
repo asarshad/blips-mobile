@@ -68,7 +68,7 @@ class ArticleCard extends HookWidget {
 
   void _shareArticle(ArticleFeedEntry entry) {
     Share.share(
-      'Check out this article: ${entry.url}',
+      'Check out this article: ${entry.url}\\n\\nShared via Blips',
       subject: entry.title,
     );
   }

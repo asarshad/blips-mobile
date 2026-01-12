@@ -11,7 +11,6 @@ import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Root shell page that hosts all main app tabs.
@@ -34,22 +33,20 @@ class FeedShellPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentIndex = useState(0);
     final pageController = usePageController();
-    final splashRemoved = useState(false);
 
-    // Watch providers
+    // Watch providers for current view
     final articleFeed = ref.watch(filteredArticleFeedProvider);
     final videoFeed = ref.watch(filteredVideoFeedProvider);
     final videoManager = ref.watch(optimizedVideoManagerProvider);
-    final reelsFeed = ref.watch(reelsFeedProvider);
 
-    // Remove splash once feed data is available
-    _useSplashRemoval(articleFeed, splashRemoved);
-
-    // Preload first reel on app start
-    _useReelPreloading(reelsFeed, videoManager);
+    // Preload reels in background after first frame
+    _useBackgroundReelsPreload(ref, videoManager);
 
     // Pause videos when navigating away from video tabs
     _useVideoPauseOnNavigate(currentIndex.value, videoManager);
+
+    // Cleanup all video resources when shell page is disposed
+    _useLifecycleCleanup(videoManager);
 
     // Sync page controller with bottom nav
     _usePageControllerSync(pageController, currentIndex.value);
@@ -76,37 +73,45 @@ class FeedShellPage extends HookConsumerWidget {
     );
   }
 
-  void _useSplashRemoval(
-    AsyncValue<List<ArticleFeedEntry>> articleFeed,
-    ValueNotifier<bool> splashRemoved,
-  ) {
-    useEffect(() {
-      // Remove splash immediately after first frame renders
-      // Don't wait for API - app should feel responsive
-      if (!splashRemoved.value) {
-        // Small delay to ensure Flutter UI is ready
-        Future.delayed(const Duration(milliseconds: 100), () {
-          FlutterNativeSplash.remove();
-          splashRemoved.value = true;
-          debugPrint('Splash screen removed - UI ready');
-        });
-      }
-      return null;
-    }, []);
-  }
-
-  void _useReelPreloading(
-    AsyncValue<List<ReelFeedEntry>> reelsFeed,
+  void _useBackgroundReelsPreload(
+    WidgetRef ref,
     OptimizedVideoPlayerManager videoManager,
   ) {
     useEffect(() {
-      if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
-        final firstReelUrl = reelsFeed.value!.first.link;
-        videoManager.preload(firstReelUrl);
-        debugPrint('Preloading first reel on app start: $firstReelUrl');
-      }
+      // Defer reels loading until after first frame to avoid blocking UI
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.microtask(() async {
+          try {
+            // Read the reels provider and wait for data
+            final reelsAsync = ref.read(reelsFeedProvider);
+            await reelsAsync.maybeWhen(
+              data: (reels) {
+                if (reels.isNotEmpty) {
+                  final firstReelUrl = reels.first.link;
+                  videoManager.preload(firstReelUrl);
+                  debugPrint('Background preload: First reel queued');
+                }
+              },
+              orElse: () {
+                // If loading/error, wait a bit then check again
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  final reelsData = ref.read(reelsFeedProvider).valueOrNull;
+                  if (reelsData != null && reelsData.isNotEmpty) {
+                    final firstReelUrl = reelsData.first.link;
+                    videoManager.preload(firstReelUrl);
+                    debugPrint(
+                        'Background preload: First reel queued (delayed)');
+                  }
+                });
+              },
+            );
+          } catch (e) {
+            debugPrint('Background reels preload failed: $e');
+          }
+        });
+      });
       return null;
-    }, [reelsFeed.hasValue]);
+    }, []);
   }
 
   void _useVideoPauseOnNavigate(
@@ -116,10 +121,24 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       final isOnVideoTab = currentIndex == 1 || currentIndex == 2;
       if (!isOnVideoTab) {
-        videoManager.pauseAll();
+        // Release all video resources when leaving video tabs
+        // This prevents audio leaks and frees memory
+        videoManager.releaseAll();
+        debugPrint(
+            'Released all videos: user left video tabs (index=$currentIndex)');
       }
       return null;
     }, [currentIndex]);
+  }
+
+  void _useLifecycleCleanup(OptimizedVideoPlayerManager videoManager) {
+    useEffect(() {
+      // Cleanup callback when the shell page is disposed
+      return () {
+        debugPrint('FeedShellPage disposing: cleaning up all video resources');
+        videoManager.releaseAll();
+      };
+    }, []);
   }
 
   void _usePageControllerSync(PageController controller, int currentIndex) {

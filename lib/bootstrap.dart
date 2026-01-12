@@ -14,4 +14,7 @@ Future<void> bootstrap() async {
       child: BlipsApp(),
     ),
   );
+
+  // Remove splash screen after app has started
+  FlutterNativeSplash.remove();
 }

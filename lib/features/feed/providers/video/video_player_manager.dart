@@ -16,7 +16,7 @@ final optimizedVideoManagerProvider =
     ChangeNotifierProvider((ref) => OptimizedVideoPlayerManager());
 
 /// Manages a pool of video players for optimal performance.
-/// 
+///
 /// Uses player pooling to minimize initialization overhead when
 /// scrolling through video feeds. Players are recycled using LRU
 /// (least recently used) strategy.
@@ -29,7 +29,7 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
   final List<PooledVideoPlayer> _pool = [];
   final Map<String, PooledVideoPlayer> _urlToPlayer = {};
   final List<VideoPerformanceMetrics> _performanceHistory = [];
-  
+
   late final YoutubeUrlResolver _urlResolver;
   String? _currentActiveUrl;
   bool _isDisposed = false;
@@ -63,8 +63,21 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
   }
 
   /// Gets the controller for a video URL if available.
+  ///
+  /// Returns null if no player is assigned to this URL, or if the
+  /// player's assigned URL doesn't match (safety check).
   VideoPlayerController? getController(String url) {
-    return _urlToPlayer[url]?.controller;
+    final player = _urlToPlayer[url];
+    if (player == null) return null;
+
+    // Safety check: ensure player is actually assigned to this URL
+    if (player.assignedUrl != url) {
+      debugPrint(
+          'WARNING: Player URL mismatch! Map key: $url, assigned: ${player.assignedUrl}');
+      return null;
+    }
+
+    return player.controller;
   }
 
   /// Checks if video is ready to play.
@@ -96,12 +109,23 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
   Future<void> playVideo(String url) async {
     if (_isDisposed) return;
 
+    debugPrint('playVideo called for: $url');
     _currentActiveUrl = url;
 
     final existingPlayer = _urlToPlayer[url];
     if (existingPlayer != null) {
+      // Verify the player is actually assigned to this URL
+      if (existingPlayer.assignedUrl != url) {
+        debugPrint(
+            'ERROR: existingPlayer URL mismatch! Expected: $url, got: ${existingPlayer.assignedUrl}');
+        _urlToPlayer.remove(url);
+        await _assignAndPreparePlayer(url, autoPlay: true);
+        return;
+      }
+
       existingPlayer.isVisible = true;
       if (existingPlayer.isReady) {
+        debugPrint('Playing existing ready player for: $url');
         await existingPlayer.controller?.play();
         existingPlayer.state = PlayerState.playing;
         existingPlayer.metrics?.playingTime = DateTime.now();
@@ -135,6 +159,21 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
     _notifyListenersSafe();
   }
 
+  /// Releases all video resources (for tab switches or screen disposal).
+  Future<void> releaseAll() async {
+    debugPrint('Releasing all video resources...');
+    _currentActiveUrl = null;
+
+    // Reset all players and clear mapping
+    for (final player in _pool) {
+      await player.reset();
+    }
+    _urlToPlayer.clear();
+
+    _notifyListenersSafe();
+    debugPrint('All video resources released');
+  }
+
   /// Releases resources for a video that's no longer needed.
   Future<void> releaseVideo(String url) async {
     final player = _urlToPlayer[url];
@@ -148,13 +187,13 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
   /// Retries loading a failed video.
   Future<void> retryVideo(String url) async {
     if (_isDisposed) return;
-    
+
     // Clear the URL from cache so it gets re-resolved
     _urlResolver.clearUrlFromCache(url);
-    
+
     // Release any existing player assignment
     await releaseVideo(url);
-    
+
     // Try playing again
     await playVideo(url);
   }
@@ -186,7 +225,8 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
 
     // If recycling, clean up old assignment
     if (player.assignedUrl != null) {
-      _urlToPlayer.remove(player.assignedUrl);
+      // Remove ALL map entries that point to this player (handles race conditions)
+      _urlToPlayer.removeWhere((key, value) => value == player);
       await player.reset();
     }
 
@@ -245,10 +285,11 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
 
       // Auto-play if this video should be playing
       // Check both: explicit autoPlay request OR isVisible (set by playVideo while loading)
-      final shouldAutoPlay = (autoPlay || player.isVisible) && 
-                             url == _currentActiveUrl;
+      final shouldAutoPlay =
+          (autoPlay || player.isVisible) && url == _currentActiveUrl;
       if (shouldAutoPlay) {
-        debugPrint('Auto-playing video $url (autoPlay=$autoPlay, isVisible=${player.isVisible})');
+        debugPrint(
+            'Auto-playing video $url (autoPlay=$autoPlay, isVisible=${player.isVisible})');
         await controller.play();
         player.state = PlayerState.playing;
         metrics.playingTime = DateTime.now();
@@ -309,7 +350,7 @@ class OptimizedVideoPlayerManager extends ChangeNotifier {
 /// Extension for feed navigation handling.
 extension VideoFeedManager on OptimizedVideoPlayerManager {
   /// Handles feed page changes with preloading and cleanup.
-  /// 
+  ///
   /// - Pauses all videos
   /// - Plays the current video
   /// - Preloads upcoming videos
@@ -337,9 +378,7 @@ extension VideoFeedManager on OptimizedVideoPlayerManager {
     }
 
     // Release old videos
-    for (var i = 0;
-        i < currentIndex - VideoPoolConfig.disposeThreshold;
-        i++) {
+    for (var i = 0; i < currentIndex - VideoPoolConfig.disposeThreshold; i++) {
       if (i >= 0 && i < videoUrls.length) {
         await releaseVideo(videoUrls[i]);
       }
