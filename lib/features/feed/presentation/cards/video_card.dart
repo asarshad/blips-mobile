@@ -1,11 +1,11 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -128,11 +128,15 @@ class VideoCard extends HookConsumerWidget {
     }
   }
 
-  void _shareVideo(VideoFeedEntry entry) {
-    Share.share(
-      'Check out this video: ${entry.link}\n\nShared via Blips',
-      subject: entry.title,
+  Future<void> _shareVideo(VideoFeedEntry entry) async {
+    final data = VideoShareData(
+      title: entry.title,
+      summary: entry.summary,
+      videoUrl: entry.link,
+      thumbnailUrl: entry.thumbnailUrl ?? _videoFallbackImage,
+      channelName: entry.source,
     );
+    await ShareService.instance.shareVideo(data);
   }
 }
 

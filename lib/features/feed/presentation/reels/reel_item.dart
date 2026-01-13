@@ -1,13 +1,12 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
-
-import 'reel_action_button.dart';
 
 /// Individual reel item with video playback.
 ///
@@ -266,12 +265,7 @@ class _ActionButtons extends StatelessWidget {
           ReelActionButton(
             icon: Icons.share,
             label: 'Share',
-            onTap: () {
-              Share.share(
-                'Check out this reel: ${entry.link}\n\nShared via Blips',
-                subject: entry.title,
-              );
-            },
+            onTap: () => _shareReel(),
           ),
           const SizedBox(height: 12),
           ReelActionButton(
@@ -287,6 +281,14 @@ class _ActionButtons extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _shareReel() async {
+    final data = ReelShareData(
+      title: entry.title,
+      videoUrl: entry.link,
+    );
+    await ShareService.instance.shareReel(data);
   }
 }
 

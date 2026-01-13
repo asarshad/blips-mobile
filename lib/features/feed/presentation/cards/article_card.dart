@@ -1,9 +1,9 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Card widget for displaying article feed entries.
@@ -66,11 +66,15 @@ class ArticleCard extends HookWidget {
     }
   }
 
-  void _shareArticle(ArticleFeedEntry entry) {
-    Share.share(
-      'Check out this article: ${entry.url}\\n\\nShared via Blips',
-      subject: entry.title,
+  Future<void> _shareArticle(ArticleFeedEntry entry) async {
+    final data = ArticleShareData(
+      title: entry.title,
+      summary: entry.summary,
+      sourceUrl: entry.url,
+      imageUrl: entry.imageUrl,
+      sourceName: entry.source,
     );
+    await ShareService.instance.shareArticle(data);
   }
 }
 
