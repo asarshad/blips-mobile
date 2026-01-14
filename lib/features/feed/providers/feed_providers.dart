@@ -24,16 +24,19 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
 
   Future<void> loadInitial() async {
     try {
+      if (!mounted) return;
       state = const AsyncValue.loading();
       final items = await _repository.fetchFeed(
         page: 1,
         articleLimit: _articleLimit,
         videoLimit: _videoLimit,
       );
+      if (!mounted) return;
       _page = 1;
       _hasMore = items.isNotEmpty;
       state = AsyncValue.data(items);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
@@ -113,12 +116,15 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   Future<void> loadInitial() async {
     try {
+      if (!mounted) return;
       state = const AsyncValue.loading();
       final reels = await _repository.fetchReels(page: 1, limit: _limit);
+      if (!mounted) return;
       _page = 1;
       _hasMore = reels.length >= _limit;
       state = AsyncValue.data(reels);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
