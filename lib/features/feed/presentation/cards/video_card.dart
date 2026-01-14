@@ -1,7 +1,6 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
-import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -83,7 +82,7 @@ class VideoCard extends HookConsumerWidget {
           ),
           onOpenLink: () => _openInBrowser(entry.link),
           onChat: () => showBubbles.value = !showBubbles.value,
-          onShare: () => _shareVideo(entry),
+          onShare: () => _shareVideo(context),
         ),
         if (showBubbles.value)
           Positioned(
@@ -128,15 +127,22 @@ class VideoCard extends HookConsumerWidget {
     }
   }
 
-  Future<void> _shareVideo(VideoFeedEntry entry) async {
-    final data = VideoShareData(
+  Future<void> _shareVideo(BuildContext context) async {
+    final dateLabel =
+        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
+    final preview = entry.thumbnailUrl ?? _videoFallbackImage;
+
+    await ShareService.instance.shareVideo(
+      context: context,
       title: entry.title,
       summary: entry.summary,
-      videoUrl: entry.link,
-      thumbnailUrl: entry.thumbnailUrl ?? _videoFallbackImage,
       channelName: entry.source,
+      category: entry.category,
+      date: dateLabel,
+      duration: '${entry.readTime} min watch',
+      thumbnailUrl: preview,
+      videoUrl: entry.link,
     );
-    await ShareService.instance.shareVideo(data);
   }
 }
 
@@ -204,8 +210,10 @@ class _VideoMedia extends StatelessWidget {
           ),
 
           // Play button overlay - show when no controller or not playing, but not when loading
-          if ((controller == null && !isLoading) || 
-              (controller != null && !controller!.value.isPlaying && !isLoading))
+          if ((controller == null && !isLoading) ||
+              (controller != null &&
+                  !controller!.value.isPlaying &&
+                  !isLoading))
             _PlayButton(),
 
           // Loading indicator - show when loading (with or without controller)

@@ -136,18 +136,12 @@ class ChatRepository {
       final payload = <String, dynamic>{
           'message': message,
           'sender': 'user',
+          'content_item_id': isVideo ? -articleId : articleId,
           'history': previousHistory.map((m) => {
             'role': m.role,
             'content': m.content,
           }).toList(),
       };
-      
-      if (isVideo) {
-          payload['video_id'] = -articleId;
-          payload['article_id'] = null;
-      } else {
-          payload['article_id'] = articleId;
-      }
 
       final response = await _dio.post<Map<String, dynamic>>(
         '/ai/respond',

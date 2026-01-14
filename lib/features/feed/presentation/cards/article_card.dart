@@ -1,6 +1,5 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
-import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:intl/intl.dart';
@@ -16,7 +15,8 @@ class ArticleCard extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final showBubbles = useState(false);
-    final dateLabel = DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
+    final dateLabel =
+        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
     return Stack(
       children: [
@@ -31,7 +31,7 @@ class ArticleCard extends HookWidget {
           onTap: () => _handleTap(showBubbles),
           onOpenLink: () => _openInBrowser(entry.url),
           onChat: () => showBubbles.value = !showBubbles.value,
-          onShare: () => _shareArticle(entry),
+          onShare: () => _shareArticle(context),
         ),
         if (showBubbles.value)
           Positioned(
@@ -52,7 +52,7 @@ class ArticleCard extends HookWidget {
       showBubbles.value = false;
       return;
     }
-    
+
     final uri = Uri.parse(entry.url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -66,15 +66,21 @@ class ArticleCard extends HookWidget {
     }
   }
 
-  Future<void> _shareArticle(ArticleFeedEntry entry) async {
-    final data = ArticleShareData(
+  Future<void> _shareArticle(BuildContext context) async {
+    final dateLabel =
+        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
+
+    await ShareService.instance.shareArticle(
+      context: context,
       title: entry.title,
       summary: entry.summary,
-      sourceUrl: entry.url,
+      source: entry.source,
+      category: entry.category,
+      date: dateLabel,
+      readTime: '${entry.readTime} min read',
       imageUrl: entry.imageUrl,
-      sourceName: entry.source,
+      articleUrl: entry.url,
     );
-    await ShareService.instance.shareArticle(data);
   }
 }
 

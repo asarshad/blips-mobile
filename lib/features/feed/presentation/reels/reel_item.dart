@@ -1,7 +1,7 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
-import 'package:blips_mobile/features/share/share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -55,8 +55,8 @@ class ReelItem extends HookConsumerWidget {
     final showVideo = controller != null &&
         controller.value.isInitialized &&
         (controller.value.position > Duration.zero ||
-         controller.value.isPlaying || 
-         controller.value.isBuffering);
+            controller.value.isPlaying ||
+            controller.value.isBuffering);
 
     return Stack(
       fit: StackFit.expand,
@@ -284,11 +284,10 @@ class _ActionButtons extends StatelessWidget {
   }
 
   Future<void> _shareReel() async {
-    final data = ReelShareData(
+    await ShareService.instance.shareReel(
       title: entry.title,
       videoUrl: entry.link,
     );
-    await ShareService.instance.shareReel(data);
   }
 }
 
@@ -305,7 +304,7 @@ class _InfoLayer extends HookWidget {
   Widget build(BuildContext context) {
     // Watch the value notifier
     final expanded = useValueListenable(isTextExpanded);
-    
+
     return Positioned(
       left: 16,
       right: 16,
