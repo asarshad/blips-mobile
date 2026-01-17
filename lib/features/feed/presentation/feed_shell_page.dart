@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -8,7 +9,6 @@ import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
 import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -89,7 +89,10 @@ class FeedShellPage extends HookConsumerWidget {
                 if (reels.isNotEmpty) {
                   final firstReelUrl = reels.first.link;
                   videoManager.preload(firstReelUrl);
-                  debugPrint('Background preload: First reel queued');
+                  logger.debug(
+                    'Background preload: First reel queued',
+                    category: LogCategory.video,
+                  );
                 }
               },
               orElse: () {
@@ -99,14 +102,21 @@ class FeedShellPage extends HookConsumerWidget {
                   if (reelsData != null && reelsData.isNotEmpty) {
                     final firstReelUrl = reelsData.first.link;
                     videoManager.preload(firstReelUrl);
-                    debugPrint(
-                        'Background preload: First reel queued (delayed)');
+                    logger.debug(
+                      'Background preload: First reel queued (delayed)',
+                      category: LogCategory.video,
+                    );
                   }
                 });
               },
             );
-          } catch (e) {
-            debugPrint('Background reels preload failed: $e');
+          } catch (e, stack) {
+            logger.warning(
+              'Background reels preload failed',
+              category: LogCategory.video,
+              error: e,
+              stackTrace: stack,
+            );
           }
         });
       });
@@ -124,8 +134,10 @@ class FeedShellPage extends HookConsumerWidget {
         // Release all video resources when leaving video tabs
         // This prevents audio leaks and frees memory
         videoManager.releaseAll();
-        debugPrint(
-            'Released all videos: user left video tabs (index=$currentIndex)');
+        logger.debug(
+          'Released all videos: user left video tabs (index=$currentIndex)',
+          category: LogCategory.video,
+        );
       }
       return null;
     }, [currentIndex]);
@@ -135,7 +147,10 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       // Cleanup callback when the shell page is disposed
       return () {
-        debugPrint('FeedShellPage disposing: cleaning up all video resources');
+        logger.debug(
+          'FeedShellPage disposing: cleaning up all video resources',
+          category: LogCategory.lifecycle,
+        );
         videoManager.releaseAll();
       };
     }, []);

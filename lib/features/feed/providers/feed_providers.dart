@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -37,6 +38,12 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       state = AsyncValue.data(items);
     } catch (e, st) {
       if (!mounted) return;
+      logger.warning(
+        'Failed to load feed',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: st,
+      );
       state = AsyncValue.error(e, st);
     }
   }
@@ -54,14 +61,20 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
         articleLimit: _articleLimit,
         videoLimit: _videoLimit,
       );
-      
+
       if (mounted) {
         _page++;
         _hasMore = nextItems.isNotEmpty;
         state = AsyncValue.data([...currentList, ...nextItems]);
       }
-    } catch (e) {
-      print('Error loading more feed items: $e');
+    } catch (e, st) {
+      logger.warning(
+        'Failed to load more feed items',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: st,
+      );
+      // Don't update state on loadMore failure - keep existing data
     } finally {
       _isLoadingMore = false;
     }
@@ -69,8 +82,8 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
 }
 
 /// Loads the merged article/video feed for the home experience.
-final paginatedFeedProvider =
-    StateNotifierProvider.autoDispose<FeedNotifier, AsyncValue<List<FeedEntry>>>(
+final paginatedFeedProvider = StateNotifierProvider.autoDispose<FeedNotifier,
+    AsyncValue<List<FeedEntry>>>(
   (ref) => FeedNotifier(ref.watch(feedRepositoryProvider)),
 );
 
@@ -78,7 +91,7 @@ final paginatedFeedProvider =
 final filteredArticleFeedProvider =
     Provider.autoDispose<AsyncValue<List<ArticleFeedEntry>>>((ref) {
   final feedState = ref.watch(paginatedFeedProvider);
-  
+
   return feedState.when(
     data: (items) => AsyncValue.data(
       items.whereType<ArticleFeedEntry>().toList(growable: false),
@@ -92,7 +105,7 @@ final filteredArticleFeedProvider =
 final filteredVideoFeedProvider =
     Provider.autoDispose<AsyncValue<List<VideoFeedEntry>>>((ref) {
   final feedState = ref.watch(paginatedFeedProvider);
-  
+
   return feedState.when(
     data: (items) => AsyncValue.data(
       items.whereType<VideoFeedEntry>().toList(growable: false),
@@ -125,6 +138,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       state = AsyncValue.data(reels);
     } catch (e, st) {
       if (!mounted) return;
+      logger.warning(
+        'Failed to load reels',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: st,
+      );
       state = AsyncValue.error(e, st);
     }
   }
@@ -142,15 +161,20 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         page: _page + 1,
         limit: _limit,
       );
-      
+
       if (mounted) {
         _page++;
         _hasMore = nextReels.length >= _limit;
         state = AsyncValue.data([...currentList, ...nextReels]);
       }
-    } catch (e) {
-      // Silently fail on load more, or handle error
-      print('Error loading more reels: $e');
+    } catch (e, st) {
+      logger.warning(
+        'Failed to load more reels',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: st,
+      );
+      // Don't update state on loadMore failure - keep existing data
     } finally {
       _isLoadingMore = false;
     }
@@ -158,7 +182,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 }
 
 /// Loads the reels feed with pagination support.
-final reelsFeedProvider =
-    StateNotifierProvider.autoDispose<ReelsNotifier, AsyncValue<List<ReelFeedEntry>>>(
+final reelsFeedProvider = StateNotifierProvider.autoDispose<ReelsNotifier,
+    AsyncValue<List<ReelFeedEntry>>>(
   (ref) => ReelsNotifier(ref.watch(feedRepositoryProvider)),
 );

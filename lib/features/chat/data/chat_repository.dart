@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -15,54 +16,70 @@ class ChatRepository {
     try {
       // 1. Get article IDs from local DB
       final articleIds = await _db.getChatArticleIds();
-      print('Repo: fetchAllChats - Found ${articleIds.length} conversations in local DB: $articleIds');
-      
+      logger.debug(
+        'fetchAllChats: Found ${articleIds.length} conversations in local DB',
+        category: LogCategory.app,
+      );
+
       if (articleIds.isEmpty) return [];
 
       final conversations = <ChatConversation>[];
-      
+
       for (final id in articleIds) {
         try {
           // Fetch article details
-          print('Repo: Fetching article details for $id');
-          
+          logger.debug(
+            'Fetching article details for $id',
+            category: LogCategory.network,
+          );
+
           Map<String, dynamic>? data;
-          
+
           if (id < 0) {
-             // It's a video
-             final videoId = -id;
-             final response = await _dio.get<Map<String, dynamic>>('/videos/$videoId');
-             if (response.data != null) {
-                 final v = response.data!;
-                 data = {
-                     'id': id, // Keep negative ID
-                     'title': v['title'],
-                     'source_url': v['video_url'] ?? v['source_url'] ?? '',
-                     'summary': v['summary'],
-                     'image_url': v['thumbnail_url'],
-                     'published_date': v['published_date'],
-                     'created_at': v['created_at'],
-                     'read_time_minutes': (v['duration_seconds'] as int? ?? 0) ~/ 60,
-                     'tags': [],
-                 };
-             }
+            // It's a video
+            final videoId = -id;
+            final response = await _dio.get<Map<String, dynamic>>(
+              '/videos/$videoId',
+            );
+            if (response.data != null) {
+              final v = response.data!;
+              data = {
+                'id': id, // Keep negative ID
+                'title': v['title'],
+                'source_url': v['video_url'] ?? v['source_url'] ?? '',
+                'summary': v['summary'],
+                'image_url': v['thumbnail_url'],
+                'published_date': v['published_date'],
+                'created_at': v['created_at'],
+                'read_time_minutes': (v['duration_seconds'] as int? ?? 0) ~/ 60,
+                'tags': <dynamic>[],
+              };
+            }
           } else {
-             final response = await _dio.get<Map<String, dynamic>>('/articles/$id');
-             data = response.data;
+            final response = await _dio.get<Map<String, dynamic>>(
+              '/articles/$id',
+            );
+            data = response.data;
           }
-          
+
           if (data == null) {
-            print('Repo: Response data is null for $id');
+            logger.debug(
+              'Response data is null for $id',
+              category: LogCategory.network,
+            );
             continue;
           }
 
           final articleDto = ArticleDto.fromJson(data);
           final article = articleDto.toDomain();
-          
+
           // Fetch local messages
           final messages = await _db.getMessages(id);
-          print('Repo: Found ${messages.length} messages for article $id');
-          
+          logger.debug(
+            'Found ${messages.length} messages for article $id',
+            category: LogCategory.app,
+          );
+
           if (messages.isNotEmpty) {
             conversations.add(ChatConversation(
               articleId: id,
@@ -72,25 +89,42 @@ class ChatRepository {
           }
         } on DioException catch (e) {
           if (e.response?.statusCode == 404) {
-            print('Repo: Article $id not found (404). Deleting local chat history.');
+            logger.debug(
+              'Article $id not found (404). Deleting local chat history.',
+              category: LogCategory.network,
+            );
             await _db.deleteChat(id);
           } else {
-            print('Repo: Failed to load chat for article $id: $e');
+            logger.warning(
+              'Failed to load chat for article $id',
+              category: LogCategory.network,
+              error: e,
+            );
           }
         } catch (e, stack) {
-          print('Repo: Failed to load chat for article $id: $e');
-          print(stack);
+          logger.warning(
+            'Failed to load chat for article $id',
+            category: LogCategory.app,
+            error: e,
+            stackTrace: stack,
+          );
           // Skip if article fetch fails
         }
       }
 
       // Sort by last updated
       conversations.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
-      print('Repo: Returning ${conversations.length} conversations');
+      logger.debug(
+        'Returning ${conversations.length} conversations',
+        category: LogCategory.app,
+      );
       return conversations;
     } catch (e, stack) {
-      print('Repo: fetchAllChats failed completely: $e');
-      print(stack);
+      logger.error(
+        'fetchAllChats failed completely',
+        error: e,
+        stackTrace: stack,
+      );
       return [];
     }
   }
@@ -124,33 +158,35 @@ class ChatRepository {
       timestamp: DateTime.now(),
     );
     await _db.insertMessage(articleId, userMsg);
-    
+
     // 2. Get history (excluding current message for API call if needed, but API takes history + message)
     // The backend expects 'history' to be previous messages.
     final history = await _db.getMessages(articleId);
     final previousHistory = history.where((m) => m.id != userMsg.id).toList();
-    
+
     // 3. Call API
     try {
       final isVideo = articleId < 0;
       final payload = <String, dynamic>{
-          'message': message,
-          'sender': 'user',
-          'content_item_id': isVideo ? -articleId : articleId,
-          'history': previousHistory.map((m) => {
-            'role': m.role,
-            'content': m.content,
-          }).toList(),
+        'message': message,
+        'sender': 'user',
+        'content_item_id': isVideo ? -articleId : articleId,
+        'history': previousHistory
+            .map((m) => {
+                  'role': m.role,
+                  'content': m.content,
+                })
+            .toList(),
       };
 
       final response = await _dio.post<Map<String, dynamic>>(
         '/ai/respond',
         data: payload,
       );
-      
+
       final aiContent = response.data?['response'] as String;
       final remainingDaily = response.data?['remaining_daily'] as int? ?? 0;
-      
+
       // 4. Save AI response locally
       final aiMsg = ChatMessage(
         id: const Uuid().v4(),
@@ -160,7 +196,7 @@ class ChatRepository {
       );
       await _db.insertMessage(articleId, aiMsg);
       print('Repo: AI response saved');
-      
+
       return ChatResponse(content: aiContent, remainingDaily: remainingDaily);
     } catch (e) {
       print('Repo: API call failed: $e');

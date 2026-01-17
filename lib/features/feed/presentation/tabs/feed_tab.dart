@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
@@ -6,7 +7,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Generic vertical-scrolling feed tab with pagination support.
-/// 
+///
 /// Handles:
 /// - Empty states with refresh action
 /// - Error states with retry action
@@ -47,10 +48,9 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       child: feed.when(
         data: (entries) => _buildFeedContent(entries, controller, videoManager),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => FeedMessageState(
-          message: 'Unable to load this feed right now.',
-          actionLabel: 'Try again',
-          onAction: onRefresh,
+        error: (error, stackTrace) => ErrorView(
+          error: error,
+          onRetry: onRefresh,
         ),
       ),
     );

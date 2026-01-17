@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
@@ -43,8 +44,12 @@ class OptimizedReelsPage extends HookConsumerWidget {
           ref: ref,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => _ErrorView(
-          onRetry: () => ref.invalidate(reelsFeedProvider),
+        error: (error, stack) => Theme(
+          data: ThemeData.dark(),
+          child: ErrorView(
+            error: error,
+            onRetry: () => ref.invalidate(reelsFeedProvider),
+          ),
         ),
       ),
     );
@@ -94,7 +99,10 @@ class OptimizedReelsPage extends HookConsumerWidget {
         } else {
           // Release all resources when leaving reels tab
           videoManager.releaseAll();
-          debugPrint('Reels tab hidden: released all video resources');
+          logger.debug(
+            'Reels tab hidden: released all video resources',
+            category: LogCategory.video,
+          );
         }
       }
       return null;
@@ -153,33 +161,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
         if (const bool.fromEnvironment('dart.vm.product') == false)
           VideoPerformanceOverlay(videoManager: videoManager),
       ],
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 48),
-          const SizedBox(height: 16),
-          Text(
-            'Error loading reels',
-            style: TextStyle(color: Colors.grey[400]),
-          ),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
     );
   }
 }

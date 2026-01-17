@@ -46,7 +46,9 @@ class ChatPage extends ConsumerWidget {
                 chat: chat,
                 onDelete: () async {
                   try {
-                    await ref.read(chatRepositoryProvider).deleteChat(chat.articleId);
+                    await ref
+                        .read(chatRepositoryProvider)
+                        .deleteChat(chat.articleId);
                     // Optimistically update or refresh
                     ref.invalidate(chatListProvider);
                   } catch (e) {
@@ -104,7 +106,7 @@ class _ChatListItem extends StatelessWidget {
         child: Icon(Icons.delete, color: colorScheme.onError),
       ),
       confirmDismiss: (direction) async {
-        return await showDialog(
+        return showDialog(
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
@@ -119,7 +121,8 @@ class _ChatListItem extends StatelessWidget {
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: Text("Delete", style: TextStyle(color: colorScheme.error)),
+                  child: Text("Delete",
+                      style: TextStyle(color: colorScheme.error)),
                 ),
               ],
             );
@@ -161,84 +164,88 @@ class _ChatListItem extends StatelessWidget {
                   width: 60,
                   height: 60,
                   fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 60,
-                  height: 60,
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.article, color: colorScheme.onSurfaceVariant),
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 60,
+                    height: 60,
+                    color: colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.article,
+                        color: colorScheme.onSurfaceVariant),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    chat.article.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    lastMessage?.content ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    timeLabel,
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: colorScheme.onSurfaceVariant),
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: const Text("Delete Chat"),
-                      content: const Text(
-                        "Are you sure you want to delete this conversation?",
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      chat.article.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
-                      actions: <Widget>[
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text("Cancel"),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lastMessage?.content ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      timeLabel,
+                      style: TextStyle(
+                        color:
+                            colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline,
+                    color: colorScheme.onSurfaceVariant),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text("Delete Chat"),
+                        content: const Text(
+                          "Are you sure you want to delete this conversation?",
                         ),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          child: Text("Delete", style: TextStyle(color: colorScheme.error)),
-                        ),
-                      ],
-                    );
-                  },
-                );
-                
-                if (confirm == true) {
-                  onDelete();
-                }
-              },
-            ),
-          ],
+                        actions: <Widget>[
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text("Cancel"),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: Text("Delete",
+                                style: TextStyle(color: colorScheme.error)),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (confirm == true) {
+                    onDelete();
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }

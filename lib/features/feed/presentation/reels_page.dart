@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video_player_provider.dart';
@@ -74,7 +75,9 @@ class ReelsPage extends HookConsumerWidget {
 
               // 4. Pagination: Load more when we get close to the end
               if (index >= entries.length - 3) {
-                Future.microtask(() => ref.read(reelsFeedProvider.notifier).loadMore());
+                Future.microtask(
+                  () => ref.read(reelsFeedProvider.notifier).loadMore(),
+                );
               }
             },
             itemCount: entries.length,
@@ -86,21 +89,11 @@ class ReelsPage extends HookConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                'Error loading reels',
-                style: TextStyle(color: Colors.grey[400]),
-              ),
-              TextButton(
-                onPressed: () => ref.invalidate(reelsFeedProvider),
-                child: const Text('Retry'),
-              ),
-            ],
+        error: (error, stack) => Theme(
+          data: ThemeData.dark(),
+          child: ErrorView(
+            error: error,
+            onRetry: () => ref.invalidate(reelsFeedProvider),
           ),
         ),
       ),
@@ -125,7 +118,7 @@ class _ReelItem extends HookConsumerWidget {
     final controller = videoManager.getController(entry.link);
     final isPlayerReady = useState(false);
     final isVideoPlaying = useState(false);
-    
+
     // Listen to controller changes to update UI (play/pause icon)
     // We use a dummy listenable when controller is null to maintain hook consistency
     final dummyListenable = useMemoized(() => ChangeNotifier());
@@ -148,6 +141,7 @@ class _ReelItem extends HookConsumerWidget {
             isVideoPlaying.value = false;
           }
         }
+
         controller.addListener(listener);
         return () => controller.removeListener(listener);
       }
@@ -243,7 +237,8 @@ class _ReelItem extends HookConsumerWidget {
                   onTap: () async {
                     final uri = Uri.parse(entry.link);
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
                     }
                   },
                 ),
@@ -263,7 +258,8 @@ class _ReelItem extends HookConsumerWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.white24,
                         borderRadius: BorderRadius.circular(4),

@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -21,7 +22,9 @@ class ChatDetailPage extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final messages = useState<List<ChatMessage>>(existingConversation?.messages ?? []);
+    final messages = useState<List<ChatMessage>>(
+      existingConversation?.messages ?? [],
+    );
     final isLoading = useState(false);
     final remainingQuota = useState<int?>(null);
     final textController = useTextEditingController();
@@ -38,8 +41,13 @@ class ChatDetailPage extends HookConsumerWidget {
           if (context.mounted) {
             remainingQuota.value = quota;
           }
-        } catch (e) {
-          debugPrint('Failed to fetch quota: $e');
+        } catch (e, stack) {
+          logger.warning(
+            'Failed to fetch quota',
+            category: LogCategory.network,
+            error: e,
+            stackTrace: stack,
+          );
         }
       });
       return null;
@@ -56,9 +64,12 @@ class ChatDetailPage extends HookConsumerWidget {
               // Prepend history to current messages
               messages.value = [...chat.messages, ...messages.value];
             }
-          } catch (e) {
+          } catch (e, stack) {
             // Ignore error (e.g. 404 if no history)
-            debugPrint('Failed to fetch chat history: $e');
+            logger.debug(
+              'Failed to fetch chat history (may not exist)',
+              category: LogCategory.network,
+            );
           } finally {
             if (context.mounted) {
               isHistoryLoaded.value = true;
@@ -85,23 +96,23 @@ class ChatDetailPage extends HookConsumerWidget {
         content: text,
         timestamp: DateTime.now(),
       );
-      
+
       messages.value = [...messages.value, userMsg];
 
       try {
         final repository = ref.read(chatRepositoryProvider);
         final response = await repository.sendMessage(article.id, text);
-        
+
         final aiMsg = ChatMessage(
           id: 'ai-${DateTime.now().millisecondsSinceEpoch}',
           role: 'assistant',
           content: response.content,
           timestamp: DateTime.now(),
         );
-        
+
         messages.value = [...messages.value, aiMsg];
         remainingQuota.value = response.remainingDaily;
-        
+
         // Refresh the chat list so the new conversation appears/updates
         ref.invalidate(chatListProvider);
       } catch (e) {
@@ -109,20 +120,23 @@ class ChatDetailPage extends HookConsumerWidget {
         if (customText == null) {
           textController.text = text;
         }
-        
+
         String errorMessage = 'Failed to send message';
         bool isQuotaLimit = false;
 
         if (e is DioException) {
           if (e.response?.statusCode == 429) {
-            errorMessage = 'Daily message limit reached. Please try again tomorrow.';
+            errorMessage =
+                'Daily message limit reached. Please try again tomorrow.';
             remainingQuota.value = 0;
             isQuotaLimit = true;
-            
+
             // Remove the optimistic message since it failed due to quota
-            messages.value = messages.value.where((m) => m.id != userMsg.id).toList();
-          } else if (e.response?.data is Map && (e.response?.data as Map).containsKey('detail')) {
-             errorMessage = (e.response?.data as Map)['detail'].toString();
+            messages.value =
+                messages.value.where((m) => m.id != userMsg.id).toList();
+          } else if (e.response?.data is Map &&
+              (e.response?.data as Map).containsKey('detail')) {
+            errorMessage = (e.response?.data as Map)['detail'].toString();
           }
         }
 
@@ -142,13 +156,12 @@ class ChatDetailPage extends HookConsumerWidget {
 
     // Handle initial prompt
     useEffect(() {
-      if (isHistoryLoaded.value && 
-          remainingQuota.value != null && 
-          initialPrompt != null && 
+      if (isHistoryLoaded.value &&
+          remainingQuota.value != null &&
+          initialPrompt != null &&
           !hasSentInitialPrompt.value) {
-        
         hasSentInitialPrompt.value = true;
-        
+
         if (remainingQuota.value! > 0) {
           Future.microtask(() => sendMessage(initialPrompt));
         }
@@ -202,7 +215,8 @@ class ChatDetailPage extends HookConsumerWidget {
                     ),
                     Text(
                       article.source,
-                      style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                      style: TextStyle(
+                          fontSize: 11, color: colorScheme.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -231,7 +245,8 @@ class ChatDetailPage extends HookConsumerWidget {
               controller: scrollController,
               reverse: true,
               padding: const EdgeInsets.all(16),
-              itemCount: messages.value.length + (remainingQuota.value == 0 ? 1 : 0),
+              itemCount:
+                  messages.value.length + (remainingQuota.value == 0 ? 1 : 0),
               itemBuilder: (context, index) {
                 if (remainingQuota.value == 0 && index == 0) {
                   return Container(
@@ -240,12 +255,14 @@ class ChatDetailPage extends HookConsumerWidget {
                     decoration: BoxDecoration(
                       color: Colors.yellow.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.yellow.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: Colors.yellow.withValues(alpha: 0.3)),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.info_outline, color: Colors.yellow, size: 16),
+                        Icon(Icons.info_outline,
+                            color: Colors.yellow, size: 16),
                         SizedBox(width: 8),
                         Text(
                           'Daily chat limit reached',
@@ -255,20 +272,25 @@ class ChatDetailPage extends HookConsumerWidget {
                     ),
                   );
                 }
-                
+
                 final listIndex = remainingQuota.value == 0 ? index - 1 : index;
-                final msg = messages.value[messages.value.length - 1 - listIndex];
+                final msg =
+                    messages.value[messages.value.length - 1 - listIndex];
                 final isUser = msg.role == 'user';
                 return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment:
+                      isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.8,
                     ),
                     decoration: BoxDecoration(
-                      color: isUser ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                      color: isUser
+                          ? colorScheme.primary
+                          : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(16).copyWith(
                         bottomRight: isUser ? Radius.zero : null,
                         bottomLeft: !isUser ? Radius.zero : null,
@@ -277,7 +299,9 @@ class ChatDetailPage extends HookConsumerWidget {
                     child: Text(
                       msg.content,
                       style: TextStyle(
-                        color: isUser ? colorScheme.onPrimary : colorScheme.onSurface,
+                        color: isUser
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -309,8 +333,8 @@ class ChatDetailPage extends HookConsumerWidget {
                     enabled: remainingQuota.value != 0,
                     style: TextStyle(color: colorScheme.onSurface),
                     decoration: InputDecoration(
-                      hintText: remainingQuota.value == 0 
-                          ? 'Daily limit reached' 
+                      hintText: remainingQuota.value == 0
+                          ? 'Daily limit reached'
                           : 'Type a message...',
                       hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                       border: OutlineInputBorder(
@@ -318,8 +342,8 @@ class ChatDetailPage extends HookConsumerWidget {
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: remainingQuota.value == 0 
-                          ? colorScheme.surface.withValues(alpha: 0.5) 
+                      fillColor: remainingQuota.value == 0
+                          ? colorScheme.surface.withValues(alpha: 0.5)
                           : colorScheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -331,10 +355,11 @@ class ChatDetailPage extends HookConsumerWidget {
                 ),
                 const SizedBox(width: 12),
                 IconButton(
-                  onPressed: remainingQuota.value == 0 ? null : () => sendMessage(),
+                  onPressed:
+                      remainingQuota.value == 0 ? null : () => sendMessage(),
                   icon: const Icon(Icons.send),
-                  color: remainingQuota.value == 0 
-                      ? colorScheme.onSurface.withValues(alpha: 0.3) 
+                  color: remainingQuota.value == 0
+                      ? colorScheme.onSurface.withValues(alpha: 0.3)
                       : colorScheme.primary,
                 ),
               ],

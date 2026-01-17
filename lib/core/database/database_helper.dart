@@ -18,7 +18,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(
+    return openDatabase(
       path,
       version: 1,
       onCreate: _createDB,
@@ -41,7 +41,7 @@ class DatabaseHelper {
     try {
       final db = await instance.database;
       await db.insert(
-        'messages', 
+        'messages',
         {
           'id': message.id,
           'articleId': articleId,
@@ -67,12 +67,14 @@ class DatabaseHelper {
       orderBy: 'timestamp ASC',
     );
 
-    return result.map((json) => ChatMessage(
-      id: json['id'] as String,
-      role: json['role'] as String,
-      content: json['content'] as String,
-      timestamp: DateTime.parse(json['timestamp'] as String),
-    )).toList();
+    return result
+        .map((json) => ChatMessage(
+              id: json['id'] as String,
+              role: json['role'] as String,
+              content: json['content'] as String,
+              timestamp: DateTime.parse(json['timestamp'] as String),
+            ))
+        .toList();
   }
 
   Future<void> deleteChat(int articleId) async {
@@ -97,7 +99,7 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
-  
+
   Future<List<int>> getChatArticleIds() async {
     final db = await instance.database;
     final result = await db.query(

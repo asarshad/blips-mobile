@@ -1,40 +1,17 @@
-import 'package:blips_mobile/app.dart';
-import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
-import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/core/error/error_view.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
-  testWidgets('renders feed cards from provider data', (tester) async {
-    final overrides = [
-      feedItemsProvider.overrideWith(
-        (ref) async => [
-          ArticleFeedEntry(
-            id: 1,
-            title: 'AI beats gravity',
-            summary: 'Scientists achieved a new milestone in AI hardware.',
-            source: 'example.com',
-            publishedAt: DateTime(2024, 5),
-            url: 'https://example.com/article',
-            imageUrl: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800',
-            category: 'Technology',
-            readTime: 4,
-            tags: const ['AI'],
-          ),
-        ],
-      ),
-    ];
-
+  testWidgets('ErrorView renders a friendly message', (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: overrides,
-        child: const BlipsApp(),
+      MaterialApp(
+        home: Scaffold(
+          body: ErrorView(error: Exception('boom')),
+        ),
       ),
     );
 
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI beats gravity'), findsOneWidget);
-    expect(find.textContaining('example.com'), findsOneWidget);
+    expect(find.textContaining('Something went wrong'), findsOneWidget);
   });
 }

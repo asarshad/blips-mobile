@@ -1,8 +1,11 @@
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
-final videoPlayerManagerProvider = ChangeNotifierProvider((ref) => VideoPlayerManager());
+final videoPlayerManagerProvider = ChangeNotifierProvider(
+  (ref) => VideoPlayerManager(),
+);
 
 class VideoPlayerManager extends ChangeNotifier {
   final Map<String, YoutubePlayerController> _controllers = {};
@@ -56,7 +59,7 @@ class VideoPlayerManager extends ChangeNotifier {
 
       _controllers[url] = controller;
       _isInitialized[url] = true;
-      
+
       if (_autoPlayUrls.contains(url)) {
         controller.play();
       }
@@ -64,8 +67,13 @@ class VideoPlayerManager extends ChangeNotifier {
       // Schedule notification to avoid build-phase updates
       Future.microtask(() => notifyListeners());
       return controller;
-    } catch (e) {
-      debugPrint('Error initializing video $url: $e');
+    } catch (e, stack) {
+      logger.warning(
+        'Error initializing video $url',
+        category: LogCategory.video,
+        error: e,
+        stackTrace: stack,
+      );
       _controllers.remove(url);
       _autoPlayUrls.remove(url);
       return null;
