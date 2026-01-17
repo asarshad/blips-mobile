@@ -42,6 +42,9 @@ class FeedShellPage extends HookConsumerWidget {
     // Preload reels in background after first frame
     _useBackgroundReelsPreload(ref, videoManager);
 
+    // Preload first videos in background after first frame
+    _useBackgroundVideosPreload(videoFeed, videoManager);
+
     // Pause videos when navigating away from video tabs
     _useVideoPauseOnNavigate(currentIndex.value, videoManager);
 
@@ -122,6 +125,40 @@ class FeedShellPage extends HookConsumerWidget {
       });
       return null;
     }, []);
+  }
+
+  void _useBackgroundVideosPreload(
+    AsyncValue<List<VideoFeedEntry>> videoFeed,
+    OptimizedVideoPlayerManager videoManager,
+  ) {
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.microtask(() {
+          try {
+            final entries = videoFeed.valueOrNull;
+            if (entries == null || entries.isEmpty) return;
+
+            // Warm the first 1–2 videos so playback is instant when user enters the tab.
+            videoManager.preload(entries.first.link);
+            if (entries.length > 1) {
+              videoManager.preload(entries[1].link);
+            }
+            logger.debug(
+              'Background preload: First videos queued',
+              category: LogCategory.video,
+            );
+          } catch (e, stack) {
+            logger.warning(
+              'Background videos preload failed',
+              category: LogCategory.video,
+              error: e,
+              stackTrace: stack,
+            );
+          }
+        });
+      });
+      return null;
+    }, [videoFeed.hasValue]);
   }
 
   void _useVideoPauseOnNavigate(

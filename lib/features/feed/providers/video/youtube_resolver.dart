@@ -8,7 +8,13 @@ class YoutubeUrlResolver {
   YoutubeUrlResolver() : _youtubeExplode = YoutubeExplode();
 
   final YoutubeExplode _youtubeExplode;
-  final Map<String, String> _cache = {};
+  static const Duration _cacheTtl = Duration(minutes: 10);
+
+  // Cache by videoId to avoid duplicate work across URL variants (watch/shorts/youtu.be).
+  final Map<String, ({String url, DateTime cachedAt})> _cacheById = {};
+
+  // De-dupe concurrent resolves for the same videoId.
+  final Map<String, Future<String>> _inFlightById = {};
   bool _isDisposed = false;
 
   /// Resolves a YouTube URL to a direct stream URL.
@@ -20,15 +26,39 @@ class YoutubeUrlResolver {
       throw StateError('YoutubeUrlResolver has been disposed');
     }
 
-    // Check cache first
-    if (_cache.containsKey(url)) {
-      return _cache[url]!;
-    }
-
     final videoId = extractVideoId(url);
     if (videoId == null) {
       throw ArgumentError('Invalid YouTube URL: $url');
     }
+
+    // Check cache first (respect TTL)
+    final cached = _cacheById[videoId];
+    if (cached != null) {
+      final age = DateTime.now().difference(cached.cachedAt);
+      if (age <= _cacheTtl) {
+        return cached.url;
+      }
+      _cacheById.remove(videoId);
+    }
+
+    // If already resolving this videoId, await the same Future.
+    final inFlight = _inFlightById[videoId];
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _resolveUncached(videoId);
+    _inFlightById[videoId] = future;
+    try {
+      final streamUrl = await future;
+      _cacheById[videoId] = (url: streamUrl, cachedAt: DateTime.now());
+      return streamUrl;
+    } finally {
+      _inFlightById.remove(videoId);
+    }
+  }
+
+  Future<String> _resolveUncached(String videoId) async {
 
     try {
       debugPrint('YoutubeResolver: Fetching manifest for videoId=$videoId');
@@ -62,10 +92,9 @@ class YoutubeUrlResolver {
 
       debugPrint('YoutubeResolver: Found stream ${stream.videoResolution.height}p for $videoId');
       final streamUrl = stream.url.toString();
-      _cache[url] = streamUrl;
       return streamUrl;
     } catch (e) {
-      debugPrint('YoutubeResolver ERROR for $url: $e');
+      debugPrint('YoutubeResolver ERROR for videoId=$videoId: $e');
       rethrow;
     }
   }
@@ -110,18 +139,23 @@ class YoutubeUrlResolver {
 
   /// Clears the URL cache.
   void clearCache() {
-    _cache.clear();
+    _cacheById.clear();
+    _inFlightById.clear();
   }
 
   /// Clears a specific URL from cache.
   void clearUrlFromCache(String url) {
-    _cache.remove(url);
+    final videoId = extractVideoId(url);
+    if (videoId == null) return;
+    _cacheById.remove(videoId);
+    _inFlightById.remove(videoId);
   }
 
   /// Disposes resources.
   void dispose() {
     _isDisposed = true;
-    _cache.clear();
+    _cacheById.clear();
+    _inFlightById.clear();
     _youtubeExplode.close();
   }
 }
