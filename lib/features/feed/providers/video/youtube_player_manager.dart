@@ -155,12 +155,8 @@ class YoutubePlayerManager extends ChangeNotifier {
       });
       
       debugPrint('YoutubePlayerManager: Initialized controller for $videoId');
-      
-      // Auto-play if requested
-      if (_autoPlayUrls.contains(url)) {
-        controller.play();
-        _states[url] = YTPlayerState.playing;
-      }
+      // Note: Don't call play() here - iframe isn't mounted yet
+      // Auto-play will be triggered in _handleControllerUpdate when player is ready
       
       _notifySafe();
       return controller;
@@ -202,6 +198,15 @@ class YoutubePlayerManager extends ChangeNotifier {
       _ => _states[url] ?? YTPlayerState.loading,
     };
     
+    // Auto-play when player becomes ready (iframe is now mounted and loaded)
+    if (controller.value.isReady && _autoPlayUrls.contains(url) && playerState != PlayerState.playing) {
+      debugPrint('YoutubePlayerManager: Player ready, auto-playing $url');
+      controller.play();
+      _states[url] = YTPlayerState.playing;
+      _notifySafe();
+      return;
+    }
+    
     if (_states[url] != newState) {
       _states[url] = newState;
       _notifySafe();
@@ -221,21 +226,32 @@ class YoutubePlayerManager extends ChangeNotifier {
   }
   
   /// Plays a video. Initializes the controller if needed.
+  /// 
+  /// If the player isn't ready yet, adds URL to auto-play list and
+  /// playback will start when the iframe loads (in _handleControllerUpdate).
   Future<void> playVideo(String url) async {
     if (_isDisposed) return;
     
+    debugPrint('YoutubePlayerManager: playVideo called for $url');
     _currentActiveUrl = url;
     _autoPlayUrls.add(url);
     
     var controller = _controllers[url];
-    if (controller == null) {
+    
+    // Start initialization if needed
+    if (controller == null && !_pendingInit.contains(url)) {
       controller = await initController(url);
     }
     
-    if (controller != null) {
+    // If controller exists and player is ready, play immediately
+    // Otherwise, _handleControllerUpdate will trigger auto-play when ready
+    if (controller != null && controller.value.isReady && !_isDisposed) {
+      debugPrint('YoutubePlayerManager: Controller ready, playing immediately');
       controller.play();
       _states[url] = YTPlayerState.playing;
       _notifySafe();
+    } else {
+      debugPrint('YoutubePlayerManager: Controller not ready yet, will auto-play when ready');
     }
   }
   

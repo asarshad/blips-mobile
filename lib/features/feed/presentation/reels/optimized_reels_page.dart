@@ -60,6 +60,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
     bool isVisible,
   ) {
     useEffect(() {
+      debugPrint('ReelsPage: _useInitialPreload effect - hasValue=${reelsFeed.hasValue}, isVisible=$isVisible');
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
 
@@ -67,19 +68,17 @@ class OptimizedReelsPage extends HookConsumerWidget {
         final preloadCount = entries.length.clamp(0, 5);
         for (var i = 0; i < preloadCount; i++) {
           final link = entries[i].link;
-          if (i == 0) {
-            if (isVisible) {
-              videoManager.playVideo(link);
-            } else {
-              videoManager.initController(link);
-            }
+          if (i == 0 && isVisible) {
+            // Play first video immediately if visible
+            debugPrint('ReelsPage: Playing first video immediately');
+            videoManager.playVideo(link);
           } else {
             videoManager.initController(link);
           }
         }
       }
       return null;
-    }, [reelsFeed.hasValue]);
+    }, [reelsFeed.hasValue, isVisible]);
   }
 
   /// Handle visibility changes.
@@ -90,22 +89,22 @@ class OptimizedReelsPage extends HookConsumerWidget {
     ValueNotifier<int> currentIndex,
   ) {
     useEffect(() {
-      if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
-        final entries = reelsFeed.value!;
-        if (isVisible) {
-          final link = entries[currentIndex.value].link;
-          videoManager.playVideo(link);
-        } else {
-          // Release all resources when leaving reels tab
-          videoManager.releaseAll();
-          logger.debug(
-            'Reels tab hidden: released all video resources',
-            category: LogCategory.video,
-          );
-        }
+      if (!reelsFeed.hasValue || reelsFeed.value!.isEmpty) return null;
+
+      final entries = reelsFeed.value!;
+      if (isVisible) {
+        // Play current video when becoming visible
+        final index = currentIndex.value.clamp(0, entries.length - 1);
+        final link = entries[index].link;
+        debugPrint('ReelsPage: Visibility ON - playing video at index $index');
+        videoManager.playVideo(link);
+      } else {
+        // Pause all when leaving (keep cached for faster resume)
+        debugPrint('ReelsPage: Visibility OFF - pausing all');
+        videoManager.pauseAll();
       }
       return null;
-    }, [isVisible]);
+    }, [isVisible, reelsFeed.hasValue]);
   }
 
   Widget _buildContent({
