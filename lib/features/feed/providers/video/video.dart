@@ -8,4 +8,5 @@ export 'pooled_player.dart';
 export 'video_config.dart';
 export 'video_metrics.dart';
 export 'video_player_manager.dart';
+export 'youtube_player_manager.dart';
 export 'youtube_resolver.dart';

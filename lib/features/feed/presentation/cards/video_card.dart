@@ -1,12 +1,12 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 /// Fallback image when video thumbnail is unavailable.
 const _videoFallbackImage =
@@ -31,18 +31,18 @@ class VideoCard extends HookConsumerWidget {
     final dateLabel =
         DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
-    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
-    final playerState = videoManager.getPlayerState(entry.link);
+    final playerState = videoManager.getState(entry.link);
 
     // Listen to controller changes to update UI
     final dummyListenable = useMemoized(ChangeNotifier.new);
     useListenable(controller ?? dummyListenable);
 
-    final isPlayerReady = playerState == PlayerState.ready ||
-        playerState == PlayerState.playing ||
-        playerState == PlayerState.paused;
-    final isLoading = playerState == PlayerState.loading || playerState == null;
+    final isPlayerReady = playerState == YTPlayerState.ready ||
+        playerState == YTPlayerState.playing ||
+        playerState == YTPlayerState.paused;
+    final isLoading = playerState == YTPlayerState.loading || playerState == YTPlayerState.idle;
 
     // Handle visibility changes
     useEffect(() {
@@ -100,16 +100,16 @@ class VideoCard extends HookConsumerWidget {
 
   Future<void> _handleTap({
     required ValueNotifier<bool> showBubbles,
-    required VideoPlayerController? controller,
-    required OptimizedVideoPlayerManager videoManager,
+    required YoutubePlayerController? controller,
+    required YoutubePlayerManager videoManager,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
       return;
     }
 
-    if (controller != null && controller.value.isInitialized) {
-      if (controller.value.isPlaying) {
+    if (controller != null) {
+      if (controller.value.playerState == PlayerState.playing) {
         videoManager.pauseVideo(entry.link);
       } else {
         videoManager.playVideo(entry.link);
@@ -155,7 +155,7 @@ class _VideoMedia extends StatelessWidget {
   });
 
   final String thumbnailUrl;
-  final VideoPlayerController? controller;
+  final YoutubePlayerController? controller;
   final bool isPlayerReady;
   final bool isLoading;
 
@@ -184,15 +184,11 @@ class _VideoMedia extends StatelessWidget {
           ),
 
           // Video player when ready
-          if (controller != null && controller!.value.isInitialized)
+          if (controller != null && isPlayerReady)
             Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: controller!.value.size.width,
-                  height: controller!.value.size.height,
-                  child: VideoPlayer(controller!),
-                ),
+              child: YoutubePlayer(
+                controller: controller!,
+                showVideoProgressIndicator: false,
               ),
             ),
 
@@ -212,7 +208,7 @@ class _VideoMedia extends StatelessWidget {
           // Play button overlay - show when no controller or not playing, but not when loading
           if ((controller == null && !isLoading) ||
               (controller != null &&
-                  !controller!.value.isPlaying &&
+                  controller!.value.playerState != PlayerState.playing &&
                   !isLoading))
             _PlayButton(),
 

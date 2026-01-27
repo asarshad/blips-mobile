@@ -62,8 +62,13 @@ class YoutubeUrlResolver {
 
     try {
       debugPrint('YoutubeResolver: Fetching manifest for videoId=$videoId');
+      // Use both TV and iOS clients as YouTube has been blocking Android client
+      // TV client works for most restricted videos per library docs
       final manifest =
-          await _youtubeExplode.videos.streamsClient.getManifest(videoId);
+          await _youtubeExplode.videos.streamsClient.getManifest(
+        videoId,
+        ytClients: [YoutubeApiClient.tv, YoutubeApiClient.ios],
+      );
 
       // Prefer muxed streams for faster loading (video + audio combined)
       // Choose medium quality for balance of speed and quality

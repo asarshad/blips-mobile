@@ -7,7 +7,7 @@ import 'package:blips_mobile/features/feed/presentation/optimized_reels_page.dar
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -37,7 +37,7 @@ class FeedShellPage extends HookConsumerWidget {
     // Watch providers for current view
     final articleFeed = ref.watch(filteredArticleFeedProvider);
     final videoFeed = ref.watch(filteredVideoFeedProvider);
-    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload reels in background after first frame
     _useBackgroundReelsPreload(ref, videoManager);
@@ -78,7 +78,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   void _useBackgroundReelsPreload(
     WidgetRef ref,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     useEffect(() {
       // Defer reels loading until after first frame to avoid blocking UI
@@ -87,28 +87,14 @@ class FeedShellPage extends HookConsumerWidget {
           try {
             // Read the reels provider and wait for data
             final reelsAsync = ref.read(reelsFeedProvider);
-            await reelsAsync.maybeWhen(
-              data: (reels) {
-                if (reels.isNotEmpty) {
-                  final firstReelUrl = reels.first.link;
-                  videoManager.preload(firstReelUrl);
-                  logger.debug(
-                    'Background preload: First reel queued',
-                    category: LogCategory.video,
-                  );
-                }
-              },
+            reelsAsync.maybeWhen(
+              data: (reels) => _preloadReels(reels, videoManager),
               orElse: () {
                 // If loading/error, wait a bit then check again
                 Future.delayed(const Duration(milliseconds: 500), () {
                   final reelsData = ref.read(reelsFeedProvider).valueOrNull;
-                  if (reelsData != null && reelsData.isNotEmpty) {
-                    final firstReelUrl = reelsData.first.link;
-                    videoManager.preload(firstReelUrl);
-                    logger.debug(
-                      'Background preload: First reel queued (delayed)',
-                      category: LogCategory.video,
-                    );
+                  if (reelsData != null) {
+                    _preloadReels(reelsData, videoManager);
                   }
                 });
               },
@@ -127,9 +113,24 @@ class FeedShellPage extends HookConsumerWidget {
     }, []);
   }
 
+  /// Preload first 5 reels in background for instant playback.
+  void _preloadReels(List<ReelFeedEntry> reels, YoutubePlayerManager manager) {
+    if (reels.isEmpty) return;
+    
+    // Preload first 5 reels in background
+    final preloadCount = reels.length.clamp(0, 5);
+    for (var i = 0; i < preloadCount; i++) {
+      manager.initController(reels[i].link);
+    }
+    logger.debug(
+      'Background preload: $preloadCount reels queued',
+      category: LogCategory.video,
+    );
+  }
+
   void _useBackgroundVideosPreload(
     AsyncValue<List<VideoFeedEntry>> videoFeed,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -139,9 +140,9 @@ class FeedShellPage extends HookConsumerWidget {
             if (entries == null || entries.isEmpty) return;
 
             // Warm the first 1–2 videos so playback is instant when user enters the tab.
-            videoManager.preload(entries.first.link);
+            videoManager.initController(entries.first.link);
             if (entries.length > 1) {
-              videoManager.preload(entries[1].link);
+              videoManager.initController(entries[1].link);
             }
             logger.debug(
               'Background preload: First videos queued',
@@ -163,7 +164,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   void _useVideoPauseOnNavigate(
     int currentIndex,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     useEffect(() {
       final isOnVideoTab = currentIndex == 1 || currentIndex == 2;
@@ -180,7 +181,7 @@ class FeedShellPage extends HookConsumerWidget {
     }, [currentIndex]);
   }
 
-  void _useLifecycleCleanup(OptimizedVideoPlayerManager videoManager) {
+  void _useLifecycleCleanup(YoutubePlayerManager videoManager) {
     useEffect(() {
       // Cleanup callback when the shell page is disposed
       return () {

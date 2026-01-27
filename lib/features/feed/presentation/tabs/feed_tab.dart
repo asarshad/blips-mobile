@@ -1,7 +1,7 @@
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -33,7 +33,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
-    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload first videos when data loads
     useEffect(() {
@@ -58,21 +58,21 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
 
   void _preloadInitialVideos(
     List<T> entries,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     final firstEntry = entries[0] as VideoFeedEntry;
-    videoManager.preload(firstEntry.link);
+    videoManager.initController(firstEntry.link);
 
     if (entries.length > 1) {
       final secondEntry = entries[1] as VideoFeedEntry;
-      videoManager.preload(secondEntry.link);
+      videoManager.initController(secondEntry.link);
     }
   }
 
   Widget _buildFeedContent(
     List<T> entries,
     PageController controller,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     if (entries.isEmpty) {
       return FeedMessageState(
@@ -99,7 +99,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   void _handlePageChange(
     int index,
     List<T> entries,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
     // Video preloading logic
     if (T == VideoFeedEntry) {
@@ -115,38 +115,15 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   void _handleVideoPreloading(
     int index,
     List<T> entries,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
   ) {
-    // Preload current
-    final currentEntry = entries[index] as VideoFeedEntry;
-    videoManager.preload(currentEntry.link);
-
-    // Pause previous
-    if (index > 0) {
-      final prevEntry = entries[index - 1] as VideoFeedEntry;
-      videoManager.pauseVideo(prevEntry.link);
-    }
-
-    // Pause next (if scrolling back)
-    if (index < entries.length - 1) {
-      final nextEntry = entries[index + 1] as VideoFeedEntry;
-      videoManager.pauseVideo(nextEntry.link);
-    }
-
-    // Preload next 2
-    if (index + 1 < entries.length) {
-      final nextEntry = entries[index + 1] as VideoFeedEntry;
-      videoManager.preload(nextEntry.link);
-    }
-    if (index + 2 < entries.length) {
-      final nextNextEntry = entries[index + 2] as VideoFeedEntry;
-      videoManager.preload(nextNextEntry.link);
-    }
-
-    // Release old videos (keep 1 behind for smooth back swipe)
-    if (index > 1) {
-      final oldEntry = entries[index - 2] as VideoFeedEntry;
-      videoManager.releaseVideo(oldEntry.link);
-    }
+    // Collect video URLs for the manager
+    final urls = entries.map((e) => (e as VideoFeedEntry).link).toList();
+    
+    // Use the centralized page change handler
+    videoManager.onPageChanged(
+      currentIndex: index,
+      videoUrls: urls,
+    );
   }
 }

@@ -1,18 +1,16 @@
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'reel_item.dart';
-import 'video_performance_overlay.dart';
 
 /// Optimized Reels page with video player pooling and preloading.
 ///
-/// Achieves near-instant playback (target: <200ms time-to-first-frame)
-/// through intelligent preloading and player pooling.
+/// Uses YouTube IFrame API for reliable playback without stream URL extraction.
 class OptimizedReelsPage extends HookConsumerWidget {
   /// Creates an optimized reels page.
   const OptimizedReelsPage({
@@ -27,7 +25,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final reelsFeed = ref.watch(reelsFeedProvider);
     final controller = usePageController();
-    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final videoManager = ref.watch(youtubePlayerManagerProvider);
     final currentIndex = useState(0);
 
     _useInitialPreload(reelsFeed, videoManager, isVisible);
@@ -58,7 +56,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   /// Preload initial videos when data loads.
   void _useInitialPreload(
     AsyncValue<List<ReelFeedEntry>> reelsFeed,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
     bool isVisible,
   ) {
     useEffect(() {
@@ -72,10 +70,10 @@ class OptimizedReelsPage extends HookConsumerWidget {
             if (isVisible) {
               videoManager.playVideo(link);
             } else {
-              videoManager.preload(link);
+              videoManager.initController(link);
             }
           } else {
-            videoManager.preload(link);
+            videoManager.initController(link);
           }
         }
       }
@@ -86,7 +84,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   /// Handle visibility changes.
   void _useVisibilityHandler(
     AsyncValue<List<ReelFeedEntry>> reelsFeed,
-    OptimizedVideoPlayerManager videoManager,
+    YoutubePlayerManager videoManager,
     bool isVisible,
     ValueNotifier<int> currentIndex,
   ) {
@@ -112,7 +110,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   Widget _buildContent({
     required List<ReelFeedEntry> entries,
     required PageController controller,
-    required OptimizedVideoPlayerManager videoManager,
+    required YoutubePlayerManager videoManager,
     required ValueNotifier<int> currentIndex,
     required WidgetRef ref,
   }) {
@@ -127,40 +125,32 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
     final urls = entries.map((e) => e.link).toList();
 
-    return Stack(
-      children: [
-        PageView.builder(
-          controller: controller,
-          scrollDirection: Axis.vertical,
-          allowImplicitScrolling: true,
-          onPageChanged: (index) {
-            currentIndex.value = index;
+    return PageView.builder(
+      controller: controller,
+      scrollDirection: Axis.vertical,
+      allowImplicitScrolling: true,
+      onPageChanged: (index) {
+        currentIndex.value = index;
 
-            videoManager.onPageChanged(
-              currentIndex: index,
-              videoUrls: urls,
-            );
+        videoManager.onPageChanged(
+          currentIndex: index,
+          videoUrls: urls,
+        );
 
-            // Pagination: Load more when close to end
-            if (index >= entries.length - 3) {
-              Future.microtask(
-                () => ref.read(reelsFeedProvider.notifier).loadMore(),
-              );
-            }
-          },
-          itemCount: entries.length,
-          itemBuilder: (context, index) => ReelItem(
-            key: ValueKey(entries[index].link),
-            entry: entries[index],
-            isActive: index == currentIndex.value,
-            isVisible: isVisible,
-          ),
-        ),
-
-        // Performance overlay (debug mode only)
-        if (const bool.fromEnvironment('dart.vm.product') == false)
-          VideoPerformanceOverlay(videoManager: videoManager),
-      ],
+        // Pagination: Load more when close to end
+        if (index >= entries.length - 3) {
+          Future.microtask(
+            () => ref.read(reelsFeedProvider.notifier).loadMore(),
+          );
+        }
+      },
+      itemCount: entries.length,
+      itemBuilder: (context, index) => ReelItem(
+        key: ValueKey(entries[index].link),
+        entry: entries[index],
+        isActive: index == currentIndex.value,
+        isVisible: isVisible,
+      ),
     );
   }
 }

@@ -1,12 +1,12 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 /// Individual reel item with video playback.
 ///
@@ -32,9 +32,10 @@ class ReelItem extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final videoManager = ref.watch(optimizedVideoManagerProvider);
+    final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
-    final playerState = videoManager.getPlayerState(entry.link);
+    final playerState = videoManager.getState(entry.link);
+    final playerError = videoManager.getError(entry.link);
     final showThumbnail = useState(true);
     final isMounted = useIsMounted();
     final isTextExpanded = useState(false);
@@ -47,16 +48,14 @@ class ReelItem extends HookConsumerWidget {
       isMounted: isMounted,
     );
 
-    final isLoading = playerState == PlayerState.loading || playerState == null;
-    final isError = playerState == PlayerState.error;
+    final isLoading = playerState == YTPlayerState.loading || playerState == YTPlayerState.idle;
+    final isError = playerState == YTPlayerState.error;
 
-    // Show video when initialized and has been played (position > 0) or is currently playing/buffering
-    // This keeps video visible when paused
-    final showVideo = controller != null &&
-        controller.value.isInitialized &&
-        (controller.value.position > Duration.zero ||
-            controller.value.isPlaying ||
-            controller.value.isBuffering);
+    // Show video when controller exists and ready
+    final showVideo = controller != null && 
+        (playerState == YTPlayerState.ready || 
+         playerState == YTPlayerState.playing || 
+         playerState == YTPlayerState.paused);
 
     return Stack(
       fit: StackFit.expand,
@@ -67,8 +66,9 @@ class ReelItem extends HookConsumerWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Video Layer - only show when actually playing
-              if (showVideo) _VideoLayer(controller: controller),
+              // Video Layer - only show when ready
+              if (showVideo && controller != null) 
+                _YoutubeVideoLayer(controller: controller),
 
               // Thumbnail Layer
               _ThumbnailLayer(
@@ -80,8 +80,7 @@ class ReelItem extends HookConsumerWidget {
               const _GradientOverlay(),
 
               // Play indicator - show when paused OR when there's an error (tap to retry)
-              if (isActive &&
-                  (controller == null || !controller.value.isPlaying))
+              if (isActive && playerState != YTPlayerState.playing)
                 const _PlayIndicator(),
 
               // Loading Indicator
@@ -91,7 +90,7 @@ class ReelItem extends HookConsumerWidget {
                 ),
 
               // Error indicator
-              if (isError) const _ErrorIndicator(),
+              if (isError) _ErrorIndicator(error: playerError),
             ],
           ),
         ),
@@ -109,7 +108,7 @@ class ReelItem extends HookConsumerWidget {
   }
 
   void _useThumbnailVisibility({
-    required VideoPlayerController? controller,
+    required YoutubePlayerController? controller,
     required bool isActive,
     required ValueNotifier<bool> showThumbnail,
     required bool Function() isMounted,
@@ -120,7 +119,7 @@ class ReelItem extends HookConsumerWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!isMounted()) return;
 
-            final isPlaying = controller.value.isPlaying;
+            final isPlaying = controller.value.playerState == PlayerState.playing;
 
             // Hide thumbnail as soon as video starts playing
             if (isPlaying && showThumbnail.value) {
@@ -139,12 +138,12 @@ class ReelItem extends HookConsumerWidget {
   }
 
   void _handleTap(
-    VideoPlayerController? controller,
-    OptimizedVideoPlayerManager videoManager,
-    PlayerState? playerState,
+    YoutubePlayerController? controller,
+    YoutubePlayerManager videoManager,
+    YTPlayerState playerState,
   ) {
     // If error state, retry loading
-    if (playerState == PlayerState.error) {
+    if (playerState == YTPlayerState.error) {
       debugPrint('Retrying failed video: ${entry.link}');
       videoManager.retryVideo(entry.link);
       return;
@@ -157,7 +156,7 @@ class ReelItem extends HookConsumerWidget {
     }
 
     // Toggle play/pause
-    if (controller.value.isPlaying) {
+    if (controller.value.playerState == PlayerState.playing) {
       videoManager.pauseVideo(entry.link);
     } else {
       videoManager.playVideo(entry.link);
@@ -165,17 +164,28 @@ class ReelItem extends HookConsumerWidget {
   }
 }
 
-class _VideoLayer extends StatelessWidget {
-  const _VideoLayer({required this.controller});
+class _YoutubeVideoLayer extends StatelessWidget {
+  const _YoutubeVideoLayer({required this.controller});
 
-  final VideoPlayerController controller;
+  final YoutubePlayerController controller;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: AspectRatio(
-        aspectRatio: controller.value.aspectRatio,
-        child: VideoPlayer(controller),
+    return SizedBox.expand(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width,
+          height: MediaQuery.of(context).size.width * 16 / 9,
+          child: YoutubePlayer(
+            controller: controller,
+            showVideoProgressIndicator: false,
+            progressColors: const ProgressBarColors(
+              playedColor: Colors.white,
+              handleColor: Colors.white,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -381,10 +391,28 @@ class _SourceBadge extends StatelessWidget {
 }
 
 class _ErrorIndicator extends StatelessWidget {
-  const _ErrorIndicator();
+  const _ErrorIndicator({this.error});
+  
+  final YTPlayerError? error;
 
   @override
   Widget build(BuildContext context) {
+    String message = 'Failed to load video';
+    String hint = 'Tap to retry';
+    
+    if (error != null) {
+      if (error!.isPlaybackDisabled) {
+        message = 'Playback disabled';
+        hint = 'Video owner disabled playback';
+      } else if (error!.isVideoUnavailable) {
+        message = 'Video unavailable';
+        hint = 'Video may be private or removed';
+      } else if (error!.isConfigError) {
+        message = 'Configuration error';
+        hint = 'Tap to retry';
+      }
+    }
+    
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -392,12 +420,12 @@ class _ErrorIndicator extends StatelessWidget {
           const Icon(Icons.error_outline, color: Colors.red, size: 48),
           const SizedBox(height: 8),
           Text(
-            'Failed to load video',
+            message,
             style: TextStyle(color: Colors.grey[400]),
           ),
           const SizedBox(height: 4),
           Text(
-            'Tap to retry',
+            hint,
             style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
