@@ -362,15 +362,15 @@ extension YoutubePlayerFeedManager on YoutubePlayerManager {
       await playVideo(currentUrl);
     }
     
-    // Preload next 2 videos in background (don't await)
-    for (var i = 1; i <= 2; i++) {
+    // Preload next 3 videos in background (don't await)
+    for (var i = 1; i <= 3; i++) {
       final nextIndex = currentIndex + i;
       if (nextIndex < videoUrls.length) {
         initController(videoUrls[nextIndex]);
       }
     }
     
-    // Release old videos
+    // Keep 2 videos behind for back-swipe, release older ones
     for (var i = 0; i < currentIndex - 2; i++) {
       if (i >= 0 && i < videoUrls.length) {
         releaseVideo(videoUrls[i]);

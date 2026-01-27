@@ -63,8 +63,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
 
-        // Preload first few videos
-        for (var i = 0; i < 3 && i < entries.length; i++) {
+        // Preload first 5 videos for smoother swiping
+        final preloadCount = entries.length.clamp(0, 5);
+        for (var i = 0; i < preloadCount; i++) {
           final link = entries[i].link;
           if (i == 0) {
             if (isVisible) {
