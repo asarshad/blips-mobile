@@ -12,10 +12,10 @@ class ReelActionButton extends StatelessWidget {
 
   /// The icon to display.
   final IconData icon;
-  
+
   /// The label text below the icon.
   final String label;
-  
+
   /// Callback when tapped.
   final VoidCallback onTap;
 

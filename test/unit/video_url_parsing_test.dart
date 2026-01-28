@@ -1,18 +1,10 @@
+@Tags(['unit'])
+library video_url_parsing_test;
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:blips_mobile/features/feed/providers/optimized_video_provider.dart';
 
 void main() {
   group('YouTube URL Extraction Tests', () {
-    late OptimizedVideoPlayerManager manager;
-
-    setUp(() {
-      manager = OptimizedVideoPlayerManager();
-    });
-
-    tearDown(() {
-      manager.dispose();
-    });
-
     // Test helper - access private method via public API behavior
     // We'll test through the actual flow instead
 

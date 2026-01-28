@@ -46,7 +46,7 @@ class _DeviceDebugOverlayState extends State<DeviceDebugOverlay> {
     final textScaler = mediaQuery.textScaler;
     final orientation = mediaQuery.orientation;
     final platformBrightness = mediaQuery.platformBrightness;
-    
+
     // Get text scale factor using the new textScaler API
     final textScaleFactor = textScaler.scale(1.0);
 
@@ -114,7 +114,9 @@ class _DeviceDebugOverlayState extends State<DeviceDebugOverlay> {
       children: [
         _buildHeader(),
         const SizedBox(height: AppSpacing.sm),
-        _MetricRow(label: 'Screen', value: '${size.width.toInt()}×${size.height.toInt()}'),
+        _MetricRow(
+            label: 'Screen',
+            value: '${size.width.toInt()}×${size.height.toInt()}'),
         _MetricRow(label: 'DPR', value: devicePixelRatio.toStringAsFixed(2)),
         _MetricRow(
           label: 'Text Scale',

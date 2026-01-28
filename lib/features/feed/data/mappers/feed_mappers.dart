@@ -59,14 +59,18 @@ int computeReadTime(String summary) {
 }
 
 /// Resolves a publication timestamp, falling back to creation date.
-DateTime resolvePublishedDate(String? published, String? created) {
+DateTime resolvePublishedDate(
+  String? published,
+  String? created, {
+  DateTime Function() now = DateTime.now,
+}) {
   if (published != null && published.isNotEmpty) {
-    return DateTime.tryParse(published) ?? DateTime.now().toUtc();
+    return DateTime.tryParse(published) ?? now().toUtc();
   }
   if (created != null && created.isNotEmpty) {
-    return DateTime.tryParse(created)?.toUtc() ?? DateTime.now().toUtc();
+    return DateTime.tryParse(created)?.toUtc() ?? now().toUtc();
   }
-  return DateTime.now().toUtc();
+  return now().toUtc();
 }
 
 /// Convenience extension for pattern matching without manual type checks.
@@ -76,5 +80,6 @@ extension FeedEntryMapper on FeedEntry {
     required T Function(ArticleFeedEntry article) article,
     required T Function(VideoFeedEntry video) video,
     required T Function(ReelFeedEntry reel) reel,
-  }) => when(article: article, video: video, reel: reel);
+  }) =>
+      when(article: article, video: video, reel: reel);
 }

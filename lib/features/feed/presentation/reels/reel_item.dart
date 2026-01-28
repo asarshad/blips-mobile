@@ -2,6 +2,7 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -48,14 +49,15 @@ class ReelItem extends HookConsumerWidget {
       isMounted: isMounted,
     );
 
-    final isLoading = playerState == YTPlayerState.loading || playerState == YTPlayerState.idle;
+    final isLoading = playerState == YTPlayerState.loading ||
+        playerState == YTPlayerState.idle;
     final isError = playerState == YTPlayerState.error;
 
     // Show video when controller exists and ready
-    final showVideo = controller != null && 
-        (playerState == YTPlayerState.ready || 
-         playerState == YTPlayerState.playing || 
-         playerState == YTPlayerState.paused);
+    final showVideo = controller != null &&
+        (playerState == YTPlayerState.ready ||
+            playerState == YTPlayerState.playing ||
+            playerState == YTPlayerState.paused);
 
     return Stack(
       fit: StackFit.expand,
@@ -67,7 +69,7 @@ class ReelItem extends HookConsumerWidget {
             fit: StackFit.expand,
             children: [
               // Video Layer - only show when ready
-              if (showVideo && controller != null) 
+              if (showVideo && controller != null)
                 _YoutubeVideoLayer(controller: controller),
 
               // Thumbnail Layer
@@ -119,7 +121,8 @@ class ReelItem extends HookConsumerWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!isMounted()) return;
 
-            final isPlaying = controller.value.playerState == PlayerState.playing;
+            final isPlaying =
+                controller.value.playerState == PlayerState.playing;
 
             // Hide thumbnail as soon as video starts playing
             if (isPlaying && showThumbnail.value) {
@@ -139,7 +142,7 @@ class ReelItem extends HookConsumerWidget {
 
   void _handleTap(
     YoutubePlayerController? controller,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
     YTPlayerState playerState,
   ) {
     // If error state, retry loading
@@ -392,14 +395,14 @@ class _SourceBadge extends StatelessWidget {
 
 class _ErrorIndicator extends StatelessWidget {
   const _ErrorIndicator({this.error});
-  
+
   final YTPlayerError? error;
 
   @override
   Widget build(BuildContext context) {
     String message = 'Failed to load video';
     String hint = 'Tap to retry';
-    
+
     if (error != null) {
       if (error!.isPlaybackDisabled) {
         message = 'Playback disabled';
@@ -412,7 +415,7 @@ class _ErrorIndicator extends StatelessWidget {
         hint = 'Tap to retry';
       }
     }
-    
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,

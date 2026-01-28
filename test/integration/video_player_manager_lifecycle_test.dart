@@ -1,3 +1,6 @@
+@Tags(['manual'])
+library video_player_manager_lifecycle_test;
+
 import 'package:blips_mobile/features/feed/providers/video/video_player_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 

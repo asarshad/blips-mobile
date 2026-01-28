@@ -30,3 +30,24 @@ Future<void> bootstrap() async {
     logger.info('App started successfully', category: LogCategory.lifecycle);
   });
 }
+
+/// Test-friendly bootstrap that allows overriding providers.
+///
+/// Production code should continue calling [bootstrap].
+Future<void> bootstrapWithOverrides({
+  List<Override> overrides = const [],
+}) async {
+  await runWithGlobalErrorHandling(() async {
+    final binding = WidgetsFlutterBinding.ensureInitialized();
+    FlutterNativeSplash.preserve(widgetsBinding: binding);
+
+    runApp(
+      ProviderScope(
+        overrides: overrides,
+        child: const BlipsApp(),
+      ),
+    );
+
+    FlutterNativeSplash.remove();
+  });
+}

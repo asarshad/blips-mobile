@@ -9,6 +9,7 @@ import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -86,7 +87,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   void _useBackgroundReelsPreload(
     WidgetRef ref,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
   ) {
     useEffect(() {
       // Defer reels loading until after first frame to avoid blocking UI
@@ -122,9 +123,10 @@ class FeedShellPage extends HookConsumerWidget {
   }
 
   /// Preload first 5 reels in background for instant playback.
-  void _preloadReels(List<ReelFeedEntry> reels, YoutubePlayerManager manager) {
+  void _preloadReels(
+      List<ReelFeedEntry> reels, YoutubePlayerManagerBase manager) {
     if (reels.isEmpty) return;
-    
+
     // Preload first 5 reels in background
     final preloadCount = reels.length.clamp(0, 5);
     for (var i = 0; i < preloadCount; i++) {
@@ -138,7 +140,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   void _useBackgroundVideosPreload(
     AsyncValue<List<VideoFeedEntry>> videoFeed,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
   ) {
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -172,7 +174,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   void _useVideoPauseOnNavigate(
     int currentIndex,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
   ) {
     useEffect(() {
       final isOnVideoTab = currentIndex == 1 || currentIndex == 2;
@@ -189,7 +191,7 @@ class FeedShellPage extends HookConsumerWidget {
     }, [currentIndex]);
   }
 
-  void _useLifecycleCleanup(YoutubePlayerManager videoManager) {
+  void _useLifecycleCleanup(YoutubePlayerManagerBase videoManager) {
     useEffect(() {
       // Cleanup callback when the shell page is disposed
       return () {
@@ -281,7 +283,7 @@ class _BottomNavBar extends StatelessWidget {
     // - Android 3-button navigation
     // - Tablets and foldables
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
-    
+
     return Container(
       color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
       // Add safe area padding below the nav content

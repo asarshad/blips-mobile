@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 /// Resolves YouTube URLs to direct stream URLs.
-/// 
+///
 /// Handles various YouTube URL formats and caches resolved URLs.
 class YoutubeUrlResolver {
   YoutubeUrlResolver() : _youtubeExplode = YoutubeExplode();
@@ -18,7 +18,7 @@ class YoutubeUrlResolver {
   bool _isDisposed = false;
 
   /// Resolves a YouTube URL to a direct stream URL.
-  /// 
+  ///
   /// Returns cached result if available.
   /// Throws if URL is invalid or resolution fails.
   Future<String> resolve(String url) async {
@@ -59,13 +59,11 @@ class YoutubeUrlResolver {
   }
 
   Future<String> _resolveUncached(String videoId) async {
-
     try {
       debugPrint('YoutubeResolver: Fetching manifest for videoId=$videoId');
       // Use both TV and iOS clients as YouTube has been blocking Android client
       // TV client works for most restricted videos per library docs
-      final manifest =
-          await _youtubeExplode.videos.streamsClient.getManifest(
+      final manifest = await _youtubeExplode.videos.streamsClient.getManifest(
         videoId,
         ytClients: [YoutubeApiClient.tv, YoutubeApiClient.ios],
       );
@@ -73,29 +71,31 @@ class YoutubeUrlResolver {
       // Prefer muxed streams for faster loading (video + audio combined)
       // Choose medium quality for balance of speed and quality
       final streams = manifest.muxed.toList();
-      
+
       if (streams.isEmpty) {
-        debugPrint('YoutubeResolver: No muxed streams for $videoId, trying audio-only');
+        debugPrint(
+            'YoutubeResolver: No muxed streams for $videoId, trying audio-only');
         // Fallback: some videos only have separate audio/video streams
         final audioStreams = manifest.audioOnly.toList();
         if (audioStreams.isEmpty) {
           throw Exception('No playable streams found for video $videoId');
         }
         // For now, we need muxed streams - audio-only won't work for video display
-        throw Exception('Video $videoId has no muxed streams (may be restricted)');
+        throw Exception(
+            'Video $videoId has no muxed streams (may be restricted)');
       }
-      
+
       streams.sort((a, b) => b.bitrate.compareTo(a.bitrate));
 
       // Find a good quality stream (720p or lower for fast loading)
       final stream = streams.firstWhere(
         (s) =>
-            s.videoResolution.height <= 720 &&
-            s.videoResolution.height >= 360,
+            s.videoResolution.height <= 720 && s.videoResolution.height >= 360,
         orElse: () => streams.first,
       );
 
-      debugPrint('YoutubeResolver: Found stream ${stream.videoResolution.height}p for $videoId');
+      debugPrint(
+          'YoutubeResolver: Found stream ${stream.videoResolution.height}p for $videoId');
       final streamUrl = stream.url.toString();
       return streamUrl;
     } catch (e) {
@@ -105,7 +105,7 @@ class YoutubeUrlResolver {
   }
 
   /// Extracts video ID from various YouTube URL formats.
-  /// 
+  ///
   /// Supports:
   /// - youtube.com/shorts/VIDEO_ID
   /// - youtube.com/watch?v=VIDEO_ID

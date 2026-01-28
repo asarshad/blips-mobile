@@ -1,5 +1,5 @@
 /// Video player pooling and management.
-/// 
+///
 /// Provides optimized video playback with player pooling, URL resolution,
 /// and performance metrics tracking.
 library;

@@ -131,7 +131,10 @@ class _ContentSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0,
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        0,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,8 +413,8 @@ class _ActionIcon extends StatelessWidget {
       customBorder: const CircleBorder(),
       child: Padding(
         padding: AppSpacing.allXs,
-        child: Icon(icon, color: colorScheme.onSurfaceVariant, 
-            size: AppSizes.iconSm),
+        child: Icon(icon,
+            color: colorScheme.onSurfaceVariant, size: AppSizes.iconSm),
       ),
     );
   }

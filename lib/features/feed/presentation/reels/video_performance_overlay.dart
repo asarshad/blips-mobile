@@ -2,7 +2,7 @@ import 'package:blips_mobile/features/feed/providers/optimized_video_provider.da
 import 'package:flutter/material.dart';
 
 /// Performance overlay for debugging video playback.
-/// 
+///
 /// Only shown in debug mode.
 class VideoPerformanceOverlay extends StatelessWidget {
   /// Creates a performance overlay.

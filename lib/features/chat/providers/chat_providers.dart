@@ -8,7 +8,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository(dio);
 });
 
-final chatListProvider = FutureProvider.autoDispose<List<ChatConversation>>((ref) {
+final chatListProvider =
+    FutureProvider.autoDispose<List<ChatConversation>>((ref) {
   final repository = ref.watch(chatRepositoryProvider);
   return repository.fetchAllChats();
 });

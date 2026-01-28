@@ -21,7 +21,7 @@ class NavBarIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).bottomNavigationBarTheme;
-    
+
     // Clamp text scaling for nav icons to prevent layout overflow
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.2,

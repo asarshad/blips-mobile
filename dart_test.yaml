@@ -1,0 +1,9 @@
+# Defines test tags used across the suite so `flutter test --tags/--exclude-tags`
+# can filter predictably without warnings.
+
+tags:
+  unit:
+  widget:
+  golden:
+  integration:
+  manual:

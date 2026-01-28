@@ -1,5 +1,5 @@
 /// Configuration constants for the video player pool.
-/// 
+///
 /// These values control memory usage and preloading behavior.
 class VideoPoolConfig {
   const VideoPoolConfig._();

@@ -19,12 +19,32 @@ abstract final class GoldenDevices {
     viewPadding: EdgeInsets.only(top: 20),
   );
 
+  /// Small phone with 1.3x text scale.
+  static const smallPhoneText13 = DeviceConfig(
+    name: 'small_phone_text_1_3',
+    size: Size(375, 667),
+    devicePixelRatio: 2.0,
+    textScale: 1.3,
+    padding: EdgeInsets.only(top: 20),
+    viewPadding: EdgeInsets.only(top: 20),
+  );
+
   /// Large phone (iPhone 14 Pro Max)
   static const largePhone = DeviceConfig(
     name: 'large_phone',
     size: Size(430, 932),
     devicePixelRatio: 3.0,
     textScale: 1.0,
+    padding: EdgeInsets.only(top: 59, bottom: 34),
+    viewPadding: EdgeInsets.only(top: 59, bottom: 34),
+  );
+
+  /// Large phone with 1.3x text scale.
+  static const largePhoneText13 = DeviceConfig(
+    name: 'large_phone_text_1_3',
+    size: Size(430, 932),
+    devicePixelRatio: 3.0,
+    textScale: 1.3,
     padding: EdgeInsets.only(top: 59, bottom: 34),
     viewPadding: EdgeInsets.only(top: 59, bottom: 34),
   );
@@ -125,7 +145,7 @@ extension GoldenTestExtensions on WidgetTester {
   /// Sets up the test environment for a specific device config.
   Future<void> setDeviceConfig(DeviceConfig config) async {
     await binding.setSurfaceSize(config.size);
-    
+
     // Configure the view for proper MediaQuery values
     binding.platformDispatcher.textScaleFactorTestValue = config.textScale;
   }
@@ -150,9 +170,8 @@ Widget goldenTestWrapper({
       debugShowCheckedModeBanner: false,
       theme: ThemeData.light(useMaterial3: true),
       darkTheme: ThemeData.dark(useMaterial3: true),
-      themeMode: brightness == Brightness.light 
-          ? ThemeMode.light 
-          : ThemeMode.dark,
+      themeMode:
+          brightness == Brightness.light ? ThemeMode.light : ThemeMode.dark,
       home: child,
     ),
   );

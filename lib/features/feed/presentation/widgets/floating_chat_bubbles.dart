@@ -26,11 +26,13 @@ class FloatingChatBubbles extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
-      children: questions.map((q) => _ChatBubble(
-        question: q,
-        entry: entry,
-        onClose: onClose,
-      )).toList(),
+      children: questions
+          .map((q) => _ChatBubble(
+                question: q,
+                entry: entry,
+                onClose: onClose,
+              ))
+          .toList(),
     );
   }
 }
@@ -49,7 +51,7 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    
+
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: InkWell(

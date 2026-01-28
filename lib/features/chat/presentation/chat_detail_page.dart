@@ -198,7 +198,8 @@ class ChatDetailPage extends HookConsumerWidget {
                     height: AppSizes.iconLg + 4,
                     color: colorScheme.surfaceContainerHighest,
                     child: Icon(Icons.article,
-                        size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+                        size: AppSizes.iconXs,
+                        color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ),
@@ -294,7 +295,8 @@ class ChatDetailPage extends HookConsumerWidget {
                       color: isUser
                           ? colorScheme.primary
                           : colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(AppRadius.xl).copyWith(
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.xl).copyWith(
                         bottomRight: isUser ? Radius.zero : null,
                         bottomLeft: !isUser ? Radius.zero : null,
                       ),

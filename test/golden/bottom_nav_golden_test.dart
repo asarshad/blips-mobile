@@ -4,6 +4,7 @@
 /// - Proper safe area handling
 /// - No overlap with system navigation
 /// - Consistent appearance across devices
+@Tags(['golden'])
 library;
 
 import 'package:blips_mobile/core/theme/theme.dart';
@@ -72,9 +73,9 @@ void main() {
 
     testWidgets('Bottom nav on iPhone with home indicator', (tester) async {
       final device = GoldenDevices.iphoneSafeArea;
-      
+
       await tester.setDeviceConfig(device);
-      
+
       await tester.pumpWidget(
         goldenTestWrapper(
           device: device,
@@ -95,9 +96,9 @@ void main() {
 
     testWidgets('Bottom nav on Android gesture navigation', (tester) async {
       final device = GoldenDevices.androidGesture;
-      
+
       await tester.setDeviceConfig(device);
-      
+
       await tester.pumpWidget(
         goldenTestWrapper(
           device: device,
@@ -118,9 +119,9 @@ void main() {
 
     testWidgets('Bottom nav on Android 3-button navigation', (tester) async {
       final device = GoldenDevices.androidButtons;
-      
+
       await tester.setDeviceConfig(device);
-      
+
       await tester.pumpWidget(
         goldenTestWrapper(
           device: device,
@@ -141,9 +142,9 @@ void main() {
 
     testWidgets('Bottom nav on small phone', (tester) async {
       final device = GoldenDevices.smallPhone;
-      
+
       await tester.setDeviceConfig(device);
-      
+
       await tester.pumpWidget(
         goldenTestWrapper(
           device: device,
@@ -164,9 +165,9 @@ void main() {
 
     testWidgets('Bottom nav with large text scaling', (tester) async {
       final device = GoldenDevices.largeText;
-      
+
       await tester.setDeviceConfig(device);
-      
+
       await tester.pumpWidget(
         goldenTestWrapper(
           device: device,

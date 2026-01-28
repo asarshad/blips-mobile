@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// SQLite-based cache for feed data with stale-while-revalidate support.
-class FeedCache {
+class FeedCache implements FeedCacheInterface {
   static final FeedCache instance = FeedCache._init();
   static Database? _database;
 
@@ -264,6 +265,7 @@ class FeedCache {
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Returns combined articles and videos sorted by published date.
+  @override
   Future<List<FeedEntry>> getCachedFeed({
     int articleLimit = 15,
     int videoLimit = 10,
@@ -276,6 +278,7 @@ class FeedCache {
   }
 
   /// Caches a mixed feed by separating articles and videos.
+  @override
   Future<void> cacheFeed(List<FeedEntry> entries) async {
     final articles = entries.whereType<ArticleFeedEntry>().toList();
     final videos = entries.whereType<VideoFeedEntry>().toList();
@@ -301,8 +304,7 @@ class FeedCache {
   /// Clears stale cache entries older than [maxAge].
   Future<void> clearStale({Duration maxAge = const Duration(hours: 24)}) async {
     final db = await database;
-    final cutoff =
-        DateTime.now().subtract(maxAge).toIso8601String();
+    final cutoff = DateTime.now().subtract(maxAge).toIso8601String();
 
     await db.delete('articles', where: 'cached_at < ?', whereArgs: [cutoff]);
     await db.delete('videos', where: 'cached_at < ?', whereArgs: [cutoff]);
@@ -314,16 +316,16 @@ class FeedCache {
     final db = await database;
     final articleCount = Sqflite.firstIntValue(
         await db.rawQuery('SELECT COUNT(*) FROM articles'));
-    final videoCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM videos'));
+    final videoCount =
+        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM videos'));
     return (articleCount ?? 0) > 0 || (videoCount ?? 0) > 0;
   }
 
   /// Returns true if there are any cached reels.
   Future<bool> hasCachedReels() async {
     final db = await database;
-    final count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM reels'));
+    final count =
+        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM reels'));
     return (count ?? 0) > 0;
   }
 }

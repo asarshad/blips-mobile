@@ -11,19 +11,19 @@ import 'package:flutter/material.dart';
 abstract final class AppColors {
   /// Primary brand color - teal
   static const Color primary = Color(0xFF0E7490);
-  
+
   /// Light theme scaffold background
   static const Color lightBackground = Color(0xFFF1F5F9);
-  
+
   /// Light theme card color
   static const Color lightCard = Colors.white;
-  
+
   /// Dark theme scaffold background
   static const Color darkBackground = Color(0xFF0F172A);
-  
+
   /// Dark theme card color
   static const Color darkCard = Color(0xFF1E293B);
-  
+
   /// Dark theme surface color
   static const Color darkSurface = Color(0xFF1E293B);
 }
@@ -33,17 +33,17 @@ abstract final class AppTheme {
   /// Creates the light theme.
   static ThemeData light() {
     const baseColor = AppColors.primary;
-    
+
     final colorScheme = ColorScheme.fromSeed(
       seedColor: baseColor,
       brightness: Brightness.light,
     );
-    
+
     final textTheme = AppTypography.createTextTheme(
       onSurface: colorScheme.onSurface,
       onSurfaceVariant: colorScheme.onSurfaceVariant,
     );
-    
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -82,18 +82,18 @@ abstract final class AppTheme {
   /// Creates the dark theme.
   static ThemeData dark() {
     const baseColor = AppColors.primary;
-    
+
     final colorScheme = ColorScheme.fromSeed(
       seedColor: baseColor,
       brightness: Brightness.dark,
       surface: AppColors.darkSurface,
     );
-    
+
     final textTheme = AppTypography.createTextTheme(
       onSurface: colorScheme.onSurface,
       onSurfaceVariant: colorScheme.onSurfaceVariant,
     );
-    
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,

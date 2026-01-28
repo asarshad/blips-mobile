@@ -1,6 +1,7 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -42,7 +43,8 @@ class VideoCard extends HookConsumerWidget {
     final isPlayerReady = playerState == YTPlayerState.ready ||
         playerState == YTPlayerState.playing ||
         playerState == YTPlayerState.paused;
-    final isLoading = playerState == YTPlayerState.loading || playerState == YTPlayerState.idle;
+    final isLoading = playerState == YTPlayerState.loading ||
+        playerState == YTPlayerState.idle;
 
     // Handle visibility changes
     useEffect(() {
@@ -97,7 +99,7 @@ class VideoCard extends HookConsumerWidget {
   Future<void> _handleTap({
     required ValueNotifier<bool> showBubbles,
     required YoutubePlayerController? controller,
-    required YoutubePlayerManager videoManager,
+    required YoutubePlayerManagerBase videoManager,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
@@ -181,7 +183,7 @@ class _VideoMedia extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showPlayer = _isControllerValid && isPlayerReady;
-    
+
     return ClipRect(
       clipBehavior: Clip.hardEdge,
       child: Stack(
@@ -227,8 +229,7 @@ class _VideoMedia extends StatelessWidget {
           ),
 
           // Play button overlay - show when no valid player or not playing, but not when loading
-          if (!isLoading && _shouldShowPlayButton(showPlayer))
-            _PlayButton(),
+          if (!isLoading && _shouldShowPlayButton(showPlayer)) _PlayButton(),
 
           // Loading indicator - show when loading (with or without controller)
           if (isLoading)

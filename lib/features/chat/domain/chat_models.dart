@@ -24,9 +24,10 @@ class ChatConversation {
     required this.article,
     required this.messages,
   });
-  
+
   ChatMessage? get lastMessage => messages.isNotEmpty ? messages.last : null;
-  DateTime get lastUpdated => lastMessage?.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime get lastUpdated =>
+      lastMessage?.timestamp ?? DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 class ChatResponse {

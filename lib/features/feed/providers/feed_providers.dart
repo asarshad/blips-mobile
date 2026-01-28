@@ -1,6 +1,8 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
+import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -8,11 +10,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// Provides a singleton [FeedRepository].
 final feedRepositoryProvider = Provider<FeedRepository>((ref) {
   final dio = ref.watch(dioProvider);
-  return FeedRepository(dio);
+  return FeedRepository(DioBackendApiClient(dio));
 });
 
 /// Provides access to the feed cache singleton.
-final feedCacheProvider = Provider<FeedCache>((ref) {
+final feedCacheProvider = Provider<FeedCacheInterface>((ref) {
   return FeedCache.instance;
 });
 
@@ -23,12 +25,13 @@ final feedCacheProvider = Provider<FeedCache>((ref) {
 /// 2. Fetch fresh data in background
 /// 3. Seamlessly merge new data, preserving user's current position
 class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
-  FeedNotifier(this._repository, this._cache) : super(const AsyncValue.loading()) {
+  FeedNotifier(this._repository, this._cache)
+      : super(const AsyncValue.loading()) {
     loadInitial();
   }
 
   final FeedRepository _repository;
-  final FeedCache _cache;
+  final FeedCacheInterface _cache;
   int _page = 1;
   bool _hasMore = true;
   bool _isLoadingMore = false;
@@ -146,7 +149,8 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       }
 
       // Check if current item exists in fresh data
-      final freshIndex = freshItems.indexWhere((item) => item.id == currentItem.id);
+      final freshIndex =
+          freshItems.indexWhere((item) => item.id == currentItem.id);
 
       if (freshIndex >= 0) {
         // Current item exists in fresh data - use fresh list
@@ -283,12 +287,13 @@ final filteredVideoFeedProvider =
 ///
 /// Implements stale-while-revalidate similar to FeedNotifier.
 class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
-  ReelsNotifier(this._repository, this._cache) : super(const AsyncValue.loading()) {
+  ReelsNotifier(this._repository, this._cache)
+      : super(const AsyncValue.loading()) {
     loadInitial();
   }
 
   final FeedRepository _repository;
-  final FeedCache _cache;
+  final FeedCacheInterface _cache;
   int _page = 1;
   bool _hasMore = true;
   bool _isLoadingMore = false;
@@ -386,9 +391,8 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       } else {
         final itemsFromCurrent = currentList.sublist(_currentViewIndex);
         final currentIds = itemsFromCurrent.map((e) => e.id).toSet();
-        final uniqueFresh = freshReels
-            .where((item) => !currentIds.contains(item.id))
-            .toList();
+        final uniqueFresh =
+            freshReels.where((item) => !currentIds.contains(item.id)).toList();
 
         final merged = [...uniqueFresh, ...itemsFromCurrent];
         _page = 1;

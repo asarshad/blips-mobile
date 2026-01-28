@@ -2,6 +2,7 @@ import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -56,11 +57,12 @@ class OptimizedReelsPage extends HookConsumerWidget {
   /// Preload initial videos when data loads.
   void _useInitialPreload(
     AsyncValue<List<ReelFeedEntry>> reelsFeed,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
     bool isVisible,
   ) {
     useEffect(() {
-      debugPrint('ReelsPage: _useInitialPreload effect - hasValue=${reelsFeed.hasValue}, isVisible=$isVisible');
+      debugPrint(
+          'ReelsPage: _useInitialPreload effect - hasValue=${reelsFeed.hasValue}, isVisible=$isVisible');
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
 
@@ -84,7 +86,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   /// Handle visibility changes.
   void _useVisibilityHandler(
     AsyncValue<List<ReelFeedEntry>> reelsFeed,
-    YoutubePlayerManager videoManager,
+    YoutubePlayerManagerBase videoManager,
     bool isVisible,
     ValueNotifier<int> currentIndex,
   ) {
@@ -110,7 +112,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   Widget _buildContent({
     required List<ReelFeedEntry> entries,
     required PageController controller,
-    required YoutubePlayerManager videoManager,
+    required YoutubePlayerManagerBase videoManager,
     required ValueNotifier<int> currentIndex,
     required WidgetRef ref,
   }) {

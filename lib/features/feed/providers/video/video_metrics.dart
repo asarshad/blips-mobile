@@ -1,5 +1,5 @@
 /// Performance metrics tracking for video playback.
-/// 
+///
 /// Captures timing data for debugging and optimization.
 class VideoPerformanceMetrics {
   /// Creates a new metrics instance when video loading begins.
@@ -10,22 +10,22 @@ class VideoPerformanceMetrics {
 
   /// The original video URL being measured.
   final String videoUrl;
-  
+
   /// When the load process started.
   final DateTime startTime;
-  
+
   /// When URL resolution completed (YouTube URL → direct stream URL).
   DateTime? urlResolutionTime;
-  
+
   /// When the VideoPlayerController was created.
   DateTime? controllerCreatedTime;
-  
+
   /// When the controller finished initializing.
   DateTime? initializedTime;
-  
+
   /// When the first video frame was decoded.
   DateTime? firstFrameTime;
-  
+
   /// When playback actually started.
   DateTime? playingTime;
 

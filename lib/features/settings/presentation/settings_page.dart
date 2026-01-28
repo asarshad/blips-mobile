@@ -43,7 +43,8 @@ class SettingsPage extends ConsumerWidget {
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: AppRadius.borderLg,
-              side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              side: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: Column(
               children: [
@@ -54,7 +55,11 @@ class SettingsPage extends ConsumerWidget {
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
                 ),
-                Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Light Mode',
                   value: ThemeMode.light,
@@ -62,7 +67,11 @@ class SettingsPage extends ConsumerWidget {
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
                 ),
-                Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Dark Mode',
                   value: ThemeMode.dark,
@@ -80,7 +89,8 @@ class SettingsPage extends ConsumerWidget {
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: AppRadius.borderLg,
-              side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+              side: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: _SettingsTile(
               title: 'Clear Chat History',
@@ -102,7 +112,8 @@ class SettingsPage extends ConsumerWidget {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(foregroundColor: colorScheme.error),
+                        style: TextButton.styleFrom(
+                            foregroundColor: colorScheme.error),
                         child: const Text('Delete'),
                       ),
                     ],
@@ -130,7 +141,8 @@ class SettingsPage extends ConsumerWidget {
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               shape: RoundedRectangleBorder(
                 borderRadius: AppRadius.borderLg,
-                side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                side: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
               ),
               child: Column(
                 children: [
@@ -139,31 +151,51 @@ class SettingsPage extends ConsumerWidget {
                     value: '1.0.0 (Dev Build)',
                     icon: Icons.info_outline,
                   ),
-                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: AppSpacing.lg,
+                      endIndent: AppSpacing.lg,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Author',
                     value: 'Asif Arshad',
                     icon: Icons.person_outline,
                   ),
-                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: AppSpacing.lg,
+                      endIndent: AppSpacing.lg,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Framework',
                     value: 'Flutter 3.x',
                     icon: Icons.flutter_dash,
                   ),
-                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: AppSpacing.lg,
+                      endIndent: AppSpacing.lg,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'State Management',
                     value: 'Riverpod + Hooks',
                     icon: Icons.account_tree_outlined,
                   ),
-                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: AppSpacing.lg,
+                      endIndent: AppSpacing.lg,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Backend',
                     value: 'FastAPI + PostgreSQL',
                     icon: Icons.cloud_outlined,
                   ),
-                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(
+                      height: 1,
+                      indent: AppSpacing.lg,
+                      endIndent: AppSpacing.lg,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Video Player',
                     value: 'video_player + youtube_explode',
@@ -195,7 +227,8 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.lg),
+      padding:
+          const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.lg),
       child: Text(
         title,
         style: textTheme.labelMedium?.copyWith(
@@ -282,7 +315,7 @@ class _ThemeRadioTile extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    
+
     return InkWell(
       onTap: () => onChanged(value),
       child: Padding(
@@ -297,7 +330,8 @@ class _ThemeRadioTile extends StatelessWidget {
                 title,
                 style: textTheme.titleLarge?.copyWith(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                  color:
+                      isSelected ? colorScheme.primary : colorScheme.onSurface,
                 ),
               ),
             ),
