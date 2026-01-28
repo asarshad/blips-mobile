@@ -280,7 +280,12 @@ class YoutubePlayerManager extends ChangeNotifier {
   void releaseVideo(String url) {
     final controller = _controllers.remove(url);
     if (controller != null) {
-      controller.dispose();
+      try {
+        controller.dispose();
+      } catch (e) {
+        // Controller may already be disposed or in invalid state
+        debugPrint('YoutubePlayerManager: Error disposing controller for $url: $e');
+      }
     }
     _states.remove(url);
     _errors.remove(url);
@@ -291,8 +296,13 @@ class YoutubePlayerManager extends ChangeNotifier {
   /// Releases all controllers.
   void releaseAll() {
     _currentActiveUrl = null;
-    for (final controller in _controllers.values) {
-      controller.dispose();
+    for (final entry in _controllers.entries) {
+      try {
+        entry.value.dispose();
+      } catch (e) {
+        // Controller may already be disposed or in invalid state
+        debugPrint('YoutubePlayerManager: Error disposing controller for ${entry.key}: $e');
+      }
     }
     _controllers.clear();
     _states.clear();
@@ -331,8 +341,12 @@ class YoutubePlayerManager extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
-    for (final controller in _controllers.values) {
-      controller.dispose();
+    for (final entry in _controllers.entries) {
+      try {
+        entry.value.dispose();
+      } catch (e) {
+        debugPrint('YoutubePlayerManager: Error disposing controller on manager dispose: $e');
+      }
     }
     _controllers.clear();
     _states.clear();

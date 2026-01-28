@@ -40,7 +40,7 @@ class FeedCardFrame extends StatelessWidget {
 
   /// Max text scale factor for card content.
   /// Allows some accessibility scaling while preventing overflow.
-  static const double _maxTextScaleFactor = 1.15;
+  static const double _maxTextScaleFactor = 1.2;
 
   @override
   Widget build(BuildContext context) {

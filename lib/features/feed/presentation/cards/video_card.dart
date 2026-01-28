@@ -52,13 +52,9 @@ class VideoCard extends HookConsumerWidget {
       return null;
     }, [isVisible]);
 
-    // Cleanup: release video resources when this card is disposed
-    useEffect(() {
-      return () {
-        debugPrint('VideoCard disposed for ${entry.link}, releasing resources');
-        videoManager.releaseVideo(entry.link);
-      };
-    }, [entry.link]);
+    // Note: Don't release video resources on dispose - let the pool manager handle cleanup.
+    // Releasing here causes "IOSInAppWebViewController used after disposed" errors
+    // because the YoutubePlayer widget's WebView may still be unmounting.
 
     return Stack(
       children: [
@@ -159,8 +155,33 @@ class _VideoMedia extends StatelessWidget {
   final bool isPlayerReady;
   final bool isLoading;
 
+  /// Checks if controller is valid and not in a disposed state.
+  bool get _isControllerValid {
+    if (controller == null) return false;
+    try {
+      // Try to access the value to check if it's disposed
+      // ignore: unused_local_variable
+      final _ = controller!.value;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Determines if play button should be shown.
+  bool _shouldShowPlayButton(bool showPlayer) {
+    if (!showPlayer) return true;
+    try {
+      return controller!.value.playerState != PlayerState.playing;
+    } catch (_) {
+      return true;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final showPlayer = _isControllerValid && isPlayerReady;
+    
     return ClipRect(
       clipBehavior: Clip.hardEdge,
       child: Stack(
@@ -183,8 +204,8 @@ class _VideoMedia extends StatelessWidget {
             ),
           ),
 
-          // Video player when ready
-          if (controller != null && isPlayerReady)
+          // Video player when ready and controller is valid
+          if (showPlayer)
             Positioned.fill(
               child: YoutubePlayer(
                 controller: controller!,
@@ -205,11 +226,8 @@ class _VideoMedia extends StatelessWidget {
             ),
           ),
 
-          // Play button overlay - show when no controller or not playing, but not when loading
-          if ((controller == null && !isLoading) ||
-              (controller != null &&
-                  controller!.value.playerState != PlayerState.playing &&
-                  !isLoading))
+          // Play button overlay - show when no valid player or not playing, but not when loading
+          if (!isLoading && _shouldShowPlayButton(showPlayer))
             _PlayButton(),
 
           // Loading indicator - show when loading (with or without controller)

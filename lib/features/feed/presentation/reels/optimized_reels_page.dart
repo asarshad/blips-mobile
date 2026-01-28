@@ -132,6 +132,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
       onPageChanged: (index) {
         currentIndex.value = index;
 
+        // Track current view index for seamless cache updates
+        ref.read(reelsFeedProvider.notifier).setCurrentViewIndex(index);
+
         videoManager.onPageChanged(
           currentIndex: index,
           videoUrls: urls,

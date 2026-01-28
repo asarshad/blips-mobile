@@ -14,6 +14,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// - Loading states
 /// - Video preloading for VideoFeedEntry types
 /// - Infinite scroll pagination
+/// - Current view index tracking for seamless cache updates
 class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   const FeedTab({
     super.key,
@@ -22,6 +23,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     required this.emptyLabel,
     required this.onRefresh,
     this.onLoadMore,
+    this.onPageChanged,
   });
 
   final AsyncValue<List<T>> feed;
@@ -29,6 +31,8 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   final String emptyLabel;
   final VoidCallback onRefresh;
   final VoidCallback? onLoadMore;
+  /// Called when user swipes to a new page, for tracking current view index.
+  final void Function(int index)? onPageChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,6 +105,9 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     YoutubePlayerManager videoManager,
   ) {
+    // Notify parent of page change for cache position tracking
+    onPageChanged?.call(index);
+
     // Video preloading logic
     if (T == VideoFeedEntry) {
       _handleVideoPreloading(index, entries, videoManager);

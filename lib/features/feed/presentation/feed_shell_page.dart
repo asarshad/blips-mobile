@@ -177,11 +177,11 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       final isOnVideoTab = currentIndex == 1 || currentIndex == 2;
       if (!isOnVideoTab) {
-        // Release all video resources when leaving video tabs
-        // This prevents audio leaks and frees memory
-        videoManager.releaseAll();
+        // Pause all videos when leaving video tabs (don't release - let pool manager handle it)
+        // This prevents audio leaks while keeping controllers warm for faster resume
+        videoManager.pauseAll();
         logger.debug(
-          'Released all videos: user left video tabs (index=$currentIndex)',
+          'Paused all videos: user left video tabs (index=$currentIndex)',
           category: LogCategory.video,
         );
       }
@@ -194,10 +194,12 @@ class FeedShellPage extends HookConsumerWidget {
       // Cleanup callback when the shell page is disposed
       return () {
         logger.debug(
-          'FeedShellPage disposing: cleaning up all video resources',
+          'FeedShellPage disposing: pausing all video resources',
           category: LogCategory.lifecycle,
         );
-        videoManager.releaseAll();
+        // Just pause - don't release. The ChangeNotifierProvider will dispose the manager
+        // which will properly clean up controllers when the app is actually closing
+        videoManager.pauseAll();
       };
     }, []);
   }
@@ -230,6 +232,8 @@ class FeedShellPage extends HookConsumerWidget {
         builder: (entry) => ArticleCard(entry: entry),
         onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
+        onPageChanged: (index) =>
+            ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
       ),
       // Videos tab
       FeedTab<VideoFeedEntry>(
@@ -241,6 +245,8 @@ class FeedShellPage extends HookConsumerWidget {
         ),
         onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
+        onPageChanged: (index) =>
+            ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
       ),
       // Reels tab
       OptimizedReelsPage(isVisible: currentIndex.value == 2),
