@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -34,14 +35,14 @@ class SettingsPage extends ConsumerWidget {
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: AppSpacing.allLg,
         children: [
           _SectionHeader(title: 'APPEARANCE'),
           Card(
             elevation: 0,
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppRadius.borderLg,
               side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: Column(
@@ -53,7 +54,7 @@ class SettingsPage extends ConsumerWidget {
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
                 ),
-                Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Light Mode',
                   value: ThemeMode.light,
@@ -61,7 +62,7 @@ class SettingsPage extends ConsumerWidget {
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
                 ),
-                Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Dark Mode',
                   value: ThemeMode.dark,
@@ -72,13 +73,13 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xl),
           _SectionHeader(title: 'DATA & STORAGE'),
           Card(
             elevation: 0,
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppRadius.borderLg,
               side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
             child: _SettingsTile(
@@ -122,13 +123,13 @@ class SettingsPage extends ConsumerWidget {
 
           // About section - only visible in dev/debug mode
           if (kIsDevMode) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
             _SectionHeader(title: 'ABOUT (DEV)'),
             Card(
               elevation: 0,
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppRadius.borderLg,
                 side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
               ),
               child: Column(
@@ -138,31 +139,31 @@ class SettingsPage extends ConsumerWidget {
                     value: '1.0.0 (Dev Build)',
                     icon: Icons.info_outline,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Author',
                     value: 'Asif Arshad',
                     icon: Icons.person_outline,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Framework',
                     value: 'Flutter 3.x',
                     icon: Icons.flutter_dash,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'State Management',
                     value: 'Riverpod + Hooks',
                     icon: Icons.account_tree_outlined,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Backend',
                     value: 'FastAPI + PostgreSQL',
                     icon: Icons.cloud_outlined,
                   ),
-                  Divider(height: 1, indent: 16, endIndent: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Video Player',
                     value: 'video_player + youtube_explode',
@@ -192,13 +193,13 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 16),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.lg),
       child: Text(
         title,
-        style: TextStyle(
+        style: textTheme.labelMedium?.copyWith(
           color: Theme.of(context).colorScheme.primary,
-          fontSize: 12,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.2,
         ),
@@ -224,35 +225,38 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xxs,
+      ),
       leading: Icon(
         icon,
         color: iconColor ?? colorScheme.onSurfaceVariant,
-        size: 24,
+        size: AppSizes.iconMd,
       ),
       title: Text(
         title,
-        style: TextStyle(
+        style: textTheme.titleLarge?.copyWith(
           color: colorScheme.onSurface,
-          fontSize: 16,
           fontWeight: FontWeight.w400,
         ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: TextStyle(
+              style: textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
-                fontSize: 13,
               ),
             )
           : null,
       trailing: Icon(
         Icons.chevron_right,
         color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-        size: 20,
+        size: AppSizes.iconSm,
       ),
       onTap: onTap,
     );
@@ -275,19 +279,23 @@ class _ThemeRadioTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = value == groupValue;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     
     return InkWell(
       onTap: () => onChanged(value),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(
-                  fontSize: 16,
+                style: textTheme.titleLarge?.copyWith(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected ? colorScheme.primary : colorScheme.onSurface,
                 ),
@@ -297,7 +305,7 @@ class _ThemeRadioTile extends StatelessWidget {
               Icon(
                 Icons.check,
                 color: colorScheme.primary,
-                size: 20,
+                size: AppSizes.iconSm,
               ),
           ],
         ),
@@ -319,31 +327,34 @@ class _AboutTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         children: [
           Icon(
             icon,
             color: colorScheme.primary.withValues(alpha: 0.7),
-            size: 20,
+            size: AppSizes.iconSm,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               title,
-              style: TextStyle(
+              style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
-                fontSize: 14,
               ),
             ),
           ),
           Text(
             value,
-            style: TextStyle(
+            style: textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface,
-              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           ),

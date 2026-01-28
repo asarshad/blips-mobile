@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -9,6 +10,7 @@ import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -56,12 +58,18 @@ class FeedShellPage extends HookConsumerWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: _buildBody(
-        pageController: pageController,
-        currentIndex: currentIndex,
-        articleFeed: articleFeed,
-        videoFeed: videoFeed,
-        ref: ref,
+      body: Stack(
+        children: [
+          _buildBody(
+            pageController: pageController,
+            currentIndex: currentIndex,
+            articleFeed: articleFeed,
+            videoFeed: videoFeed,
+            ref: ref,
+          ),
+          // Debug overlay for development builds
+          if (kDebugMode) const DeviceDebugOverlay(),
+        ],
       ),
       bottomNavigationBar: _BottomNavBar(
         currentIndex: currentIndex.value,
@@ -220,7 +228,7 @@ class FeedShellPage extends HookConsumerWidget {
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
         builder: (entry) => ArticleCard(entry: entry),
-        onRefresh: () => ref.invalidate(paginatedFeedProvider),
+        onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
       // Videos tab
@@ -231,7 +239,7 @@ class FeedShellPage extends HookConsumerWidget {
           entry: entry,
           isVisible: currentIndex.value == 1,
         ),
-        onRefresh: () => ref.invalidate(paginatedFeedProvider),
+        onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
       ),
       // Reels tab
@@ -261,11 +269,20 @@ class _BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // viewPadding includes system navigation insets (works for all devices):
+    // - iPhone home indicator
+    // - Android gesture navigation
+    // - Android 3-button navigation
+    // - Tablets and foldables
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+    
     return Container(
       color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+      // Add safe area padding below the nav content
+      padding: EdgeInsets.only(bottom: bottomInset),
       child: SizedBox(
-        height: 30,
+        // Use design system constant for nav height
+        height: AppSizes.bottomNavHeight,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [

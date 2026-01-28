@@ -1,7 +1,13 @@
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:flutter/material.dart';
 
 /// Shared card frame used by article and video cards.
-/// Provides consistent layout with media, metadata, and action buttons.
+///
+/// Layout Strategy:
+/// - Media section: 35% of card height (fixed ratio)
+/// - Content section: 65% of card height (flexible text)
+/// - Text scaling is clamped to 1.15x max to prevent layout overflow
+/// - Summary uses gradient fade for graceful truncation
 class FeedCardFrame extends StatelessWidget {
   const FeedCardFrame({
     super.key,
@@ -32,6 +38,10 @@ class FeedCardFrame extends StatelessWidget {
   final VoidCallback? onOpenLink;
   final bool showActions;
 
+  /// Max text scale factor for card content.
+  /// Allows some accessibility scaling while preventing overflow.
+  static const double _maxTextScaleFactor = 1.15;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -43,7 +53,7 @@ class FeedCardFrame extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: theme.cardColor,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppRadius.borderLg,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
@@ -59,29 +69,25 @@ class FeedCardFrame extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Media section (35%)
-            Expanded(
-              flex: 35,
-              child: SizedBox.expand(child: media),
-            ),
-            // Content section (65%)
+            Expanded(flex: 35, child: SizedBox.expand(child: media)),
+            // Content section (65%) - clamp text scaling
             Expanded(
               flex: 65,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(15, 10, 15, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(colorScheme),
-                    const SizedBox(height: 10),
-                    _buildTitle(textTheme, colorScheme),
-                    const SizedBox(height: 8),
-                    _buildSummary(textTheme, colorScheme),
-                    Divider(
-                      color: colorScheme.onSurface.withValues(alpha: 0.1),
-                      height: 1,
-                    ),
-                    _buildFooter(colorScheme),
-                  ],
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: _maxTextScaleFactor,
+                child: _ContentSection(
+                  category: category,
+                  title: title,
+                  summary: summary,
+                  source: source,
+                  date: date,
+                  readTime: readTime,
+                  showActions: showActions,
+                  onShare: onShare,
+                  onChat: onChat,
+                  onOpenLink: onOpenLink,
+                  colorScheme: colorScheme,
+                  textTheme: textTheme,
                 ),
               ),
             ),
@@ -90,144 +96,298 @@ class FeedCardFrame extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildHeader(ColorScheme colorScheme) {
+class _ContentSection extends StatelessWidget {
+  const _ContentSection({
+    required this.category,
+    required this.title,
+    required this.summary,
+    required this.source,
+    required this.date,
+    required this.readTime,
+    required this.showActions,
+    required this.colorScheme,
+    required this.textTheme,
+    this.onShare,
+    this.onChat,
+    this.onOpenLink,
+  });
+
+  final String category;
+  final String title;
+  final String summary;
+  final String source;
+  final String date;
+  final String readTime;
+  final bool showActions;
+  final ColorScheme colorScheme;
+  final TextTheme textTheme;
+  final VoidCallback? onShare;
+  final VoidCallback? onChat;
+  final VoidCallback? onOpenLink;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Header(
+            category: category,
+            source: source,
+            showActions: showActions,
+            onShare: onShare,
+            onOpenLink: onOpenLink,
+            colorScheme: colorScheme,
+            textTheme: textTheme,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _Title(title: title, colorScheme: colorScheme, textTheme: textTheme),
+          const SizedBox(height: AppSpacing.xs),
+          Expanded(
+            child: _Summary(
+              summary: summary,
+              colorScheme: colorScheme,
+              textTheme: textTheme,
+            ),
+          ),
+          Divider(
+            color: colorScheme.onSurface.withValues(alpha: 0.1),
+            height: AppSizes.dividerHeight,
+          ),
+          _Footer(
+            date: date,
+            readTime: readTime,
+            showActions: showActions,
+            onChat: onChat,
+            colorScheme: colorScheme,
+            textTheme: textTheme,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.category,
+    required this.source,
+    required this.showActions,
+    required this.colorScheme,
+    required this.textTheme,
+    this.onShare,
+    this.onOpenLink,
+  });
+
+  final String category;
+  final String source;
+  final bool showActions;
+  final ColorScheme colorScheme;
+  final TextTheme textTheme;
+  final VoidCallback? onShare;
+  final VoidCallback? onOpenLink;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
         _CategoryBadge(category: category, colorScheme: colorScheme),
-        const SizedBox(width: 12),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
             source,
-            style: TextStyle(
+            style: textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
             overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
         if (showActions) ...[
-          _ActionIcon(
-            icon: Icons.open_in_new,
-            onTap: onOpenLink,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          _ActionIcon(
-            icon: Icons.share_outlined,
-            onTap: onShare,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          _ActionIcon(Icons.open_in_new, onOpenLink, colorScheme),
+          _ActionIcon(Icons.share_outlined, onShare, colorScheme),
         ],
-      ],
-    );
-  }
-
-  Widget _buildTitle(TextTheme textTheme, ColorScheme colorScheme) {
-    return Text(
-      title,
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
-      style: textTheme.headlineSmall?.copyWith(
-        color: colorScheme.onSurface,
-        fontWeight: FontWeight.bold,
-        height: 1.4,
-        fontSize: 16,
-      ),
-    );
-  }
-
-  Widget _buildSummary(TextTheme textTheme, ColorScheme colorScheme) {
-    return Expanded(
-      child: Text(
-        summary,
-        style: textTheme.bodyLarge?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          height: 1.4,
-          fontSize: 13,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFooter(ColorScheme colorScheme) {
-    return Row(
-      children: [
-        Icon(
-          Icons.calendar_today_outlined,
-          size: 14,
-          color: colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          date,
-          style: TextStyle(
-            color: colorScheme.onSurfaceVariant,
-            fontSize: 13,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Icon(
-          Icons.access_time,
-          size: 14,
-          color: colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          readTime,
-          style: TextStyle(
-            color: colorScheme.onSurfaceVariant,
-            fontSize: 13,
-          ),
-        ),
-        const Spacer(),
-        if (showActions)
-          InkWell(
-            onTap: onChat,
-            customBorder: const CircleBorder(),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.bolt, color: colorScheme.onPrimary),
-              ),
-            ),
-          ),
       ],
     );
   }
 }
 
-class _CategoryBadge extends StatelessWidget {
-  const _CategoryBadge({
-    required this.category,
+class _Title extends StatelessWidget {
+  const _Title({
+    required this.title,
     required this.colorScheme,
+    required this.textTheme,
   });
+
+  final String title;
+  final ColorScheme colorScheme;
+  final TextTheme textTheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      maxLines: 2, // Reduced from 3 to give summary more room
+      overflow: TextOverflow.ellipsis,
+      style: textTheme.titleLarge?.copyWith(
+        color: colorScheme.onSurface,
+        fontWeight: FontWeight.bold,
+        height: AppTypography.lineHeightNormal,
+      ),
+    );
+  }
+}
+
+class _Summary extends StatelessWidget {
+  const _Summary({
+    required this.summary,
+    required this.colorScheme,
+    required this.textTheme,
+  });
+
+  final String summary;
+  final ColorScheme colorScheme;
+  final TextTheme textTheme;
+
+  @override
+  Widget build(BuildContext context) {
+    // Use ShaderMask for smooth gradient fade at bottom
+    return ShaderMask(
+      shaderCallback: (bounds) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white,
+          Colors.white,
+          Colors.white.withValues(alpha: 0),
+        ],
+        stops: const [0.0, 0.8, 1.0],
+      ).createShader(bounds),
+      blendMode: BlendMode.dstIn,
+      child: Text(
+        summary,
+        style: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          height: AppTypography.lineHeightNormal,
+        ),
+        // No maxLines - flows naturally, fades at bottom
+      ),
+    );
+  }
+}
+
+class _Footer extends StatelessWidget {
+  const _Footer({
+    required this.date,
+    required this.readTime,
+    required this.showActions,
+    required this.colorScheme,
+    required this.textTheme,
+    this.onChat,
+  });
+
+  final String date;
+  final String readTime;
+  final bool showActions;
+  final ColorScheme colorScheme;
+  final TextTheme textTheme;
+  final VoidCallback? onChat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(Icons.calendar_today_outlined,
+            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.xs),
+        Flexible(
+          child: Text(
+            date,
+            style: textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Icon(Icons.access_time,
+            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.xs),
+        Text(
+          readTime,
+          style: textTheme.labelSmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const Spacer(),
+        if (showActions) _ChatButton(onChat: onChat, colorScheme: colorScheme),
+      ],
+    );
+  }
+}
+
+class _ChatButton extends StatelessWidget {
+  const _ChatButton({required this.onChat, required this.colorScheme});
+
+  final VoidCallback? onChat;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onChat,
+      customBorder: const CircleBorder(),
+      child: Padding(
+        padding: AppSpacing.allSm,
+        child: Container(
+          width: AppSizes.avatarSm,
+          height: AppSizes.avatarSm,
+          decoration: BoxDecoration(
+            color: colorScheme.primary,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.bolt,
+            color: colorScheme.onPrimary,
+            size: AppSizes.iconSm,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.category, required this.colorScheme});
 
   final String category;
   final ColorScheme colorScheme;
 
   @override
   Widget build(BuildContext context) {
-    final displayCategory =
-        category == 'Artificial Intelligence' ? 'AI' : category;
+    final textTheme = Theme.of(context).textTheme;
+    final display = category == 'Artificial Intelligence' ? 'AI' : category;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xxs,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: AppRadius.borderSm,
       ),
       child: Text(
-        displayCategory.toUpperCase(),
-        style: TextStyle(
+        display.toUpperCase(),
+        style: textTheme.labelSmall?.copyWith(
           color: colorScheme.primary,
-          fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 0.5,
         ),
@@ -237,15 +397,11 @@ class _CategoryBadge extends StatelessWidget {
 }
 
 class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({
-    required this.icon,
-    required this.onTap,
-    required this.color,
-  });
+  const _ActionIcon(this.icon, this.onTap, this.colorScheme);
 
   final IconData icon;
   final VoidCallback? onTap;
-  final Color color;
+  final ColorScheme colorScheme;
 
   @override
   Widget build(BuildContext context) {
@@ -253,8 +409,9 @@ class _ActionIcon extends StatelessWidget {
       onTap: onTap,
       customBorder: const CircleBorder(),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Icon(icon, color: color, size: 20),
+        padding: AppSpacing.allXs,
+        child: Icon(icon, color: colorScheme.onSurfaceVariant, 
+            size: AppSizes.iconSm),
       ),
     );
   }

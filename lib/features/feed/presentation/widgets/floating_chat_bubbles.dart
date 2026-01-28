@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:flutter/material.dart';
@@ -47,19 +48,24 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: InkWell(
         onTap: () => _navigateToChat(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           decoration: BoxDecoration(
             color: const Color(0xFF1D4ED8).withValues(alpha: 0.95),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-              bottomLeft: Radius.circular(20),
-              bottomRight: Radius.circular(4),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(AppRadius.xl + 4),
+              topRight: Radius.circular(AppRadius.xl + 4),
+              bottomLeft: Radius.circular(AppRadius.xl + 4),
+              bottomRight: Radius.circular(AppRadius.sm),
             ),
             border: Border.all(
               color: const Color(0xFF1D4ED8).withValues(alpha: 0.5),
@@ -74,9 +80,8 @@ class _ChatBubble extends StatelessWidget {
           ),
           child: Text(
             question,
-            style: const TextStyle(
+            style: textTheme.bodyMedium?.copyWith(
               color: Colors.white,
-              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           ),

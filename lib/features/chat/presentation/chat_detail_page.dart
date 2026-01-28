@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -186,37 +187,37 @@ class ChatDetailPage extends HookConsumerWidget {
           child: Row(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: Image.network(
                   article.imageUrl,
-                  width: 32,
-                  height: 32,
+                  width: AppSizes.iconLg + 4,
+                  height: AppSizes.iconLg + 4,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    width: 32,
-                    height: 32,
+                    width: AppSizes.iconLg + 4,
+                    height: AppSizes.iconLg + 4,
                     color: colorScheme.surfaceContainerHighest,
                     child: Icon(Icons.article,
-                        size: 16, color: colorScheme.onSurfaceVariant),
+                        size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       article.title,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       article.source,
-                      style: TextStyle(
-                          fontSize: 11, color: colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -228,7 +229,7 @@ class ChatDetailPage extends HookConsumerWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.open_in_new, size: 20),
+            icon: Icon(Icons.open_in_new, size: AppSizes.iconSm),
             onPressed: () async {
               final uri = Uri.parse(article.url);
               if (await canLaunchUrl(uri)) {
@@ -244,29 +245,31 @@ class ChatDetailPage extends HookConsumerWidget {
             child: ListView.builder(
               controller: scrollController,
               reverse: true,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(AppSpacing.lg),
               itemCount:
                   messages.value.length + (remainingQuota.value == 0 ? 1 : 0),
               itemBuilder: (context, index) {
                 if (remainingQuota.value == 0 && index == 0) {
                   return Container(
-                    margin: const EdgeInsets.symmetric(vertical: 16),
-                    padding: const EdgeInsets.all(12),
+                    margin: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                    padding: EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
                       color: Colors.yellow.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                       border: Border.all(
                           color: Colors.yellow.withValues(alpha: 0.3)),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.info_outline,
-                            color: Colors.yellow, size: 16),
-                        SizedBox(width: 8),
+                            color: Colors.yellow, size: AppSizes.iconXs),
+                        SizedBox(width: AppSpacing.sm),
                         Text(
                           'Daily chat limit reached',
-                          style: TextStyle(color: Colors.yellow, fontSize: 12),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: Colors.yellow,
+                          ),
                         ),
                       ],
                     ),
@@ -281,9 +284,9 @@ class ChatDetailPage extends HookConsumerWidget {
                   alignment:
                       isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                    margin: EdgeInsets.only(bottom: AppSpacing.md),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.8,
                     ),
@@ -291,14 +294,14 @@ class ChatDetailPage extends HookConsumerWidget {
                       color: isUser
                           ? colorScheme.primary
                           : colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16).copyWith(
+                      borderRadius: BorderRadius.circular(AppRadius.xl).copyWith(
                         bottomRight: isUser ? Radius.zero : null,
                         bottomLeft: !isUser ? Radius.zero : null,
                       ),
                     ),
                     child: Text(
                       msg.content,
-                      style: TextStyle(
+                      style: theme.textTheme.bodyMedium?.copyWith(
                         color: isUser
                             ? colorScheme.onPrimary
                             : colorScheme.onSurface,
@@ -318,8 +321,8 @@ class ChatDetailPage extends HookConsumerWidget {
               ),
             ),
           Container(
-            padding: const EdgeInsets.all(16).copyWith(
-              bottom: MediaQuery.of(context).padding.bottom + 16,
+            padding: EdgeInsets.all(AppSpacing.lg).copyWith(
+              bottom: MediaQuery.of(context).padding.bottom + AppSpacing.lg,
             ),
             decoration: BoxDecoration(
               color: theme.cardColor,
@@ -338,26 +341,27 @@ class ChatDetailPage extends HookConsumerWidget {
                           : 'Type a message...',
                       hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AppRadius.full),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
                       fillColor: remainingQuota.value == 0
                           ? colorScheme.surface.withValues(alpha: 0.5)
                           : colorScheme.surfaceContainerHighest,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.sm + 2,
                       ),
                     ),
                     onSubmitted: (_) => sendMessage(),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: AppSpacing.md),
                 IconButton(
                   onPressed:
                       remainingQuota.value == 0 ? null : () => sendMessage(),
                   icon: const Icon(Icons.send),
+                  iconSize: AppSizes.iconMd,
                   color: remainingQuota.value == 0
                       ? colorScheme.onSurface.withValues(alpha: 0.3)
                       : colorScheme.primary,

@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
@@ -37,9 +38,9 @@ class ChatPage extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: AppSpacing.allLg,
             itemCount: chats.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
             itemBuilder: (context, index) {
               final chat = chats[index];
               return _ChatListItem(
@@ -92,6 +93,7 @@ class _ChatListItem extends StatelessWidget {
         : '';
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return Dismissible(
       key: ValueKey(chat.articleId),
@@ -142,10 +144,10 @@ class _ChatListItem extends StatelessWidget {
           );
         },
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.allLg,
           decoration: BoxDecoration(
             color: theme.cardColor,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: AppRadius.borderLg,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -158,22 +160,24 @@ class _ChatListItem extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppRadius.borderMd,
                 child: Image.network(
                   chat.article.imageUrl,
-                  width: 60,
-                  height: 60,
+                  width: AppSizes.thumbnailSm,
+                  height: AppSizes.thumbnailSm,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    width: 60,
-                    height: 60,
+                    width: AppSizes.thumbnailSm,
+                    height: AppSizes.thumbnailSm,
                     color: colorScheme.surfaceContainerHighest,
-                    child: Icon(Icons.article,
-                        color: colorScheme.onSurfaceVariant),
+                    child: Icon(
+                      Icons.article,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,29 +186,26 @@ class _ChatListItem extends StatelessWidget {
                       chat.article.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: textTheme.titleLarge?.copyWith(
                         color: colorScheme.onSurface,
-                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       lastMessage?.content ?? '',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 14,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
                       timeLabel,
-                      style: TextStyle(
+                      style: textTheme.labelSmall?.copyWith(
                         color:
                             colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        fontSize: 12,
                       ),
                     ),
                   ],
