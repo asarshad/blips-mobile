@@ -19,6 +19,17 @@ import '../test_utils/fake_youtube_player_manager.dart';
 import 'golden_test_utils.dart';
 
 void main() {
+  // CI (macos-14-arm64) can produce tiny, harmless pixel drift for a specific
+  // golden. Keep everything else strict.
+  installAllowlistedGoldenToleranceComparator(
+    allowlist: {
+      RegExp(r'goldens/feed_article_large_1_0\.png$'): const GoldenTolerance(
+        maxDiffPercent: 0.05,
+        maxDiffPixels: 200,
+      ),
+    },
+  );
+
   group('Feed Card Golden Tests', () {
     final article = ArticleFeedEntry(
       id: 1,

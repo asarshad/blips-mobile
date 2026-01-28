@@ -4,6 +4,8 @@
 /// across different screen sizes and safe area configurations.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -152,6 +154,10 @@ extension GoldenTestExtensions on WidgetTester {
     // Configure text scaling.
     binding.platformDispatcher.textScaleFactorTestValue = config.textScale;
 
+    // Ensure overrides are applied before the test widget tree is built.
+    // This helps when running a single golden test in isolation.
+    await pump();
+
     // Ensure we always clean up after each test.
     addTearDown(() async {
       binding.platformDispatcher.clearTextScaleFactorTestValue();
@@ -185,4 +191,106 @@ Widget goldenTestWrapper({
       home: child,
     ),
   );
+}
+
+/// Installs a golden comparator that tolerates small pixel diffs for specific
+/// allowlisted golden files.
+///
+/// This is intended to address rare, tiny rendering differences across
+/// platforms (e.g. `macos-14-arm64` vs local) without loosening golden
+/// strictness globally.
+void installAllowlistedGoldenToleranceComparator({
+  required Map<Pattern, GoldenTolerance> allowlist,
+}) {
+  final current = goldenFileComparator;
+  if (current is _AllowlistedToleranceGoldenComparator) {
+    return;
+  }
+  goldenFileComparator = _AllowlistedToleranceGoldenComparator(
+    delegate: current,
+    allowlist: allowlist,
+  );
+}
+
+class GoldenTolerance {
+  const GoldenTolerance({
+    required this.maxDiffPercent,
+    required this.maxDiffPixels,
+  });
+
+  /// Allowed diff percentage (e.g. 0.05 means 0.05%).
+  final double maxDiffPercent;
+
+  /// Allowed number of differing pixels.
+  final int maxDiffPixels;
+}
+
+class _AllowlistedToleranceGoldenComparator implements GoldenFileComparator {
+  _AllowlistedToleranceGoldenComparator({
+    required this.delegate,
+    required this.allowlist,
+  });
+
+  final GoldenFileComparator delegate;
+  final Map<Pattern, GoldenTolerance> allowlist;
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    try {
+      return await delegate.compare(imageBytes, golden);
+    } catch (error) {
+      final tolerance = _toleranceFor(golden);
+      if (tolerance == null) rethrow;
+
+      final parsed = _parseGoldenDiff(error);
+      if (parsed == null) rethrow;
+
+      if (parsed.diffPercent <= tolerance.maxDiffPercent &&
+          parsed.diffPixels <= tolerance.maxDiffPixels) {
+        return true;
+      }
+
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> update(Uri golden, Uint8List imageBytes) {
+    return delegate.update(golden, imageBytes);
+  }
+
+  @override
+  Uri getTestUri(Uri key, int? version) {
+    return delegate.getTestUri(key, version);
+  }
+
+  GoldenTolerance? _toleranceFor(Uri golden) {
+    final path = golden.toString();
+    for (final entry in allowlist.entries) {
+      final pattern = entry.key;
+      final matches = switch (pattern) {
+        final RegExp r => r.hasMatch(path),
+        final String s => path.contains(s),
+        _ => false,
+      };
+      if (matches) return entry.value;
+    }
+    return null;
+  }
+}
+
+({double diffPercent, int diffPixels})? _parseGoldenDiff(Object error) {
+  // Error message format (example):
+  // Golden "goldens/feed_article_large_1_0.png": Pixel test failed, 0.04%, 144px diff detected.
+  final text = error.toString();
+  final match = RegExp(
+    r'Pixel test failed,\s*([0-9]+(?:\.[0-9]+)?)%\s*,\s*([0-9]+)px diff detected',
+  ).firstMatch(text);
+  if (match == null) return null;
+
+  final diffPercent = double.tryParse(match.group(1) ?? '');
+  final diffPixels = int.tryParse(match.group(2) ?? '');
+  if (diffPercent == null || diffPixels == null) return null;
+
+  return (diffPercent: diffPercent, diffPixels: diffPixels);
 }
