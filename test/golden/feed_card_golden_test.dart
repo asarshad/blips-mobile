@@ -69,7 +69,10 @@ void main() {
               ),
             ),
           );
-          await tester.pump(const Duration(milliseconds: 100));
+          // Avoid pumpAndSettle here because some widgets (e.g. InkWell) can
+          // schedule transient animations that keep the tree "not settled".
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
 
           await expectLater(
             find.byType(Scaffold),
@@ -97,7 +100,8 @@ void main() {
               ),
             ),
           );
-          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
 
           await expectLater(
             find.byType(Scaffold),

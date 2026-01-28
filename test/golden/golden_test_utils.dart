@@ -144,10 +144,20 @@ class DeviceConfig {
 extension GoldenTestExtensions on WidgetTester {
   /// Sets up the test environment for a specific device config.
   Future<void> setDeviceConfig(DeviceConfig config) async {
+    // Make golden rasterization deterministic across machines/CI by pinning the
+    // test view's device pixel ratio and logical surface size.
+    view.devicePixelRatio = config.devicePixelRatio;
     await binding.setSurfaceSize(config.size);
 
-    // Configure the view for proper MediaQuery values
+    // Configure text scaling.
     binding.platformDispatcher.textScaleFactorTestValue = config.textScale;
+
+    // Ensure we always clean up after each test.
+    addTearDown(() async {
+      binding.platformDispatcher.clearTextScaleFactorTestValue();
+      await binding.setSurfaceSize(null);
+      view.resetDevicePixelRatio();
+    });
   }
 }
 
