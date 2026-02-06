@@ -1,3 +1,15 @@
+/// Freshness tier indicating how content was selected.
+enum FreshnessTier {
+  /// Tier A: Recently published content.
+  fresh,
+
+  /// Tier B: Recently added but older publication.
+  recentlyAdded,
+
+  /// Tier C: Evergreen high-quality content.
+  evergreen,
+}
+
 /// Sealed base class describing feed entries used by the UI.
 sealed class FeedEntry {
   const FeedEntry();
@@ -13,6 +25,15 @@ sealed class FeedEntry {
 
   /// Publication timestamp, used for sorting.
   DateTime get publishedAt;
+
+  /// When the content was added to our system (optional).
+  DateTime? get addedAt;
+
+  /// Freshness tier: fresh, recentlyAdded, or evergreen.
+  FreshnessTier get freshnessTier;
+
+  /// Human-readable reason for tier selection.
+  String? get freshnessReason;
 }
 
 /// Article variant shown for written stories.
@@ -29,6 +50,9 @@ class ArticleFeedEntry extends FeedEntry {
     required this.category,
     required this.readTime,
     List<String> tags = const <String>[],
+    this.addedAt,
+    this.freshnessTier = FreshnessTier.fresh,
+    this.freshnessReason,
   }) : tags = List.unmodifiable(tags);
 
   /// Unique article identifier.
@@ -49,6 +73,18 @@ class ArticleFeedEntry extends FeedEntry {
   /// Publication timestamp for sorting.
   @override
   final DateTime publishedAt;
+
+  /// When the article was added to our system.
+  @override
+  final DateTime? addedAt;
+
+  /// Freshness tier for display purposes.
+  @override
+  final FreshnessTier freshnessTier;
+
+  /// Human-readable reason for tier.
+  @override
+  final String? freshnessReason;
 
   /// Canonical article URL used when opening in browser.
   final String url;
@@ -80,6 +116,9 @@ class VideoFeedEntry extends FeedEntry {
     required this.publishedAt,
     required this.readTime,
     this.thumbnailUrl,
+    this.addedAt,
+    this.freshnessTier = FreshnessTier.fresh,
+    this.freshnessReason,
   });
 
   /// Unique video identifier.
@@ -110,6 +149,18 @@ class VideoFeedEntry extends FeedEntry {
   @override
   final DateTime publishedAt;
 
+  /// When the video was added to our system.
+  @override
+  final DateTime? addedAt;
+
+  /// Freshness tier for display purposes.
+  @override
+  final FreshnessTier freshnessTier;
+
+  /// Human-readable reason for tier.
+  @override
+  final String? freshnessReason;
+
   /// Approximate duration shown to the user.
   final int readTime;
 
@@ -129,6 +180,9 @@ class ReelFeedEntry extends FeedEntry {
     required this.source,
     required this.publishedAt,
     this.thumbnailUrl,
+    this.addedAt,
+    this.freshnessTier = FreshnessTier.fresh,
+    this.freshnessReason,
   });
 
   /// Unique video identifier.
@@ -155,6 +209,18 @@ class ReelFeedEntry extends FeedEntry {
   /// Publish timestamp used for ordering.
   @override
   final DateTime publishedAt;
+
+  /// When the reel was added to our system.
+  @override
+  final DateTime? addedAt;
+
+  /// Freshness tier for display purposes.
+  @override
+  final FreshnessTier freshnessTier;
+
+  /// Human-readable reason for tier.
+  @override
+  final String? freshnessReason;
 
   /// Optional thumbnail preview.
   final String? thumbnailUrl;

@@ -11,9 +11,14 @@ class ArticleDto {
     this.summary,
     this.imageUrl,
     this.publishedDate,
+    this.publishedAt,
     this.createdAt,
     this.readTimeMinutes,
     this.tags = const <ArticleTagDto>[],
+    this.freshnessTier,
+    this.freshnessReason,
+    this.publishedAgeSeconds,
+    this.addedAgeSeconds,
   });
 
   /// Parses an [ArticleDto] from a JSON map.
@@ -25,6 +30,7 @@ class ArticleDto {
       summary: json['summary'] as String?,
       imageUrl: json['image_url'] as String?,
       publishedDate: json['published_date'] as String?,
+      publishedAt: json['published_at'] as String?,
       createdAt: json['created_at'] as String?,
       readTimeMinutes: json['read_time_minutes'] as int?,
       tags: (json['tags'] as List<dynamic>? ?? [])
@@ -34,6 +40,10 @@ class ArticleDto {
             ),
           )
           .toList(growable: false),
+      freshnessTier: json['freshness_tier'] as String?,
+      freshnessReason: json['freshness_reason'] as String?,
+      publishedAgeSeconds: json['published_age_seconds'] as int?,
+      addedAgeSeconds: json['added_age_seconds'] as int?,
     );
   }
 
@@ -45,9 +55,14 @@ class ArticleDto {
         'summary': summary,
         'image_url': imageUrl,
         'published_date': publishedDate,
+        'published_at': publishedAt,
         'created_at': createdAt,
         'read_time_minutes': readTimeMinutes,
         'tags': tags.map((tag) => tag.toJson()).toList(growable: false),
+        'freshness_tier': freshnessTier,
+        'freshness_reason': freshnessReason,
+        'published_age_seconds': publishedAgeSeconds,
+        'added_age_seconds': addedAgeSeconds,
       };
 
   /// Unique article identifier.
@@ -65,8 +80,11 @@ class ArticleDto {
   /// Optional hero image URL.
   final String? imageUrl;
 
-  /// Publish date in ISO-8601 format.
+  /// Publish date in ISO-8601 format (date only, backward compatible).
   final String? publishedDate;
+
+  /// Full publish timestamp in ISO-8601 format.
+  final String? publishedAt;
 
   /// Creation timestamp in ISO-8601 format.
   final String? createdAt;
@@ -76,6 +94,18 @@ class ArticleDto {
 
   /// Tag metadata attached to the article.
   final List<ArticleTagDto> tags;
+
+  /// Freshness tier: "A" (fresh), "B" (recently added), "C" (evergreen).
+  final String? freshnessTier;
+
+  /// Human-readable reason: "fresh_published", "recently_added", "evergreen".
+  final String? freshnessReason;
+
+  /// Seconds since publication.
+  final int? publishedAgeSeconds;
+
+  /// Seconds since ingestion.
+  final int? addedAgeSeconds;
 }
 
 /// DTO describing an individual tag attached to an article.
@@ -105,12 +135,30 @@ extension ArticleDtoX on ArticleDto {
       title: title,
       summary: summaryText,
       source: deriveSource(sourceUrl),
-      publishedAt: resolvePublishedDate(publishedDate, createdAt),
+      publishedAt:
+          resolvePublishedDate(publishedAt ?? publishedDate, createdAt),
+      addedAt: createdAt != null ? DateTime.tryParse(createdAt!) : null,
       url: sourceUrl,
       imageUrl: imageUrl ?? FeedFallbacks.imageForCategory(category),
       category: category,
       readTime: readTimeMinutes ?? computeReadTime(summaryText),
       tags: tags.map((tag) => tag.name).toList(growable: false),
+      freshnessTier: _parseFreshnessTier(freshnessTier),
+      freshnessReason: freshnessReason,
     );
+  }
+
+  /// Parse freshness tier from string.
+  FreshnessTier _parseFreshnessTier(String? tier) {
+    switch (tier) {
+      case 'A':
+        return FreshnessTier.fresh;
+      case 'B':
+        return FreshnessTier.recentlyAdded;
+      case 'C':
+        return FreshnessTier.evergreen;
+      default:
+        return FreshnessTier.fresh;
+    }
   }
 }

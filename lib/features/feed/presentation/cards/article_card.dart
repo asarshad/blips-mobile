@@ -2,7 +2,6 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Card widget for displaying article feed entries.
@@ -15,8 +14,6 @@ class ArticleCard extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final showBubbles = useState(false);
-    final dateLabel =
-        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
     return Stack(
       children: [
@@ -26,7 +23,11 @@ class ArticleCard extends HookWidget {
           title: entry.title,
           summary: entry.summary,
           source: entry.source,
-          date: dateLabel,
+          freshnessInfo: FreshnessInfo(
+            publishedAt: entry.publishedAt,
+            addedAt: entry.addedAt,
+            tier: entry.freshnessTier,
+          ),
           readTime: '${entry.readTime} min read',
           onTap: () => _handleTap(showBubbles),
           onOpenLink: () => _openInBrowser(entry.url),
@@ -67,20 +68,26 @@ class ArticleCard extends HookWidget {
   }
 
   Future<void> _shareArticle(BuildContext context) async {
-    final dateLabel =
-        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
-
     await ShareService.instance.shareArticle(
       context: context,
       title: entry.title,
       summary: entry.summary,
       source: entry.source,
       category: entry.category,
-      date: dateLabel,
+      date: _formatDate(entry.publishedAt),
       readTime: '${entry.readTime} min read',
       imageUrl: entry.imageUrl,
       articleUrl: entry.url,
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.month}/${date.day}/${date.year}';
   }
 }
 

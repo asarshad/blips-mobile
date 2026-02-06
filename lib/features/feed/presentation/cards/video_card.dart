@@ -29,8 +29,6 @@ class VideoCard extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final showBubbles = useState(false);
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
-    final dateLabel =
-        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
 
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
@@ -71,7 +69,11 @@ class VideoCard extends HookConsumerWidget {
           title: entry.title,
           summary: entry.summary,
           source: entry.source,
-          date: dateLabel,
+          freshnessInfo: FreshnessInfo(
+            publishedAt: entry.publishedAt,
+            addedAt: entry.addedAt,
+            tier: entry.freshnessTier,
+          ),
           readTime: '${entry.readTime} min watch',
           onTap: () => _handleTap(
             showBubbles: showBubbles,

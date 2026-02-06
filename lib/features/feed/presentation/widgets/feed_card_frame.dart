@@ -1,5 +1,20 @@
 import 'package:blips_mobile/core/theme/theme.dart';
+import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/freshness_label.dart';
 import 'package:flutter/material.dart';
+
+/// Information about content freshness for display.
+class FreshnessInfo {
+  const FreshnessInfo({
+    required this.publishedAt,
+    this.addedAt,
+    this.tier = FreshnessTier.fresh,
+  });
+
+  final DateTime publishedAt;
+  final DateTime? addedAt;
+  final FreshnessTier tier;
+}
 
 /// Shared card frame used by article and video cards.
 ///
@@ -16,7 +31,8 @@ class FeedCardFrame extends StatelessWidget {
     required this.title,
     required this.summary,
     required this.source,
-    required this.date,
+    this.date,
+    this.freshnessInfo,
     required this.readTime,
     this.onTap,
     this.onShare,
@@ -30,7 +46,12 @@ class FeedCardFrame extends StatelessWidget {
   final String title;
   final String summary;
   final String source;
-  final String date;
+
+  /// Legacy date field for backward compatibility.
+  final String? date;
+
+  /// New freshness info with tier and timestamps.
+  final FreshnessInfo? freshnessInfo;
   final String readTime;
   final VoidCallback? onTap;
   final VoidCallback? onShare;
@@ -81,6 +102,7 @@ class FeedCardFrame extends StatelessWidget {
                   summary: summary,
                   source: source,
                   date: date,
+                  freshnessInfo: freshnessInfo,
                   readTime: readTime,
                   showActions: showActions,
                   onShare: onShare,
@@ -104,7 +126,8 @@ class _ContentSection extends StatelessWidget {
     required this.title,
     required this.summary,
     required this.source,
-    required this.date,
+    this.date,
+    this.freshnessInfo,
     required this.readTime,
     required this.showActions,
     required this.colorScheme,
@@ -118,7 +141,8 @@ class _ContentSection extends StatelessWidget {
   final String title;
   final String summary;
   final String source;
-  final String date;
+  final String? date;
+  final FreshnessInfo? freshnessInfo;
   final String readTime;
   final bool showActions;
   final ColorScheme colorScheme;
@@ -164,6 +188,7 @@ class _ContentSection extends StatelessWidget {
           ),
           _Footer(
             date: date,
+            freshnessInfo: freshnessInfo,
             readTime: readTime,
             showActions: showActions,
             onChat: onChat,
@@ -287,7 +312,8 @@ class _Summary extends StatelessWidget {
 
 class _Footer extends StatelessWidget {
   const _Footer({
-    required this.date,
+    this.date,
+    this.freshnessInfo,
     required this.readTime,
     required this.showActions,
     required this.colorScheme,
@@ -295,7 +321,8 @@ class _Footer extends StatelessWidget {
     this.onChat,
   });
 
-  final String date;
+  final String? date;
+  final FreshnessInfo? freshnessInfo;
   final String readTime;
   final bool showActions;
   final ColorScheme colorScheme;
@@ -306,19 +333,31 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(Icons.calendar_today_outlined,
-            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: AppSpacing.xs),
-        Flexible(
-          child: Text(
-            date,
-            style: textTheme.labelSmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+        // Use FreshnessLabel when freshnessInfo is available, otherwise fall back to legacy date display
+        if (freshnessInfo != null) ...[
+          Flexible(
+            child: FreshnessLabel(
+              publishedAt: freshnessInfo!.publishedAt,
+              addedAt: freshnessInfo!.addedAt,
+              freshnessTier: freshnessInfo!.tier,
+              showTierIndicator: true,
             ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
           ),
-        ),
+        ] else if (date != null) ...[
+          Icon(Icons.calendar_today_outlined,
+              size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              date!,
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
         const SizedBox(width: AppSpacing.md),
         Icon(Icons.access_time,
             size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
