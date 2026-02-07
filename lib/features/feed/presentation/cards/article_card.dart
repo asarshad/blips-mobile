@@ -36,9 +36,9 @@ class ArticleCard extends HookWidget {
         ),
         if (showBubbles.value)
           Positioned(
-            bottom: 70,
-            right: 20,
-            left: 40,
+            bottom: 60,
+            right: 16,
+            left: 16,
             child: FloatingChatBubbles(
               entry: entry,
               onClose: () => showBubbles.value = false,
