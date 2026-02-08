@@ -1,6 +1,5 @@
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
-import 'package:blips_mobile/features/feed/presentation/widgets/freshness_label.dart';
 import 'package:flutter/material.dart';
 
 /// Information about content freshness for display.
@@ -333,20 +332,22 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Use FreshnessLabel when freshnessInfo is available, otherwise fall back to legacy date display
+        // Always use legacy date display with calendar icon for visual consistency
+        Icon(Icons.calendar_today_outlined,
+            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.xs),
         if (freshnessInfo != null) ...[
           Flexible(
-            child: FreshnessLabel(
-              publishedAt: freshnessInfo!.publishedAt,
-              addedAt: freshnessInfo!.addedAt,
-              freshnessTier: freshnessInfo!.tier,
-              showTierIndicator: true,
+            child: Text(
+              _formatPublishedDate(freshnessInfo!.publishedAt),
+              style: textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ] else if (date != null) ...[
-          Icon(Icons.calendar_today_outlined,
-              size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: AppSpacing.xs),
           Flexible(
             child: Text(
               date!,
@@ -372,6 +373,25 @@ class _Footer extends StatelessWidget {
         if (showActions) _ChatButton(onChat: onChat, colorScheme: colorScheme),
       ],
     );
+  }
+
+  /// Formats the published date as a readable string.
+  String _formatPublishedDate(DateTime publishedAt) {
+    final now = DateTime.now();
+    final diff = now.difference(publishedAt);
+
+    if (diff.inDays == 0) {
+      if (diff.inHours == 0) {
+        return '${diff.inMinutes}m ago';
+      }
+      return '${diff.inHours}h ago';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays}d ago';
+    } else if (diff.inDays < 30) {
+      return '${diff.inDays ~/ 7}w ago';
+    } else {
+      return '${diff.inDays ~/ 30}mo ago';
+    }
   }
 }
 

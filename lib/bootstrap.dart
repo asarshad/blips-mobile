@@ -1,5 +1,6 @@
 import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// - Global error handling (FlutterError.onError, PlatformDispatcher)
 /// - Splash screen preservation
 /// - Riverpod provider scope
+/// - Stale cache cleanup
 Future<void> bootstrap() async {
   await runWithGlobalErrorHandling(() async {
     // Preserve splash screen until we explicitly remove it
@@ -17,6 +19,20 @@ Future<void> bootstrap() async {
     FlutterNativeSplash.preserve(widgetsBinding: binding);
 
     logger.info('App starting...', category: LogCategory.lifecycle);
+
+    // Clean up stale cache on app start (older than 6 hours)
+    // This ensures users don't see very old cached data
+    try {
+      await FeedCache.instance.clearStale(
+        maxAge: const Duration(hours: 6),
+      );
+    } catch (e) {
+      logger.warning(
+        'Failed to clear stale cache',
+        category: LogCategory.app,
+        error: e,
+      );
+    }
 
     runApp(
       const ProviderScope(

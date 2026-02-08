@@ -120,10 +120,16 @@ class FeedCache implements FeedCacheInterface {
     await batch.commit(noResult: true);
   }
 
+  /// Maximum age for cached items to be considered fresh.
+  static const _maxCacheAge = Duration(hours: 6);
+
   Future<List<ArticleFeedEntry>> getCachedArticles({int limit = 50}) async {
     final db = await database;
+    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'articles',
+      where: 'cached_at >= ?',
+      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
@@ -182,8 +188,11 @@ class FeedCache implements FeedCacheInterface {
 
   Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30}) async {
     final db = await database;
+    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'videos',
+      where: 'cached_at >= ?',
+      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
@@ -236,10 +245,14 @@ class FeedCache implements FeedCacheInterface {
     await batch.commit(noResult: true);
   }
 
+  @override
   Future<List<ReelFeedEntry>> getCachedReels({int limit = 50}) async {
     final db = await database;
+    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'reels',
+      where: 'cached_at >= ?',
+      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
