@@ -1,37 +1,24 @@
 /// Widget tests for FloatingChatBubbles.
 ///
 /// Tests the conversation starter bubbles that appear when tapping
-/// the chat button on feed cards.
+/// the chat button on feed cards. Starters are pre-generated during
+/// content ingestion and delivered inline in the feed response.
 @Tags(['widget'])
 library;
 
-import 'package:blips_mobile/features/feed/data/starters_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/floating_chat_bubbles.dart';
-import 'package:blips_mobile/features/feed/providers/starters_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
-  late ArticleFeedEntry testArticle;
-  late VideoFeedEntry testVideo;
-
-  /// Mock starters data for testing.
-  final mockStarters = ConversationStarters(
-    contentId: 1,
-    starters: [
-      'What are the implications of this article?',
-      'Can you explain the main points?',
-      'How does this compare to similar developments?',
-    ],
-    fallback: [
-      'What should I know about this?',
-    ],
-  );
+  late ArticleFeedEntry articleWithStarters;
+  late ArticleFeedEntry articleWithoutStarters;
+  late VideoFeedEntry videoWithStarters;
 
   setUp(() {
-    testArticle = ArticleFeedEntry(
+    articleWithStarters = ArticleFeedEntry(
       id: 1,
       title: 'Test Article Title',
       summary: 'Test article summary for testing purposes.',
@@ -42,10 +29,28 @@ void main() {
       category: 'Technology',
       readTime: 5,
       tags: const ['Test'],
+      conversationStarters: const [
+        'What are the implications of this article?',
+        'Can you explain the main points?',
+        'How does this compare to similar developments?',
+      ],
     );
 
-    testVideo = VideoFeedEntry(
+    articleWithoutStarters = ArticleFeedEntry(
       id: 2,
+      title: 'Article Without Starters',
+      summary: 'No starters available.',
+      source: 'Test Source',
+      publishedAt: DateTime.utc(2025, 1, 1),
+      url: 'https://example.com/article2',
+      imageUrl: 'https://example.com/image2.png',
+      category: 'Technology',
+      readTime: 3,
+      tags: const ['Test'],
+    );
+
+    videoWithStarters = VideoFeedEntry(
+      id: 3,
       title: 'Test Video Title',
       summary: 'Test video summary.',
       videoUrl: 'https://cdn.example.com/video.mp4',
@@ -55,27 +60,19 @@ void main() {
       category: 'Technology',
       publishedAt: DateTime.utc(2025, 1, 2),
       readTime: 3,
+      conversationStarters: const [
+        'What are the key takeaways from this video?',
+        'Can you summarize the demo?',
+        'How does this technology work?',
+      ],
     );
   });
 
-  /// Creates a test widget wrapped with ProviderScope and mocked starters.
   Widget createTestWidget({
     required FeedEntry entry,
-    AsyncValue<ConversationStarters>? startersValue,
     VoidCallback? onClose,
   }) {
-    final contentId = entry is ArticleFeedEntry
-        ? entry.id
-        : (entry as VideoFeedEntry).id;
-
     return ProviderScope(
-      overrides: [
-        // Override the starters provider to return mock data synchronously
-        startersProvider(contentId).overrideWith((ref) async {
-          // Return mock data or default
-          return startersValue?.value ?? mockStarters;
-        }),
-      ],
       child: MaterialApp(
         home: Scaffold(
           body: FloatingChatBubbles(
@@ -88,37 +85,36 @@ void main() {
   }
 
   group('FloatingChatBubbles', () {
-    testWidgets('shows loading state initially', (tester) async {
-      await tester.pumpWidget(createTestWidget(entry: testArticle));
+    testWidgets('renders inline starters immediately (no loading)',
+        (tester) async {
+      await tester.pumpWidget(createTestWidget(entry: articleWithStarters));
 
-      // Initially should show loading bubbles (containers without text)
-      // The loading state may flash quickly, but we verify no exceptions
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('renders bubbles after loading', (tester) async {
-      await tester.pumpWidget(createTestWidget(entry: testArticle));
-      await tester.pumpAndSettle();
-
-      // Should have 3 bubble InkWells after loading
-      final bubbleFinder = find.byType(InkWell);
-      expect(bubbleFinder, findsNWidgets(3));
-    });
-
-    testWidgets('displays starters from API', (tester) async {
-      await tester.pumpWidget(createTestWidget(entry: testArticle));
-      await tester.pumpAndSettle();
-
-      // Should show the mock starters text
+      // Should render immediately — no loading state, no API call
       expect(find.textContaining('implications'), findsOneWidget);
       expect(find.textContaining('main points'), findsOneWidget);
+      expect(find.textContaining('similar developments'), findsOneWidget);
+    });
+
+    testWidgets('shows "Ask something else..." bubble', (tester) async {
+      await tester.pumpWidget(createTestWidget(entry: articleWithStarters));
+
+      expect(find.textContaining('Ask something else'), findsOneWidget);
+    });
+
+    testWidgets('uses static defaults when no starters available',
+        (tester) async {
+      await tester.pumpWidget(
+          createTestWidget(entry: articleWithoutStarters));
+
+      // Should show the static defaults
+      expect(find.textContaining('key takeaways'), findsOneWidget);
+      expect(find.textContaining('main concepts'), findsOneWidget);
+      expect(find.textContaining('everyday users'), findsOneWidget);
     });
 
     testWidgets('bubbles column is right-aligned', (tester) async {
-      await tester.pumpWidget(createTestWidget(entry: testArticle));
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(createTestWidget(entry: articleWithStarters));
 
-      // Find any Column that is right-aligned
       final columns = tester.widgetList<Column>(find.byType(Column));
       final hasRightAligned = columns.any(
         (col) => col.crossAxisAlignment == CrossAxisAlignment.end,
@@ -127,27 +123,10 @@ void main() {
     });
 
     testWidgets('works with video entries', (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            startersProvider(testVideo.id)
-                .overrideWith((ref) async => mockStarters),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: FloatingChatBubbles(
-                entry: testVideo,
-                onClose: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(createTestWidget(entry: videoWithStarters));
 
-      // Should render bubbles for video too
-      final bubbleFinder = find.byType(InkWell);
-      expect(bubbleFinder, findsNWidgets(3));
+      expect(find.textContaining('key takeaways'), findsOneWidget);
+      expect(find.textContaining('summarize the demo'), findsOneWidget);
     });
 
     testWidgets('calls onClose when bubble is tapped', (tester) async {
@@ -155,11 +134,10 @@ void main() {
 
       await tester.pumpWidget(
         createTestWidget(
-          entry: testArticle,
+          entry: articleWithStarters,
           onClose: () => closeCalled = true,
         ),
       );
-      await tester.pumpAndSettle();
 
       // Tap the first bubble
       await tester.tap(find.byType(InkWell).first);
@@ -168,28 +146,11 @@ void main() {
       expect(closeCalled, isTrue);
     });
 
-    testWidgets('uses fallback starters on error', (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            startersProvider(testArticle.id).overrideWith((ref) async {
-              throw Exception('API error');
-            }),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: FloatingChatBubbles(
-                entry: testArticle,
-                onClose: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets('limits to 3 starters max', (tester) async {
+      await tester.pumpWidget(createTestWidget(entry: articleWithStarters));
 
-      // Should still show fallback bubbles (from defaultFallbackStarters)
-      expect(find.textContaining('main points'), findsOneWidget);
+      // 3 starter bubbles + 1 "Ask something else..." = 4 InkWell total
+      expect(find.byType(InkWell), findsNWidgets(4));
     });
   });
 
@@ -197,16 +158,12 @@ void main() {
     testWidgets('adapts to narrow width', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            startersProvider(testArticle.id)
-                .overrideWith((ref) async => mockStarters),
-          ],
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 280,
                 child: FloatingChatBubbles(
-                  entry: testArticle,
+                  entry: articleWithStarters,
                   onClose: () {},
                 ),
               ),
@@ -214,7 +171,6 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
       // Should render without overflow
       expect(tester.takeException(), isNull);
@@ -223,16 +179,12 @@ void main() {
     testWidgets('adapts to wide width', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            startersProvider(testArticle.id)
-                .overrideWith((ref) async => mockStarters),
-          ],
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
                 width: 600,
                 child: FloatingChatBubbles(
-                  entry: testArticle,
+                  entry: articleWithStarters,
                   onClose: () {},
                 ),
               ),
@@ -240,7 +192,6 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
       // Should render without issues
       expect(tester.takeException(), isNull);
