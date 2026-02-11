@@ -261,8 +261,34 @@ class FeedShellPage extends HookConsumerWidget {
     return PageView(
       controller: pageController,
       onPageChanged: (index) => currentIndex.value = index,
-      children: allTabs,
+      children: allTabs.map((tab) => _KeepAliveWrapper(child: tab)).toList(),
     );
+  }
+}
+
+/// Wraps a widget with [AutomaticKeepAliveClientMixin] so that [PageView]
+/// keeps it alive even when scrolled off-screen.
+///
+/// Without this, swiping between tabs would destroy each tab's widget tree
+/// (including its [PageController]), resetting scroll position to 0.
+class _KeepAliveWrapper extends StatefulWidget {
+  const _KeepAliveWrapper({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAliveWrapper> createState() => _KeepAliveWrapperState();
+}
+
+class _KeepAliveWrapperState extends State<_KeepAliveWrapper>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
