@@ -20,11 +20,11 @@ Future<void> bootstrap() async {
 
     logger.info('App starting...', category: LogCategory.lifecycle);
 
-    // Clean up stale cache on app start (older than 6 hours)
-    // This ensures users don't see very old cached data
+    // Clean up very old cache on app start (older than 7 days)
+    // Prevents unbounded growth; freshness is handled by background refresh
     try {
       await FeedCache.instance.clearStale(
-        maxAge: const Duration(hours: 6),
+        maxAge: const Duration(days: 7),
       );
     } catch (e) {
       logger.warning(

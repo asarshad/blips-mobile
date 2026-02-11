@@ -59,10 +59,15 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       );
 
       if (cached.isNotEmpty && mounted) {
-        // Show cached data immediately
+        // Show cached data immediately (even if stale)
         state = AsyncValue.data(cached);
         _page = 1;
         _hasMore = true;
+
+        logger.info(
+          'Feed cache HIT: ${cached.length} items served from cache',
+          category: LogCategory.app,
+        );
 
         // Then fetch fresh data in background
         _refreshInBackground();
@@ -76,6 +81,11 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
         error: e,
       );
     }
+
+    logger.info(
+      'Feed cache MISS: fetching from network',
+      category: LogCategory.app,
+    );
 
     // No cache, fetch from network
     await _fetchFromNetwork();
@@ -319,6 +329,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         state = AsyncValue.data(cached);
         _page = 1;
         _hasMore = true;
+
+        logger.info(
+          'Reels cache HIT: ${cached.length} items served from cache',
+          category: LogCategory.app,
+        );
+
         _refreshInBackground();
         return;
       }
@@ -329,6 +345,11 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         error: e,
       );
     }
+
+    logger.info(
+      'Reels cache MISS: fetching from network',
+      category: LogCategory.app,
+    );
 
     await _fetchFromNetwork();
   }

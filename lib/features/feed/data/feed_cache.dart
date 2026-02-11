@@ -24,7 +24,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -90,6 +90,14 @@ class FeedCache implements FeedCacheInterface {
         'CREATE INDEX idx_videos_published ON videos(published_at DESC)');
     await db.execute(
         'CREATE INDEX idx_reels_published ON reels(published_at DESC)');
+
+    // Index for cache cleanup queries
+    await db.execute(
+        'CREATE INDEX idx_articles_cached ON articles(cached_at)');
+    await db.execute(
+        'CREATE INDEX idx_videos_cached ON videos(cached_at)');
+    await db.execute(
+        'CREATE INDEX idx_reels_cached ON reels(cached_at)');
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -101,10 +109,15 @@ class FeedCache implements FeedCacheInterface {
           'ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
       await db.execute(
           'ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
-      // Clear stale rows so fresh fetch populates the new column
-      await db.execute('DELETE FROM articles');
-      await db.execute('DELETE FROM videos');
-      await db.execute('DELETE FROM reels');
+    }
+    if (oldVersion < 3) {
+      // v3: Add cached_at indexes for faster cleanup queries
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_videos_cached ON videos(cached_at)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_reels_cached ON reels(cached_at)');
     }
   }
 
@@ -155,16 +168,10 @@ class FeedCache implements FeedCacheInterface {
     await batch.commit(noResult: true);
   }
 
-  /// Maximum age for cached items to be considered fresh.
-  static const _maxCacheAge = Duration(hours: 6);
-
   Future<List<ArticleFeedEntry>> getCachedArticles({int limit = 50}) async {
     final db = await database;
-    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'articles',
-      where: 'cached_at >= ?',
-      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
@@ -227,11 +234,8 @@ class FeedCache implements FeedCacheInterface {
 
   Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30}) async {
     final db = await database;
-    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'videos',
-      where: 'cached_at >= ?',
-      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
@@ -291,11 +295,8 @@ class FeedCache implements FeedCacheInterface {
   @override
   Future<List<ReelFeedEntry>> getCachedReels({int limit = 50}) async {
     final db = await database;
-    final cutoff = DateTime.now().subtract(_maxCacheAge).toIso8601String();
     final results = await db.query(
       'reels',
-      where: 'cached_at >= ?',
-      whereArgs: [cutoff],
       orderBy: 'published_at DESC',
       limit: limit,
     );
