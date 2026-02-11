@@ -101,6 +101,10 @@ class FeedCache implements FeedCacheInterface {
           'ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
       await db.execute(
           'ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
+      // Clear stale rows so fresh fetch populates the new column
+      await db.execute('DELETE FROM articles');
+      await db.execute('DELETE FROM videos');
+      await db.execute('DELETE FROM reels');
     }
   }
 
