@@ -384,11 +384,9 @@ class _Footer extends StatelessWidget {
     final now = DateTime.now();
     final diff = now.difference(publishedAt);
 
-    if (diff.inDays == 0) {
-      if (diff.inHours == 0) {
-        return '${diff.inMinutes}m ago';
-      }
-      return '${diff.inHours}h ago';
+    // Anything within 24 hours (including slightly future due to UTC offset)
+    if (diff.inHours.abs() < 24) {
+      return 'Today';
     } else if (diff.inDays < 7) {
       return '${diff.inDays}d ago';
     } else if (diff.inDays < 30) {

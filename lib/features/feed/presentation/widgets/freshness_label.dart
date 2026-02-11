@@ -80,14 +80,8 @@ class FreshnessLabel extends StatelessWidget {
 
   /// Formats a duration into a human-readable age string.
   String _formatAge(Duration duration) {
-    final seconds = duration.inSeconds;
-    if (seconds < 60) return 'just now';
-
-    final minutes = duration.inMinutes;
-    if (minutes < 60) return '${minutes}m ago';
-
-    final hours = duration.inHours;
-    if (hours < 24) return '${hours}h ago';
+    // Anything within 24 hours (including slightly future due to UTC offset)
+    if (duration.inHours.abs() < 24) return 'Today';
 
     final days = duration.inDays;
     if (days < 7) return '${days}d ago';
