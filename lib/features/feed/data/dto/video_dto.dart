@@ -20,6 +20,7 @@ class VideoDto {
     this.freshnessReason,
     this.publishedAgeSeconds,
     this.addedAgeSeconds,
+    this.conversationStarters = const <String>[],
   });
 
   /// Parses a [VideoDto] from JSON.
@@ -39,6 +40,7 @@ class VideoDto {
         freshnessReason: json['freshness_reason'] as String?,
         publishedAgeSeconds: json['published_age_seconds'] as int?,
         addedAgeSeconds: json['added_age_seconds'] as int?,
+        conversationStarters: _parseStarters(json['conversation_starters']),
       );
 
   /// Serializes this DTO back to JSON.
@@ -58,6 +60,9 @@ class VideoDto {
         'freshness_reason': freshnessReason,
         'published_age_seconds': publishedAgeSeconds,
         'added_age_seconds': addedAgeSeconds,
+        'conversation_starters': conversationStarters.isNotEmpty
+            ? {'starters': conversationStarters}
+            : null,
       };
 
   /// Unique video identifier.
@@ -104,6 +109,23 @@ class VideoDto {
 
   /// Seconds since ingestion.
   final int? addedAgeSeconds;
+
+  /// Pre-generated conversation starter questions.
+  final List<String> conversationStarters;
+
+  /// Parses the starters list from the nested JSON structure.
+  static List<String> _parseStarters(dynamic json) {
+    if (json is Map<String, dynamic>) {
+      final starters = json['starters'];
+      if (starters is List) {
+        return starters
+            .whereType<String>()
+            .where((s) => s.trim().isNotEmpty)
+            .toList();
+      }
+    }
+    return const <String>[];
+  }
 }
 
 /// Parse freshness tier from string.
@@ -142,6 +164,7 @@ extension VideoDtoX on VideoDto {
       readTime: durationMinutes,
       freshnessTier: _parseFreshnessTier(freshnessTier),
       freshnessReason: freshnessReason,
+      conversationStarters: conversationStarters,
     );
   }
 
@@ -160,6 +183,7 @@ extension VideoDtoX on VideoDto {
       addedAt: createdAt != null ? DateTime.tryParse(createdAt!) : null,
       freshnessTier: _parseFreshnessTier(freshnessTier),
       freshnessReason: freshnessReason,
+      conversationStarters: conversationStarters,
     );
   }
 }

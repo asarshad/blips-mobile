@@ -24,8 +24,9 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -43,6 +44,7 @@ class FeedCache implements FeedCacheInterface {
         category TEXT NOT NULL,
         read_time INTEGER NOT NULL,
         tags TEXT NOT NULL,
+        conversation_starters TEXT,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -60,6 +62,7 @@ class FeedCache implements FeedCacheInterface {
         published_at TEXT NOT NULL,
         read_time INTEGER NOT NULL,
         thumbnail_url TEXT,
+        conversation_starters TEXT,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -75,6 +78,7 @@ class FeedCache implements FeedCacheInterface {
         source TEXT NOT NULL,
         published_at TEXT NOT NULL,
         thumbnail_url TEXT,
+        conversation_starters TEXT,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -86,6 +90,30 @@ class FeedCache implements FeedCacheInterface {
         'CREATE INDEX idx_videos_published ON videos(published_at DESC)');
     await db.execute(
         'CREATE INDEX idx_reels_published ON reels(published_at DESC)');
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // v2: Add conversation_starters column to all tables
+      await db.execute(
+          'ALTER TABLE articles ADD COLUMN conversation_starters TEXT');
+      await db.execute(
+          'ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
+      await db.execute(
+          'ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
+    }
+  }
+
+  /// Decode a JSON-encoded starters list from SQLite, returning empty list on null/error.
+  static List<String> _decodeStarters(dynamic value) {
+    if (value == null) return const <String>[];
+    try {
+      final decoded = jsonDecode(value as String);
+      if (decoded is List) {
+        return decoded.whereType<String>().toList();
+      }
+    } catch (_) {}
+    return const <String>[];
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -111,6 +139,9 @@ class FeedCache implements FeedCacheInterface {
           'category': article.category,
           'read_time': article.readTime,
           'tags': jsonEncode(article.tags),
+          'conversation_starters': article.conversationStarters.isNotEmpty
+              ? jsonEncode(article.conversationStarters)
+              : null,
           'cached_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -151,6 +182,7 @@ class FeedCache implements FeedCacheInterface {
       tags: (jsonDecode(row['tags'] as String) as List<dynamic>)
           .cast<String>()
           .toList(),
+      conversationStarters: _decodeStarters(row['conversation_starters']),
     );
   }
 
@@ -177,6 +209,9 @@ class FeedCache implements FeedCacheInterface {
           'published_at': video.publishedAt.toIso8601String(),
           'read_time': video.readTime,
           'thumbnail_url': video.thumbnailUrl,
+          'conversation_starters': video.conversationStarters.isNotEmpty
+              ? jsonEncode(video.conversationStarters)
+              : null,
           'cached_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -212,6 +247,7 @@ class FeedCache implements FeedCacheInterface {
       publishedAt: DateTime.parse(row['published_at'] as String),
       readTime: row['read_time'] as int,
       thumbnailUrl: row['thumbnail_url'] as String?,
+      conversationStarters: _decodeStarters(row['conversation_starters']),
     );
   }
 
@@ -236,6 +272,9 @@ class FeedCache implements FeedCacheInterface {
           'source': reel.source,
           'published_at': reel.publishedAt.toIso8601String(),
           'thumbnail_url': reel.thumbnailUrl,
+          'conversation_starters': reel.conversationStarters.isNotEmpty
+              ? jsonEncode(reel.conversationStarters)
+              : null,
           'cached_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -270,6 +309,7 @@ class FeedCache implements FeedCacheInterface {
       source: row['source'] as String,
       publishedAt: DateTime.parse(row['published_at'] as String),
       thumbnailUrl: row['thumbnail_url'] as String?,
+      conversationStarters: _decodeStarters(row['conversation_starters']),
     );
   }
 

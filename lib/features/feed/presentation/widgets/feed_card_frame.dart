@@ -332,44 +332,48 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Always use legacy date display with calendar icon for visual consistency
-        Icon(Icons.calendar_today_outlined,
-            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: AppSpacing.xs),
-        if (freshnessInfo != null) ...[
-          Flexible(
-            child: Text(
-              _formatPublishedDate(freshnessInfo!.publishedAt),
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+        // Metadata section takes all available space
+        Expanded(
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today_outlined,
+                  size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.xs),
+              if (freshnessInfo != null)
+                Flexible(
+                  child: Text(
+                    _formatPublishedDate(freshnessInfo!.publishedAt),
+                    style: textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                )
+              else if (date != null)
+                Flexible(
+                  child: Text(
+                    date!,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              const SizedBox(width: AppSpacing.md),
+              Icon(Icons.access_time,
+                  size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                readTime,
+                style: textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ] else if (date != null) ...[
-          Flexible(
-            child: Text(
-              date!,
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
-        const SizedBox(width: AppSpacing.md),
-        Icon(Icons.access_time,
-            size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: AppSpacing.xs),
-        Text(
-          readTime,
-          style: textTheme.labelSmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
+            ],
           ),
         ),
-        const Spacer(),
         if (showActions) _ChatButton(onChat: onChat, colorScheme: colorScheme),
       ],
     );

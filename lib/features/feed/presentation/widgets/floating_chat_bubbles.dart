@@ -30,11 +30,21 @@ class FloatingChatBubbles extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contentId = _getContentId(entry);
-    final startersAsync = ref.watch(startersProvider(contentId));
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxBubbleWidth = constraints.maxWidth * _maxWidthFraction;
+
+        // Use inline starters from the feed response if available,
+        // otherwise fall back to the separate API call.
+        if (entry.conversationStarters.isNotEmpty) {
+          return _buildBubbles(
+            entry.conversationStarters,
+            maxBubbleWidth,
+          );
+        }
+
+        final startersAsync = ref.watch(startersProvider(contentId));
 
         return startersAsync.when(
           loading: () => _buildLoadingState(maxBubbleWidth),
@@ -76,18 +86,34 @@ class FloatingChatBubbles extends ConsumerWidget {
   }
 
   Widget _buildBubbles(List<String> questions, double maxBubbleWidth) {
+    // Filter out any empty/blank strings to prevent blank bubbles
+    final validQuestions = questions
+        .where((q) => q.trim().isNotEmpty)
+        .take(3)
+        .toList();
+
+    // Fall back to defaults if all starters were empty
+    final displayQuestions = validQuestions.isNotEmpty
+        ? validQuestions
+        : defaultFallbackStarters.starters.take(3).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
-      children: questions
-          .take(3) // Limit to 3 bubbles
-          .map((q) => _ChatBubble(
-                question: q,
-                entry: entry,
-                onClose: onClose,
-                maxWidth: maxBubbleWidth,
-              ))
-          .toList(),
+      children: [
+        ...displayQuestions
+            .map((q) => _ChatBubble(
+                  question: q,
+                  entry: entry,
+                  onClose: onClose,
+                  maxWidth: maxBubbleWidth,
+                )),
+        _AskCustomBubble(
+          entry: entry,
+          onClose: onClose,
+          maxWidth: maxBubbleWidth,
+        ),
+      ],
     );
   }
 }
@@ -100,12 +126,17 @@ class _LoadingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth * 0.7),
         child: Container(
-          height: 44,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           decoration: BoxDecoration(
             color: const Color(0xFF1D4ED8).withValues(alpha: 0.5),
             borderRadius: BorderRadius.only(
@@ -114,6 +145,27 @@ class _LoadingBubble extends StatelessWidget {
               bottomLeft: Radius.circular(AppRadius.xl + 4),
               bottomRight: Radius.circular(AppRadius.sm),
             ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Thinking...',
+                style: textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -212,6 +264,109 @@ class _ChatBubble extends StatelessWidget {
     final video = entry as VideoFeedEntry;
     return ArticleFeedEntry(
       id: -video.id, // Negative ID indicates video
+      title: video.title,
+      summary: video.summary,
+      source: video.source,
+      publishedAt: video.publishedAt,
+      url: video.link,
+      imageUrl: video.thumbnailUrl ?? '',
+      category: video.category,
+      readTime: video.readTime,
+    );
+  }
+}
+
+/// Outline-style bubble that opens a free-form chat without a pre-set prompt.
+class _AskCustomBubble extends StatelessWidget {
+  const _AskCustomBubble({
+    required this.entry,
+    required this.onClose,
+    required this.maxWidth,
+  });
+
+  final FeedEntry entry;
+  final VoidCallback onClose;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: InkWell(
+          onTap: () => _navigateToChat(context),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(AppRadius.xl + 4),
+            topRight: Radius.circular(AppRadius.xl + 4),
+            bottomLeft: Radius.circular(AppRadius.xl + 4),
+            bottomRight: Radius.circular(AppRadius.sm),
+          ),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.xl + 4),
+                topRight: Radius.circular(AppRadius.xl + 4),
+                bottomLeft: Radius.circular(AppRadius.xl + 4),
+                bottomRight: Radius.circular(AppRadius.sm),
+              ),
+              border: Border.all(
+                color: const Color(0xFF1D4ED8).withValues(alpha: 0.6),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                  color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Ask something else...',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToChat(BuildContext context) {
+    onClose();
+
+    final articleEntry = _convertToArticleEntry(entry);
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ChatDetailPage(
+          article: articleEntry,
+        ),
+      ),
+    );
+  }
+
+  ArticleFeedEntry _convertToArticleEntry(FeedEntry entry) {
+    if (entry is ArticleFeedEntry) {
+      return entry;
+    }
+
+    final video = entry as VideoFeedEntry;
+    return ArticleFeedEntry(
+      id: -video.id,
       title: video.title,
       summary: video.summary,
       source: video.source,

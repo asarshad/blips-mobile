@@ -34,6 +34,9 @@ sealed class FeedEntry {
 
   /// Human-readable reason for tier selection.
   String? get freshnessReason;
+
+  /// Pre-generated conversation starter questions.
+  List<String> get conversationStarters;
 }
 
 /// Article variant shown for written stories.
@@ -53,6 +56,7 @@ class ArticleFeedEntry extends FeedEntry {
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
     this.freshnessReason,
+    this.conversationStarters = const <String>[],
   }) : tags = List.unmodifiable(tags);
 
   /// Unique article identifier.
@@ -100,6 +104,10 @@ class ArticleFeedEntry extends FeedEntry {
 
   /// Associated topic tags.
   final List<String> tags;
+
+  /// Pre-generated conversation starter questions.
+  @override
+  final List<String> conversationStarters;
 }
 
 /// Video variant shown for short-form clips.
@@ -119,6 +127,7 @@ class VideoFeedEntry extends FeedEntry {
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
     this.freshnessReason,
+    this.conversationStarters = const <String>[],
   });
 
   /// Unique video identifier.
@@ -166,6 +175,10 @@ class VideoFeedEntry extends FeedEntry {
 
   /// Optional thumbnail preview.
   final String? thumbnailUrl;
+
+  /// Pre-generated conversation starter questions.
+  @override
+  final List<String> conversationStarters;
 }
 
 /// Reel variant shown for short videos.
@@ -183,6 +196,7 @@ class ReelFeedEntry extends FeedEntry {
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
     this.freshnessReason,
+    this.conversationStarters = const <String>[],
   });
 
   /// Unique video identifier.
@@ -224,6 +238,10 @@ class ReelFeedEntry extends FeedEntry {
 
   /// Optional thumbnail preview.
   final String? thumbnailUrl;
+
+  /// Pre-generated conversation starter questions.
+  @override
+  final List<String> conversationStarters;
 }
 
 /// Pattern-matching helper that replaces the Freezed `when` utility.
