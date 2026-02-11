@@ -239,11 +239,14 @@ class _AskCustomBubble extends StatelessWidget {
                   color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'Ask something else...',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: Text(
+                    'Ask something else...',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

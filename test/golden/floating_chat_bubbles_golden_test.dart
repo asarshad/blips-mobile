@@ -1,44 +1,25 @@
 /// Golden tests for FloatingChatBubbles.
 ///
 /// Ensures visual consistency of conversation starter bubbles
-/// across different screen sizes.
+/// across different screen sizes. Starters are pre-generated during
+/// content ingestion and delivered inline in the feed response.
 @Tags(['golden'])
 library;
 
-import 'package:blips_mobile/features/feed/data/starters_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/floating_chat_bubbles.dart';
-import 'package:blips_mobile/features/feed/providers/starters_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'golden_test_utils.dart';
 
-/// Mock starters data for golden tests.
-final _mockStarters = ConversationStarters(
-  contentId: 1,
-  starters: [
-    'What are the main implications?',
-    'Can you explain this in simpler terms?',
-    'How does this compare to previous breakthroughs?',
-  ],
-  fallback: ['What should I know about this?'],
-);
-
-/// Wraps widget with ProviderScope and mocked starters.
-Widget _goldenTestWrapper({
-  required DeviceConfig device,
-  required Widget child,
-  required int contentId,
-}) {
-  return ProviderScope(
-    overrides: [
-      startersProvider(contentId).overrideWith((ref) async => _mockStarters),
-    ],
-    child: goldenTestWrapper(device: device, child: child),
-  );
-}
+/// Inline starters for golden test fixtures.
+const _testStarters = [
+  'What are the main implications?',
+  'Can you explain this in simpler terms?',
+  'How does this compare to previous breakthroughs?',
+];
 
 void main() {
   group('FloatingChatBubbles Golden Tests', () {
@@ -53,6 +34,7 @@ void main() {
       category: 'Technology',
       readTime: 5,
       tags: const ['AI', 'Technology'],
+      conversationStarters: _testStarters,
     );
 
     final cases = <({DeviceConfig device, String suffix})>[
@@ -65,9 +47,8 @@ void main() {
         await tester.setDeviceConfig(c.device);
 
         await tester.pumpWidget(
-          _goldenTestWrapper(
+          goldenTestWrapper(
             device: c.device,
-            contentId: article.id,
             child: Scaffold(
               backgroundColor: Colors.grey[200],
               body: Align(
@@ -108,21 +89,11 @@ void main() {
         category: 'Technology',
         readTime: 5,
         tags: const [],
-      );
-
-      // Create mock starters for the long title article
-      final longTitleMockStarters = ConversationStarters(
-        contentId: 2,
-        starters: _mockStarters.starters,
-        fallback: _mockStarters.fallback,
+        conversationStarters: _testStarters,
       );
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            startersProvider(longTitleArticle.id)
-                .overrideWith((ref) async => longTitleMockStarters),
-          ],
           child: goldenTestWrapper(
             device: GoldenDevices.smallPhone,
             child: Scaffold(
