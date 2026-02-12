@@ -1,6 +1,9 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
+import 'package:blips_mobile/core/network/dio_provider.dart';
+import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -92,43 +95,59 @@ class SettingsPage extends ConsumerWidget {
               side: BorderSide(
                   color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
             ),
-            child: _SettingsTile(
-              title: 'Clear Chat History',
-              subtitle: 'Delete all local conversations',
-              icon: Icons.delete_outline,
-              iconColor: colorScheme.error,
-              onTap: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Clear History?'),
-                    content: const Text(
-                      'This will permanently delete all your chat conversations from this device.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
+            child: Column(
+              children: [
+                _SettingsTile(
+                  title: 'Clear Chat History',
+                  subtitle: 'Delete all local conversations',
+                  icon: Icons.delete_outline,
+                  iconColor: colorScheme.error,
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Clear History?'),
+                        content: const Text(
+                          'This will permanently delete all your chat conversations from this device.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: TextButton.styleFrom(
+                                foregroundColor: colorScheme.error),
+                            child: const Text('Delete'),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(
-                            foregroundColor: colorScheme.error),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirmed == true) {
-                  await DatabaseHelper.instance.deleteAllChats();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Chat history cleared')),
                     );
-                  }
-                }
-              },
+
+                    if (confirmed == true) {
+                      await DatabaseHelper.instance.deleteAllChats();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Chat history cleared')),
+                        );
+                      }
+                    }
+                  },
+                ),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _SettingsTile(
+                  title: 'Delete My Data',
+                  subtitle: 'Remove all data from our servers',
+                  icon: Icons.delete_forever,
+                  iconColor: colorScheme.error,
+                  onTap: () => _confirmDeleteMyData(context, ref),
+                ),
+              ],
             ),
           ),
 
@@ -214,6 +233,62 @@ class SettingsPage extends ConsumerWidget {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _confirmDeleteMyData(BuildContext context, WidgetRef ref) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete My Data?'),
+        content: const Text(
+          'This will permanently delete all your data from our servers and '
+          'clear local conversations. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: colorScheme.error),
+            child: const Text('Delete Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      // 1. Call the server deletion endpoint
+      final dio = ref.read(dioProvider);
+      await dio.delete('/session/data');
+
+      // 2. Clear local SQLite chat history
+      await DatabaseHelper.instance.deleteAllChats();
+
+      // 3. Reset the persisted device ID so a fresh one is generated
+      await resetDeviceId();
+      ref.invalidate(deviceIdProvider);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All data deleted successfully')),
+        );
+      }
+    } on DioException catch (e) {
+      if (context.mounted) {
+        final status = e.response?.statusCode;
+        final msg = status == 429
+            ? 'Too many requests. Please wait a moment and try again.'
+            : 'Failed to delete server data. Please try again later.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
     }
   }
 }
