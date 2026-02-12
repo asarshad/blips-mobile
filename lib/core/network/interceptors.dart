@@ -52,8 +52,10 @@ class RetryInterceptor extends Interceptor {
         final options = err.requestOptions;
         options.extra['retryCount'] = retryCount + 1;
 
+        // Build the full URI so the retry doesn't need the original Dio's
+        // baseUrl. requestOptions.uri already combines base + path.
         final response = await Dio().request<dynamic>(
-          options.path,
+          options.uri.toString(),
           data: options.data,
           queryParameters: options.queryParameters,
           options: Options(
