@@ -128,6 +128,29 @@ class NetworkException extends AppException {
     DioException error,
     int? statusCode,
   ) {
+    // Try to extract structured error code from response body
+    final responseData = error.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      final errorCode = responseData['code'] as String?;
+      final serverMessage = responseData['message'] as String?;
+      if (errorCode != null && serverMessage != null) {
+        final severity = (statusCode ?? 500) >= 500
+            ? ExceptionSeverity.error
+            : ExceptionSeverity.warning;
+        return NetworkException(
+          userMessage: serverMessage,
+          technicalMessage:
+              'HTTP $statusCode [$errorCode]: ${responseData['detail']}',
+          severity: severity,
+          statusCode: statusCode,
+          isRetryable: _isCodeRetryable(errorCode),
+          originalError: error,
+          stackTrace: error.stackTrace,
+        );
+      }
+    }
+
+    // Fall back to status-code-based mapping
     final code = statusCode ?? 0;
     final (userMessage, severity, isRetryable) = switch (code) {
       400 => (
@@ -159,6 +182,20 @@ class NetworkException extends AppException {
       originalError: error,
       stackTrace: error.stackTrace,
     );
+  }
+
+  /// Determines if the backend error code allows retry
+  static bool _isCodeRetryable(String code) {
+    const retryableCodes = {
+      'external_service_error',
+      'llm_quota_exceeded',
+      'feed_fetch_error',
+      'service_unavailable',
+      'circuit_open',
+      'rate_limited',
+      'internal_error',
+    };
+    return retryableCodes.contains(code);
   }
 }
 
