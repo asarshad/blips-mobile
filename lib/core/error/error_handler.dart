@@ -4,6 +4,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:blips_mobile/core/error/app_exception.dart';
 import 'package:blips_mobile/core/error/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Centralized error handler for the application.
 ///
@@ -93,17 +94,14 @@ class ErrorHandler {
     );
   }
 
-  /// Report error to crash analytics service
+  /// Report error to Sentry crash analytics service.
   void _reportToCrashlytics(Object error, StackTrace? stackTrace) {
-    // TODO: Integrate with crash reporting service
-    // Options:
-    // - Sentry: Sentry.captureException(error, stackTrace: stackTrace)
-    // - Firebase Crashlytics: FirebaseCrashlytics.instance.recordError(error, stackTrace)
-    //
-    // For now, just log in release mode
-    if (!kDebugMode) {
-      debugPrint('CRASH REPORT: $error');
-    }
+    if (kDebugMode) return; // Don't report in debug builds
+
+    Sentry.captureException(
+      error,
+      stackTrace: stackTrace,
+    );
   }
 }
 
