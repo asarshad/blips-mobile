@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
@@ -59,17 +60,24 @@ class FeedShellPage extends HookConsumerWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Stack(
+      body: Column(
         children: [
-          _buildBody(
-            pageController: pageController,
-            currentIndex: currentIndex,
-            articleFeed: articleFeed,
-            videoFeed: videoFeed,
-            ref: ref,
+          const OfflineBanner(),
+          Expanded(
+            child: Stack(
+              children: [
+                _buildBody(
+                  pageController: pageController,
+                  currentIndex: currentIndex,
+                  articleFeed: articleFeed,
+                  videoFeed: videoFeed,
+                  ref: ref,
+                ),
+                // Debug overlay for development builds
+                if (kDebugMode) const DeviceDebugOverlay(),
+              ],
+            ),
           ),
-          // Debug overlay for development builds
-          if (kDebugMode) const DeviceDebugOverlay(),
         ],
       ),
       bottomNavigationBar: _BottomNavBar(
