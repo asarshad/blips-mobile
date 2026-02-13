@@ -68,7 +68,7 @@ void main() {
 }
 
 /// Extracted URL parsing logic for testing
-/// This mirrors the logic in OptimizedVideoPlayerManager._extractVideoId
+/// This mirrors the logic in YoutubePlayerManager.extractVideoId
 String? extractVideoIdForTest(String url) {
   final uri = Uri.tryParse(url);
   if (uri == null) return null;

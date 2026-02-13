@@ -217,7 +217,7 @@ class SettingsPage extends ConsumerWidget {
                       color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                   _AboutTile(
                     title: 'Video Player',
-                    value: 'video_player + youtube_explode',
+                    value: 'youtube_player_flutter (iframe)',
                     icon: Icons.play_circle_outline,
                   ),
                 ],
