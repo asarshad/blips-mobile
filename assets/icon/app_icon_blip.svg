@@ -1,0 +1,36 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Blips "The Blip" v2 Icon — Dark Mode (Primary) -->
+  <!-- Solid dot + 240° arc with gap at lower-right -->
+  <!--
+    Geometry:
+      Canvas: 1024×1024, Center: (512, 512)
+      Core dot: r=112
+      Arc: r=296, stroke=48, 240° sweep
+      Gap: 120° open at lower-right (~4 o'clock to ~8 o'clock)
+      Stroke-linecap: round (softened endpoints)
+
+    Arc math (240° sweep, gap centered at 6 o'clock / 270°):
+      Gap spans from 210° to 330°
+      Arc spans from 330° to 210° (going clockwise through 0°/top)
+      Start point (330°): x = 512 + 296*cos(330°) = 512 + 256.4 = 768.4
+                           y = 512 + 296*sin(330°) = 512 - 148   = 364
+      End point (210°):   x = 512 + 296*cos(210°) = 512 - 256.4 = 255.6
+                           y = 512 + 296*sin(210°) = 512 + 148   = 660
+      large-arc-flag = 1 (sweep > 180°), sweep-flag = 1 (clockwise)
+  -->
+
+  <!-- Background — iOS rounded rect -->
+  <rect width="1024" height="1024" rx="224" fill="#0F172A"/>
+
+  <!-- Detection arc — 240° sweep, gap at lower-right -->
+  <path
+    d="M 768,364 A 296,296 0 1,1 256,660"
+    stroke="#0E7490"
+    stroke-width="48"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Core signal dot -->
+  <circle cx="512" cy="512" r="112" fill="#0E7490"/>
+</svg>

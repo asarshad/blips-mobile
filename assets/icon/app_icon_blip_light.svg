@@ -1,0 +1,18 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Blips "The Blip" v2 Icon — Light Mode Variant -->
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="#FFFFFF"/>
+
+  <!-- Detection arc — 240° sweep, gap at lower-right -->
+  <path
+    d="M 768,364 A 296,296 0 1,1 256,660"
+    stroke="#0E7490"
+    stroke-width="48"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Core signal dot -->
+  <circle cx="512" cy="512" r="112" fill="#0E7490"/>
+</svg>
