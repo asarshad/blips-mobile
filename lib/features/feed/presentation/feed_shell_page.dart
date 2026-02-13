@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/error/error_boundary.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
@@ -269,7 +270,13 @@ class FeedShellPage extends HookConsumerWidget {
     return PageView(
       controller: pageController,
       onPageChanged: (index) => currentIndex.value = index,
-      children: allTabs.map((tab) => _KeepAliveWrapper(child: tab)).toList(),
+      children: allTabs
+          .map(
+            (tab) => _KeepAliveWrapper(
+              child: ErrorBoundary(child: tab),
+            ),
+          )
+          .toList(),
     );
   }
 }
