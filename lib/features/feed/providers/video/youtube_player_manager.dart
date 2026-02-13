@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -17,7 +18,9 @@ final youtubePlayerManagerProvider =
 /// but guaranteed compatibility.
 class YoutubePlayerManager extends YoutubePlayerManagerBase {
   /// Maximum number of controllers to keep in memory.
-  static const int maxControllers = 8;
+  /// Configured via MemoryConfig.playerPoolSize.
+  /// Lower values save memory. Higher values improve scroll smoothness.
+  static int get maxControllers => MemoryConfig.playerPoolSize;
 
   final Map<String, YoutubePlayerController> _controllers = {};
   final Map<String, YTPlayerState> _states = {};
