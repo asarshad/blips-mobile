@@ -80,6 +80,7 @@ extension FeedEntryMapper on FeedEntry {
     required T Function(ArticleFeedEntry article) article,
     required T Function(VideoFeedEntry video) video,
     required T Function(ReelFeedEntry reel) reel,
+    T Function(dynamic ad)? ad,
   }) =>
-      when(article: article, video: video, reel: reel);
+      when(article: article, video: video, reel: reel, ad: ad);
 }

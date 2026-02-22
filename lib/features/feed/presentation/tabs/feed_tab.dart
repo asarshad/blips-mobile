@@ -25,6 +25,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     required this.onRefresh,
     this.onLoadMore,
     this.onPageChanged,
+    this.containsVideos = false,
   });
 
   final AsyncValue<List<T>> feed;
@@ -36,14 +37,19 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   /// Called when user swipes to a new page, for tracking current view index.
   final void Function(int index)? onPageChanged;
 
+  /// When true, enables video preloading for [VideoFeedEntry] items
+  /// in the list (even when [T] is a broader type like [FeedEntry]).
+  final bool containsVideos;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload first videos when data loads
+    final hasVideos = containsVideos || T == VideoFeedEntry;
     useEffect(() {
-      if (feed.hasValue && feed.value!.isNotEmpty && T == VideoFeedEntry) {
+      if (feed.hasValue && feed.value!.isNotEmpty && hasVideos) {
         _preloadInitialVideos(feed.value!, videoManager);
       }
       return null;
@@ -52,7 +58,8 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     return SafeArea(
       bottom: false,
       child: feed.when(
-        data: (entries) => _buildFeedContent(entries, controller, videoManager),
+        data: (entries) =>
+            _buildFeedContent(entries, controller, videoManager, hasVideos),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => ErrorView(
           error: error,
@@ -66,12 +73,12 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     YoutubePlayerManagerBase videoManager,
   ) {
-    final firstEntry = entries[0] as VideoFeedEntry;
-    videoManager.initController(firstEntry.link);
+    final videos = entries.whereType<VideoFeedEntry>().toList();
+    if (videos.isEmpty) return;
 
-    if (entries.length > 1) {
-      final secondEntry = entries[1] as VideoFeedEntry;
-      videoManager.initController(secondEntry.link);
+    videoManager.initController(videos.first.link);
+    if (videos.length > 1) {
+      videoManager.initController(videos[1].link);
     }
   }
 
@@ -79,6 +86,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     PageController controller,
     YoutubePlayerManagerBase videoManager,
+    bool hasVideos,
   ) {
     if (entries.isEmpty) {
       return FeedMessageState(
@@ -94,7 +102,8 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      onPageChanged: (index) => _handlePageChange(index, entries, videoManager),
+      onPageChanged: (index) =>
+          _handlePageChange(index, entries, videoManager, hasVideos),
       itemCount: entries.length,
       itemBuilder: (context, index) => SizedBox.expand(
         child: builder(entries[index]),
@@ -106,12 +115,13 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     int index,
     List<T> entries,
     YoutubePlayerManagerBase videoManager,
+    bool hasVideos,
   ) {
     // Notify parent of page change for cache position tracking
     onPageChanged?.call(index);
 
     // Video preloading logic
-    if (T == VideoFeedEntry) {
+    if (hasVideos) {
       _handleVideoPreloading(index, entries, videoManager);
     }
 
@@ -126,13 +136,24 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     YoutubePlayerManagerBase videoManager,
   ) {
-    // Collect video URLs for the manager
-    final urls = entries.map((e) => (e as VideoFeedEntry).link).toList();
+    // Collect video URLs, skipping non-video entries (e.g. ads)
+    final videoEntries = <int, String>{};
+    for (var i = 0; i < entries.length; i++) {
+      final e = entries[i];
+      if (e is VideoFeedEntry) {
+        videoEntries[i] = e.link;
+      }
+    }
 
-    // Use the centralized page change handler
+    if (videoEntries.isEmpty) return;
+
+    // Use the centralized page change handler with the video-only URLs
     videoManager.onPageChanged(
       currentIndex: index,
-      videoUrls: urls,
+      videoUrls: entries
+          .map((e) => e is VideoFeedEntry ? e.link : '')
+          .where((url) => url.isNotEmpty)
+          .toList(),
     );
   }
 }

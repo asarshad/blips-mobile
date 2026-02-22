@@ -2,6 +2,8 @@ import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/error/error_boundary.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
+import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
+import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -40,8 +42,8 @@ class FeedShellPage extends HookConsumerWidget {
     final pageController = usePageController();
 
     // Watch providers for current view
-    final articleFeed = ref.watch(filteredArticleFeedProvider);
-    final videoFeed = ref.watch(filteredVideoFeedProvider);
+    final articleFeed = ref.watch(articleFeedWithAdsProvider);
+    final videoFeed = ref.watch(videoFeedWithAdsProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload reels in background after first frame
@@ -148,7 +150,7 @@ class FeedShellPage extends HookConsumerWidget {
   }
 
   void _useBackgroundVideosPreload(
-    AsyncValue<List<VideoFeedEntry>> videoFeed,
+    AsyncValue<List<FeedEntry>> videoFeed,
     YoutubePlayerManagerBase videoManager,
   ) {
     useEffect(() {
@@ -158,10 +160,14 @@ class FeedShellPage extends HookConsumerWidget {
             final entries = videoFeed.valueOrNull;
             if (entries == null || entries.isEmpty) return;
 
+            // Only preload actual video entries (skip any ad entries)
+            final videos = entries.whereType<VideoFeedEntry>().toList();
+            if (videos.isEmpty) return;
+
             // Warm the first 1–2 videos so playback is instant when user enters the tab.
-            videoManager.initController(entries.first.link);
-            if (entries.length > 1) {
-              videoManager.initController(entries[1].link);
+            videoManager.initController(videos.first.link);
+            if (videos.length > 1) {
+              videoManager.initController(videos[1].link);
             }
             logger.debug(
               'Background preload: First videos queued',
@@ -231,29 +237,36 @@ class FeedShellPage extends HookConsumerWidget {
   Widget _buildBody({
     required PageController pageController,
     required ValueNotifier<int> currentIndex,
-    required AsyncValue<List<ArticleFeedEntry>> articleFeed,
-    required AsyncValue<List<VideoFeedEntry>> videoFeed,
+    required AsyncValue<List<FeedEntry>> articleFeed,
+    required AsyncValue<List<FeedEntry>> videoFeed,
     required WidgetRef ref,
   }) {
     final allTabs = [
-      // Articles tab
-      FeedTab<ArticleFeedEntry>(
+      // Articles tab (may contain interleaved ad entries)
+      FeedTab<FeedEntry>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
-        builder: (entry) => ArticleCard(entry: entry),
+        builder: (entry) {
+          if (entry is AdFeedEntry) return AdCard(entry: entry);
+          return ArticleCard(entry: entry as ArticleFeedEntry);
+        },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
         onPageChanged: (index) =>
             ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
       ),
-      // Videos tab
-      FeedTab<VideoFeedEntry>(
+      // Videos tab (may contain interleaved ad entries)
+      FeedTab<FeedEntry>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
-        builder: (entry) => VideoCard(
-          entry: entry,
-          isVisible: currentIndex.value == 1,
-        ),
+        containsVideos: true,
+        builder: (entry) {
+          if (entry is AdFeedEntry) return AdCard(entry: entry);
+          return VideoCard(
+            entry: entry as VideoFeedEntry,
+            isVisible: currentIndex.value == 1,
+          );
+        },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
         onPageChanged: (index) =>

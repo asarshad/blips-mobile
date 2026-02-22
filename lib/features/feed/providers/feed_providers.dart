@@ -1,6 +1,7 @@
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
+import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
@@ -287,6 +288,41 @@ final filteredVideoFeedProvider =
   return feedState.when(
     data: (items) => AsyncValue.data(
       items.whereType<VideoFeedEntry>().toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
+
+/// Articles + injected ads for the article tab.
+///
+/// Preserves the backend's interleaving order. When ads are disabled
+/// (the default) this is identical to [filteredArticleFeedProvider].
+final articleFeedWithAdsProvider =
+    Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
+  final feedState = ref.watch(paginatedFeedProvider);
+
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items
+          .where((e) => e is ArticleFeedEntry || e is AdFeedEntry)
+          .toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
+
+/// Videos + injected ads for the video tab.
+final videoFeedWithAdsProvider =
+    Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
+  final feedState = ref.watch(paginatedFeedProvider);
+
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items
+          .where((e) => e is VideoFeedEntry || e is AdFeedEntry)
+          .toList(growable: false),
     ),
     error: (err, stack) => AsyncValue.error(err, stack),
     loading: () => const AsyncValue.loading(),

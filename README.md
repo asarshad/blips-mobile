@@ -10,6 +10,7 @@ A Flutter mobile app for consuming tech news and video content in a modern, enga
 - 🔖 **Bookmarks** - Save articles and videos for later
 - 🎨 **Dark/Light Theme** - System-aware theming
 - 📱 **iOS Native** - Built with Capacitor for native iOS deployment
+- 📢 **Ads-Ready** - Server-controlled ad scaffold (disabled by default, no SDK bundled). See [Ads Architecture](docs/ADS_ARCHITECTURE.md)
 
 ## Tech Stack
 
@@ -26,6 +27,7 @@ A Flutter mobile app for consuming tech news and video content in a modern, enga
 lib/
 ├── core/                    # Shared utilities, theme, constants
 ├── features/
+│   ├── ads/                 # Ads scaffold (off by default, no SDK)
 │   ├── feed/                # Article feed (cards, pagination)
 │   ├── reels/               # Video player (pooling, preload)
 │   ├── chat/                # AI conversation
@@ -136,6 +138,7 @@ Feature Module
 ## Documentation
 
 - [Mobile Structure](docs/MOBILE_STRUCTURE.md) - Detailed architecture guide
+- [Ads Architecture](docs/ADS_ARCHITECTURE.md) - Ads scaffold design & integration guide
 - [Architecture](../blips-ai-news-backend/docs/ARCHITECTURE.md) - System overview
 - [Development Guide](../blips-ai-news-backend/docs/DEVELOPMENT_GUIDE.md) - Full setup instructions
 
