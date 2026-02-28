@@ -25,6 +25,10 @@ import 'package:flutter/material.dart';
 class DeviceDebugOverlay extends StatefulWidget {
   const DeviceDebugOverlay({super.key});
 
+  /// Set to `true` from integration / screenshot tests to hide the overlay
+  /// even in debug builds.
+  static bool suppress = false;
+
   @override
   State<DeviceDebugOverlay> createState() => _DeviceDebugOverlayState();
 }
@@ -34,8 +38,10 @@ class _DeviceDebugOverlayState extends State<DeviceDebugOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    // Only show in debug mode
-    if (!kDebugMode) return const SizedBox.shrink();
+    // Only show in debug mode, and allow suppression for screenshots
+    if (!kDebugMode || DeviceDebugOverlay.suppress) {
+      return const SizedBox.shrink();
+    }
 
     final mediaQuery = MediaQuery.of(context);
     final size = mediaQuery.size;

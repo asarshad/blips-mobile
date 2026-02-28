@@ -151,6 +151,48 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
 
+          const SizedBox(height: AppSpacing.xl),
+          _SectionHeader(title: 'LEGAL'),
+          Card(
+            elevation: 0,
+            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.borderLg,
+              side: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              children: [
+                _SettingsTile(
+                  title: 'Privacy Policy',
+                  icon: Icons.privacy_tip_outlined,
+                  onTap: () => _launchUrl('https://husniconsulting.ca/privacy'),
+                ),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _SettingsTile(
+                  title: 'Terms of Service',
+                  icon: Icons.description_outlined,
+                  onTap: () => _launchUrl('https://husniconsulting.ca/terms'),
+                ),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _SettingsTile(
+                  title: 'Support',
+                  subtitle: 'info@husniconsulting.ca',
+                  icon: Icons.help_outline,
+                  onTap: () => _launchUrl('https://husniconsulting.ca/support'),
+                ),
+              ],
+            ),
+          ),
+
           // About section - only visible in dev/debug mode
           if (kIsDevMode) ...[
             const SizedBox(height: AppSpacing.xl),
