@@ -30,7 +30,7 @@ class VideoDto {
         videoUrl: json['video_url'] as String,
         sourceUrl: json['source_url'] as String,
         summary: json['summary'] as String?,
-        thumbnailUrl: json['thumbnail_url'] as String?,
+        thumbnailUrl: _nullIfBlank(json['thumbnail_url'] as String?),
         source: json['source'] as String?,
         category: json['category'] as String?,
         durationSeconds: json['duration_seconds'] as int?,
@@ -112,6 +112,12 @@ class VideoDto {
 
   /// Pre-generated conversation starter questions.
   final List<String> conversationStarters;
+
+  /// Returns null for empty or whitespace-only strings.
+  static String? _nullIfBlank(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return value;
+  }
 
   /// Parses the starters list from the nested JSON structure.
   static List<String> _parseStarters(dynamic json) {

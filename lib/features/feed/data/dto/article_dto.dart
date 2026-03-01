@@ -29,7 +29,7 @@ class ArticleDto {
       title: json['title'] as String,
       sourceUrl: json['source_url'] as String,
       summary: json['summary'] as String?,
-      imageUrl: json['image_url'] as String?,
+      imageUrl: _nullIfBlank(json['image_url'] as String?),
       publishedDate: json['published_date'] as String?,
       publishedAt: json['published_at'] as String?,
       createdAt: json['created_at'] as String?,
@@ -114,6 +114,12 @@ class ArticleDto {
 
   /// Pre-generated conversation starter questions.
   final List<String> conversationStarters;
+
+  /// Returns null for empty or whitespace-only strings.
+  static String? _nullIfBlank(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return value;
+  }
 
   /// Parses the starters list from the nested JSON structure.
   static List<String> _parseStarters(dynamic json) {

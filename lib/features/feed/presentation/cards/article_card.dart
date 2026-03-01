@@ -98,17 +98,40 @@ class _ArticleMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Guard against empty or whitespace-only URLs that slip through
+    if (imageUrl.trim().isEmpty) {
+      return _placeholder();
+    }
+
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
-        color: Colors.grey.shade900,
-        alignment: Alignment.center,
-        child: const Icon(
-          Icons.broken_image_outlined,
-          size: 32,
-          color: Colors.white54,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return _placeholder(loading: true);
+      },
+      errorBuilder: (_, __, ___) => _placeholder(),
+    );
+  }
+
+  /// Gradient placeholder shown while loading or when the image is unavailable.
+  static Widget _placeholder({bool loading = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.blueGrey.shade800,
+            Colors.blueGrey.shade900,
+          ],
         ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        loading ? Icons.image_outlined : Icons.article_outlined,
+        size: 36,
+        color: Colors.white30,
       ),
     );
   }

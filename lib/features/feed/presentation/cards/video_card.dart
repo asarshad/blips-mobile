@@ -193,19 +193,47 @@ class _VideoMedia extends StatelessWidget {
         children: [
           // Thumbnail background
           Positioned.fill(
-            child: Image.network(
-              thumbnailUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: Colors.grey.shade900,
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.broken_image_outlined,
-                  size: 32,
-                  color: Colors.white54,
-                ),
-              ),
-            ),
+            child: thumbnailUrl.trim().isEmpty
+                ? Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.blueGrey.shade800,
+                          Colors.blueGrey.shade900,
+                        ],
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.videocam_outlined,
+                      size: 36,
+                      color: Colors.white30,
+                    ),
+                  )
+                : Image.network(
+                    thumbnailUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.blueGrey.shade800,
+                            Colors.blueGrey.shade900,
+                          ],
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.videocam_outlined,
+                        size: 36,
+                        color: Colors.white30,
+                      ),
+                    ),
+                  ),
           ),
 
           // Video player when ready and controller is valid
