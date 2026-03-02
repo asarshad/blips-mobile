@@ -148,12 +148,12 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 
-  void _navigateToChat(BuildContext context) {
+  Future<void> _navigateToChat(BuildContext context) async {
     onClose();
 
     final articleEntry = _convertToArticleEntry(entry);
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => ChatDetailPage(
           article: articleEntry,
@@ -161,6 +161,9 @@ class _ChatBubble extends StatelessWidget {
         ),
       ),
     );
+
+    // Safety net: ensure bubbles are closed after returning from chat.
+    onClose();
   }
 
   /// Converts any FeedEntry to ArticleFeedEntry for the chat page.
@@ -257,18 +260,21 @@ class _AskCustomBubble extends StatelessWidget {
     );
   }
 
-  void _navigateToChat(BuildContext context) {
+  Future<void> _navigateToChat(BuildContext context) async {
     onClose();
 
     final articleEntry = _convertToArticleEntry(entry);
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => ChatDetailPage(
           article: articleEntry,
         ),
       ),
     );
+
+    // Safety net: ensure bubbles are closed after returning from chat.
+    onClose();
   }
 
   ArticleFeedEntry _convertToArticleEntry(FeedEntry entry) {

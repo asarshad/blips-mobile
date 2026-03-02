@@ -246,9 +246,12 @@ class FeedShellPage extends HookConsumerWidget {
       FeedTab<FeedEntry>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
-        builder: (entry) {
+        builder: (entry, isCurrentPage) {
           if (entry is AdFeedEntry) return AdCard(entry: entry);
-          return ArticleCard(entry: entry as ArticleFeedEntry);
+          return ArticleCard(
+            entry: entry as ArticleFeedEntry,
+            isVisible: currentIndex.value == 0 && isCurrentPage,
+          );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
@@ -260,11 +263,11 @@ class FeedShellPage extends HookConsumerWidget {
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
         containsVideos: true,
-        builder: (entry) {
+        builder: (entry, isCurrentPage) {
           if (entry is AdFeedEntry) return AdCard(entry: entry);
           return VideoCard(
             entry: entry as VideoFeedEntry,
-            isVisible: currentIndex.value == 1,
+            isVisible: currentIndex.value == 1 && isCurrentPage,
           );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),

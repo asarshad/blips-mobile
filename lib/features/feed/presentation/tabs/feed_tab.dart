@@ -29,7 +29,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   });
 
   final AsyncValue<List<T>> feed;
-  final Widget Function(T entry) builder;
+  final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
   final VoidCallback onRefresh;
   final VoidCallback? onLoadMore;
@@ -44,6 +44,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
+    final currentPage = useState(0);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload first videos when data loads
@@ -59,7 +60,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       bottom: false,
       child: feed.when(
         data: (entries) =>
-            _buildFeedContent(entries, controller, videoManager, hasVideos),
+            _buildFeedContent(entries, controller, videoManager, hasVideos, currentPage),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => ErrorView(
           error: error,
@@ -87,6 +88,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     PageController controller,
     YoutubePlayerManagerBase videoManager,
     bool hasVideos,
+    ValueNotifier<int> currentPage,
   ) {
     if (entries.isEmpty) {
       return FeedMessageState(
@@ -102,11 +104,13 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      onPageChanged: (index) =>
-          _handlePageChange(index, entries, videoManager, hasVideos),
+      onPageChanged: (index) {
+        currentPage.value = index;
+        _handlePageChange(index, entries, videoManager, hasVideos);
+      },
       itemCount: entries.length,
       itemBuilder: (context, index) => SizedBox.expand(
-        child: builder(entries[index]),
+        child: builder(entries[index], index == currentPage.value),
       ),
     );
   }

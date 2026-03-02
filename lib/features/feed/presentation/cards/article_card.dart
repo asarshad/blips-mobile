@@ -7,13 +7,20 @@ import 'package:url_launcher/url_launcher.dart';
 /// Card widget for displaying article feed entries.
 /// Includes media preview, metadata, and action buttons.
 class ArticleCard extends HookWidget {
-  const ArticleCard({super.key, required this.entry});
+  const ArticleCard({super.key, required this.entry, this.isVisible = true});
 
   final ArticleFeedEntry entry;
+  final bool isVisible;
 
   @override
   Widget build(BuildContext context) {
     final showBubbles = useState(false);
+
+    // Collapse bubbles when card scrolls out of view or outer tab changes
+    useEffect(() {
+      if (!isVisible) showBubbles.value = false;
+      return null;
+    }, [isVisible]);
 
     return Stack(
       children: [

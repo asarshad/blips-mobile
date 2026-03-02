@@ -48,6 +48,7 @@ class VideoCard extends HookConsumerWidget {
     useEffect(() {
       if (!isVisible) {
         videoManager.pauseVideo(entry.link);
+        showBubbles.value = false;
       }
       return null;
     }, [isVisible]);
