@@ -433,7 +433,7 @@ class ShareService {
                                 ),
                                 const SizedBox(width: 14),
                                 const Text(
-                                  'Blips',
+                                  'Blips News',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 32,

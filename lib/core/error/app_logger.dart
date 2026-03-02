@@ -132,7 +132,7 @@ class AppLogger {
         level: level,
         error: error,
         stackTrace: stackTrace,
-        name: 'Blips',
+        name: 'Blips News',
       );
     } else {
       // In release, use debugPrint which respects Flutter's logging config
