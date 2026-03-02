@@ -142,7 +142,7 @@ class SettingsPage extends ConsumerWidget {
                     color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _SettingsTile(
                   title: 'Delete My Data',
-                  subtitle: 'Remove all data from our servers',
+                  subtitle: 'Delete usage quota & preferences from our servers',
                   icon: Icons.delete_forever,
                   iconColor: colorScheme.error,
                   onTap: () => _confirmDeleteMyData(context, ref),
@@ -285,8 +285,10 @@ class SettingsPage extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Delete My Data?'),
         content: const Text(
-          'This will permanently delete all your data from our servers and '
-          'clear local conversations. This action cannot be undone.',
+          'This will permanently delete your usage quota and AI preferences '
+          'from our servers, and clear all local chat conversations. '
+          'Chat transcripts are stored only on this device — they are never '
+          'sent to or saved on our servers. This action cannot be undone.',
         ),
         actions: [
           TextButton(
