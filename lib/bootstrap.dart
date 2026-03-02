@@ -41,14 +41,26 @@ Future<void> bootstrap() async {
       );
     }
 
+    // Record start time for minimum splash duration
+    final splashStart = DateTime.now();
+
     runApp(
       const ProviderScope(
         child: BlipsApp(),
       ),
     );
 
-    // Remove splash screen after app has started
-    FlutterNativeSplash.remove();
+    // Remove splash after first frame AND a minimum 1 second total duration.
+    // This prevents the brief blank-frame flash and ensures the splash is
+    // visible long enough to be perceived.
+    binding.addPostFrameCallback((_) async {
+      final elapsed = DateTime.now().difference(splashStart);
+      const minDuration = Duration(seconds: 1);
+      if (elapsed < minDuration) {
+        await Future<void>.delayed(minDuration - elapsed);
+      }
+      FlutterNativeSplash.remove();
+    });
 
     logger.info('App started successfully', category: LogCategory.lifecycle);
   });

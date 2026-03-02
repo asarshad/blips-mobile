@@ -25,7 +25,11 @@ class ArticleCard extends HookWidget {
     return Stack(
       children: [
         FeedCardFrame(
-          media: _ArticleMedia(imageUrl: entry.imageUrl),
+          media: _ArticleMedia(
+            imageUrl: entry.imageUrl,
+            category: entry.category,
+            source: entry.source,
+          ),
           category: entry.category,
           title: entry.title,
           summary: entry.summary,
@@ -99,15 +103,21 @@ class ArticleCard extends HookWidget {
 }
 
 class _ArticleMedia extends StatelessWidget {
-  const _ArticleMedia({required this.imageUrl});
+  const _ArticleMedia({
+    required this.imageUrl,
+    required this.category,
+    required this.source,
+  });
 
   final String imageUrl;
+  final String category;
+  final String source;
 
   @override
   Widget build(BuildContext context) {
     // Guard against empty or whitespace-only URLs that slip through
     if (imageUrl.trim().isEmpty) {
-      return _placeholder();
+      return _CategoryPlaceholder(category: category, source: source);
     }
 
     return Image.network(
@@ -115,30 +125,136 @@ class _ArticleMedia extends StatelessWidget {
       fit: BoxFit.cover,
       loadingBuilder: (_, child, progress) {
         if (progress == null) return child;
-        return _placeholder(loading: true);
+        return _CategoryPlaceholder(
+          category: category,
+          source: source,
+          loading: true,
+        );
       },
-      errorBuilder: (_, __, ___) => _placeholder(),
+      errorBuilder: (_, __, ___) =>
+          _CategoryPlaceholder(category: category, source: source),
     );
   }
+}
 
-  /// Gradient placeholder shown while loading or when the image is unavailable.
-  static Widget _placeholder({bool loading = false}) {
+/// Category-aware placeholder displayed when an article has no image.
+///
+/// Uses a gradient and icon matched to the article's category so the card
+/// still looks intentional rather than broken.
+class _CategoryPlaceholder extends StatelessWidget {
+  const _CategoryPlaceholder({
+    required this.category,
+    required this.source,
+    this.loading = false,
+  });
+
+  final String category;
+  final String source;
+  final bool loading;
+
+  static const _gradients = {
+    'artificial intelligence': [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+    'ai': [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+    'technology': [Color(0xFF1D4ED8), Color(0xFF0369A1)],
+    'science': [Color(0xFF0F766E), Color(0xFF0369A1)],
+    'business': [Color(0xFF15803D), Color(0xFF0F766E)],
+    'finance': [Color(0xFF15803D), Color(0xFF166534)],
+    'health': [Color(0xFFBE185D), Color(0xFF9D174D)],
+    'politics': [Color(0xFF475569), Color(0xFF1E293B)],
+    'sports': [Color(0xFFEA580C), Color(0xFFB45309)],
+    'entertainment': [Color(0xFFD97706), Color(0xFFB45309)],
+  };
+
+  static const _icons = {
+    'artificial intelligence': Icons.smart_toy_outlined,
+    'ai': Icons.smart_toy_outlined,
+    'technology': Icons.devices_outlined,
+    'science': Icons.science_outlined,
+    'business': Icons.trending_up_outlined,
+    'finance': Icons.attach_money_outlined,
+    'health': Icons.favorite_outline,
+    'politics': Icons.account_balance_outlined,
+    'sports': Icons.sports_outlined,
+    'entertainment': Icons.movie_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final key = category.toLowerCase();
+    final colors = _gradients[key] ??
+        [const Color(0xFF334155), const Color(0xFF1E293B)];
+    final icon = _icons[key] ?? Icons.article_outlined;
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.blueGrey.shade800,
-            Colors.blueGrey.shade900,
-          ],
+          colors: colors,
         ),
       ),
-      alignment: Alignment.center,
-      child: Icon(
-        loading ? Icons.image_outlined : Icons.article_outlined,
-        size: 36,
-        color: Colors.white30,
+      child: Stack(
+        children: [
+          // Large faded icon as background texture
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(
+              icon,
+              size: 160,
+              color: Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
+          // Centred content
+          Center(
+            child: loading
+                ? const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white54,
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 48, color: Colors.white70),
+                      const SizedBox(height: 12),
+                      Text(
+                        category.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          // Source badge at bottom-left
+          if (!loading)
+            Positioned(
+              left: 16,
+              bottom: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  source,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
