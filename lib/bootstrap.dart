@@ -1,6 +1,7 @@
 import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,6 +18,12 @@ Future<void> bootstrap() async {
     // Preserve splash screen until we explicitly remove it
     final binding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: binding);
+
+    // Lock to portrait even though Info.plist declares all orientations
+    // (required for iPad multitasking / TestFlight validation).
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
 
     logger.info('App starting...', category: LogCategory.lifecycle);
 
