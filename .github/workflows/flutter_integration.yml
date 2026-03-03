@@ -29,6 +29,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Pre-cache macOS SDK artifacts
+        run: flutter precache --macos
+
+      - name: Enable macOS desktop target
+        run: flutter config --enable-macos-desktop
+
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods --no-document
+
+      - name: Install macOS pods
+        working-directory: macos
+        run: pod install
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
