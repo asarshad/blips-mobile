@@ -18,8 +18,7 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   YoutubePlayerController? getController(String url) => null;
 
   @override
-  YTPlayerState getState(String url) =>
-      _mockStates[url] ?? YTPlayerState.idle;
+  YTPlayerState getState(String url) => _mockStates[url] ?? YTPlayerState.idle;
 
   @override
   YTPlayerError? getError(String url) => null;
@@ -179,4 +178,3 @@ void main() {
     });
   });
 }
-

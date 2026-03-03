@@ -59,8 +59,8 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     return SafeArea(
       bottom: false,
       child: feed.when(
-        data: (entries) =>
-            _buildFeedContent(entries, controller, videoManager, hasVideos, currentPage),
+        data: (entries) => _buildFeedContent(
+            entries, controller, videoManager, hasVideos, currentPage),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => ErrorView(
           error: error,

@@ -92,12 +92,9 @@ class FeedCache implements FeedCacheInterface {
         'CREATE INDEX idx_reels_published ON reels(published_at DESC)');
 
     // Index for cache cleanup queries
-    await db.execute(
-        'CREATE INDEX idx_articles_cached ON articles(cached_at)');
-    await db.execute(
-        'CREATE INDEX idx_videos_cached ON videos(cached_at)');
-    await db.execute(
-        'CREATE INDEX idx_reels_cached ON reels(cached_at)');
+    await db.execute('CREATE INDEX idx_articles_cached ON articles(cached_at)');
+    await db.execute('CREATE INDEX idx_videos_cached ON videos(cached_at)');
+    await db.execute('CREATE INDEX idx_reels_cached ON reels(cached_at)');
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -105,10 +102,10 @@ class FeedCache implements FeedCacheInterface {
       // v2: Add conversation_starters column to all tables
       await db.execute(
           'ALTER TABLE articles ADD COLUMN conversation_starters TEXT');
-      await db.execute(
-          'ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
-      await db.execute(
-          'ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
+      await db
+          .execute('ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
+      await db
+          .execute('ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
     }
     if (oldVersion < 3) {
       // v3: Add cached_at indexes for faster cleanup queries

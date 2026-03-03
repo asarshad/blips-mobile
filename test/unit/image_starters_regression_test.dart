@@ -149,8 +149,8 @@ void main() {
       });
 
       expect(dto.conversationStarters, hasLength(3));
-      expect(dto.conversationStarters.first,
-          equals('What are the implications?'));
+      expect(
+          dto.conversationStarters.first, equals('What are the implications?'));
     });
 
     test('starters with empty strings are filtered out', () {
@@ -190,8 +190,7 @@ void main() {
       });
 
       expect(dto.conversationStarters, hasLength(3));
-      expect(dto.conversationStarters.first,
-          contains('implications'));
+      expect(dto.conversationStarters.first, contains('implications'));
     });
 
     test('video conversation starters parsed the same as articles', () {

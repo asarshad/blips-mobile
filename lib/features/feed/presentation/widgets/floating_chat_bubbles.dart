@@ -51,27 +51,23 @@ class FloatingChatBubbles extends ConsumerWidget {
 
   Widget _buildBubbles(List<String> questions, double maxBubbleWidth) {
     // Filter out any empty/blank strings to prevent blank bubbles
-    final validQuestions = questions
-        .where((q) => q.trim().isNotEmpty)
-        .take(3)
-        .toList();
+    final validQuestions =
+        questions.where((q) => q.trim().isNotEmpty).take(3).toList();
 
     // Fall back to defaults if all starters were empty
-    final displayQuestions = validQuestions.isNotEmpty
-        ? validQuestions
-        : _defaultFallbackStarters;
+    final displayQuestions =
+        validQuestions.isNotEmpty ? validQuestions : _defaultFallbackStarters;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        ...displayQuestions
-            .map((q) => _ChatBubble(
-                  question: q,
-                  entry: entry,
-                  onClose: onClose,
-                  maxWidth: maxBubbleWidth,
-                )),
+        ...displayQuestions.map((q) => _ChatBubble(
+              question: q,
+              entry: entry,
+              onClose: onClose,
+              maxWidth: maxBubbleWidth,
+            )),
         _AskCustomBubble(
           entry: entry,
           onClose: onClose,

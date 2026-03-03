@@ -181,8 +181,8 @@ class _CategoryPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final key = category.toLowerCase();
-    final colors = _gradients[key] ??
-        [const Color(0xFF334155), const Color(0xFF1E293B)];
+    final colors =
+        _gradients[key] ?? [const Color(0xFF334155), const Color(0xFF1E293B)];
     final icon = _icons[key] ?? Icons.article_outlined;
 
     return Container(

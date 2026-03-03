@@ -103,8 +103,7 @@ void main() {
 
     testWidgets('uses static defaults when no starters available',
         (tester) async {
-      await tester.pumpWidget(
-          createTestWidget(entry: articleWithoutStarters));
+      await tester.pumpWidget(createTestWidget(entry: articleWithoutStarters));
 
       // Should show the static defaults
       expect(find.textContaining('key takeaways'), findsOneWidget);

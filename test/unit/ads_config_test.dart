@@ -27,8 +27,7 @@ void main() {
       const feedOnly = AdsConfig(adsFeedCardEnabled: true);
       expect(feedOnly.showFeedAds, isFalse);
 
-      const bothOn =
-          AdsConfig(adsEnabled: true, adsFeedCardEnabled: true);
+      const bothOn = AdsConfig(adsEnabled: true, adsFeedCardEnabled: true);
       expect(bothOn.showFeedAds, isTrue);
     });
 
@@ -42,8 +41,7 @@ void main() {
       const bannerOnly = AdsConfig(adsBannerEnabled: true);
       expect(bannerOnly.showBannerAds, isFalse);
 
-      const bothOn =
-          AdsConfig(adsEnabled: true, adsBannerEnabled: true);
+      const bothOn = AdsConfig(adsEnabled: true, adsBannerEnabled: true);
       expect(bothOn.showBannerAds, isTrue);
     });
 
