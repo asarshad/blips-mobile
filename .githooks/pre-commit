@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-commit hook: reject commits that contain unformatted Dart code.
+#
+# Install once:
+#   git config core.hooksPath .githooks
+# Or manually:
+#   cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -euo pipefail
+
+# Only check files that are staged for this commit.
+STAGED_DART=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.dart$' || true)
+
+if [ -z "$STAGED_DART" ]; then
+  exit 0
+fi
+
+# dart format checks the files and exits non-zero if any would be changed.
+# We run it on the full dirs dart can check rather than per-file to avoid
+# issues with import ordering across files.
+if ! dart format --output=none --set-exit-if-changed $STAGED_DART 2>&1; then
+  echo ""
+  echo "❌  dart format found unformatted files listed above."
+  echo "    Run:  dart format lib/ test/"
+  echo "    Then re-stage the changed files and commit again."
+  exit 1
+fi
