@@ -69,7 +69,7 @@ class ReelItem extends HookConsumerWidget {
             fit: StackFit.expand,
             children: [
               // Video Layer - only show when ready
-              if (showVideo && controller != null)
+              if (showVideo)
                 _YoutubeVideoLayer(controller: controller),
 
               // Thumbnail Layer

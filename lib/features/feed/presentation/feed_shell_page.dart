@@ -8,7 +8,7 @@ import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/cards.dart';
-import 'package:blips_mobile/features/feed/presentation/optimized_reels_page.dart';
+import 'package:blips_mobile/features/feed/presentation/reels/reels.dart';
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';

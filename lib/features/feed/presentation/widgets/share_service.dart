@@ -205,7 +205,7 @@ class ShareService {
       debugPrint('ShareService: Overlay inserted');
 
       // Wait for rendering and image loading
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
 
       // Capture the boundary
       final boundary = boundaryKey.currentContext?.findRenderObject();

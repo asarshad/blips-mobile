@@ -217,14 +217,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.1"
-  equatable:
-    dependency: transitive
-    description:
-      name: equatable
-      sha256: "567c64b3cb4cf82397aac55f4f0cbd3ca20d77c6c03bedbc4ceaddc08904aef7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.7"
   fake_async:
     dependency: transitive
     description:
@@ -363,14 +355,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.7"
-  flutter_query:
-    dependency: "direct main"
-    description:
-      name: flutter_query
-      sha256: "648c95769fa67ddca237687487248738cf38c2a70e916d232054248115f35142"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.7"
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -599,14 +583,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.6.3"
-  nested:
-    dependency: transitive
-    description:
-      name: nested
-      sha256: "03bac4c528c64c95c722ec99280375a6f2fc708eec17c7b3f07253b626cd2a20"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
   network_image_mock:
     dependency: "direct dev"
     description:
@@ -743,14 +719,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.5"
-  provider:
-    dependency: transitive
-    description:
-      name: provider
-      sha256: "4e82183fa20e5ca25703ead7e05de9e4cceed1fbd1eadc1ac3cb6f565a09f272"
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.5+1"
   pub_semver:
     dependency: transitive
     description:
@@ -759,14 +727,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
-  query_core:
-    dependency: transitive
-    description:
-      name: query_core
-      sha256: "23ec55ab8123435e107df94276cca3ed972f9a4834b5a0b5085dda2402c41183"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.1"
   riverpod:
     dependency: transitive
     description:
@@ -775,14 +735,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.6.1"
-  screenshot:
-    dependency: "direct main"
-    description:
-      name: screenshot
-      sha256: "63817697a7835e6ce82add4228e15d233b74d42975c143ad8cfe07009fab866b"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.0"
   sentry:
     dependency: transitive
     description:

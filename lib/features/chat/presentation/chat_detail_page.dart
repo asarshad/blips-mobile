@@ -65,7 +65,7 @@ class ChatDetailPage extends HookConsumerWidget {
               // Prepend history to current messages
               messages.value = [...chat.messages, ...messages.value];
             }
-          } catch (e, stack) {
+          } catch (e) {
             // Ignore error (e.g. 404 if no history)
             logger.debug(
               'Failed to fetch chat history (may not exist)',
