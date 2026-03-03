@@ -26,21 +26,41 @@ jobs:
           channel: stable
           cache: true
 
+      # Must come before flutter pub get so the macOS platform is fully
+      # configured before dependency resolution on a fresh runner.
+      - name: Enable macOS desktop target
+        run: flutter config --enable-macos-desktop
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Pre-cache macOS SDK artifacts
         run: flutter precache --macos
 
-      - name: Enable macOS desktop target
-        run: flutter config --enable-macos-desktop
-
+      # sudo gem install fails on macos-14 runners (SIP-protected system Ruby).
+      # Install via Homebrew to get the exact version used in Podfile.lock.
       - name: Install CocoaPods
-        run: sudo gem install cocoapods --no-document
+        run: brew install cocoapods
+
+      - name: Cache CocoaPods specs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cocoapods
+          key: cocoapods-specs-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: cocoapods-specs-
+
+      - name: Cache Pods directory
+        uses: actions/cache@v4
+        id: pods-cache
+        with:
+          path: macos/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: ${{ runner.os }}-pods-
 
       - name: Install macOS pods
+        if: steps.pods-cache.outputs.cache-hit != 'true'
         working-directory: macos
-        run: pod install
+        run: pod install --repo-update
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
