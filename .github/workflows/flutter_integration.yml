@@ -69,8 +69,4 @@ jobs:
         run: flutter test --exclude-tags=integration --exclude-tags=manual
 
       - name: Integration tests
-        # Target only the smoke test explicitly — screenshot_test.dart is
-        # intended for `flutter drive` with a screenshot driver and must not
-        # be loaded here (flutter test on desktop launches one process per
-        # file; screenshot_test fails to start without the drive setup).
         run: flutter test integration_test/app_smoke_test.dart -d macos

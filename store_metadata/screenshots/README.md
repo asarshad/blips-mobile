@@ -42,15 +42,6 @@
 
 ## Generating Screenshots
 
-### Using Flutter Integration Tests
-```bash
-# Take screenshots during test run
-flutter drive \
-  --driver=test_driver/integration_test.dart \
-  --target=integration_test/screenshot_test.dart \
-  --dart-define=SCREENSHOTS=true
-```
-
 ### Manual Process
 1. Run app on target simulator/device
 2. Navigate to each screen
