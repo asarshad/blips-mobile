@@ -94,7 +94,9 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final primary = Theme.of(context).colorScheme.primary;
+    final colorScheme = Theme.of(context).colorScheme;
+    final primary = colorScheme.primary;
+    final onPrimary = colorScheme.onPrimary;
 
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
@@ -135,7 +137,7 @@ class _ChatBubble extends StatelessWidget {
             child: Text(
               question,
               style: textTheme.bodyMedium?.copyWith(
-                color: Colors.white,
+                color: onPrimary,
                 fontWeight: FontWeight.w500,
               ),
             ),
