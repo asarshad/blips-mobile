@@ -220,7 +220,7 @@ class _ContentSection extends StatelessWidget {
         AppSpacing.lg,
         AppSpacing.md,
         AppSpacing.lg,
-        AppSpacing.sm,
+        0, // _ChatButton's own AppSpacing.allSm provides 8px below — no double-padding
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
