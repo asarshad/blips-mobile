@@ -55,6 +55,13 @@ class OptimizedReelsPage extends HookConsumerWidget {
   }
 
   /// Preload initial videos when data loads.
+  ///
+  /// Only initialises controllers — does NOT call playVideo.
+  /// Playback is started exclusively by `_useVisibilityHandler` so there is a
+  /// single, authoritative place that decides what should be playing.  Having
+  /// `isVisible` in this effect's deps caused it to re-run on every tab switch
+  /// and call playVideo(entries[0]) instead of entries[currentIndex], fighting
+  /// with [_useVisibilityHandler].
   void _useInitialPreload(
     AsyncValue<List<ReelFeedEntry>> reelsFeed,
     YoutubePlayerManagerBase videoManager,
@@ -66,21 +73,15 @@ class OptimizedReelsPage extends HookConsumerWidget {
       if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
         final entries = reelsFeed.value!;
 
-        // Preload first 5 videos for smoother swiping
+        // Initialise first 5 controllers so they are warm when the user starts
+        // swiping.  Playback is triggered by _useVisibilityHandler.
         final preloadCount = entries.length.clamp(0, 5);
         for (var i = 0; i < preloadCount; i++) {
-          final link = entries[i].link;
-          if (i == 0 && isVisible) {
-            // Play first video immediately if visible
-            debugPrint('ReelsPage: Playing first video immediately');
-            videoManager.playVideo(link);
-          } else {
-            videoManager.initController(link);
-          }
+          videoManager.initController(entries[i].link);
         }
       }
       return null;
-    }, [reelsFeed.hasValue, isVisible]);
+    }, [reelsFeed.hasValue]); // isVisible intentionally excluded — see above
   }
 
   /// Handle visibility changes.

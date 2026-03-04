@@ -166,11 +166,14 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
       _ => _states[url] ?? YTPlayerState.loading,
     };
 
-    // Auto-play when player becomes ready (iframe is now mounted and loaded)
+    // Auto-play when player becomes ready (iframe is now mounted and loaded).
+    // Remove from _autoPlayUrls immediately after triggering so that buffering
+    // events (which also satisfy `!= playing`) don't repeatedly call play().
     if (controller.value.isReady &&
         _autoPlayUrls.contains(url) &&
         playerState != PlayerState.playing) {
       debugPrint('YoutubePlayerManager: Player ready, auto-playing $url');
+      _autoPlayUrls.remove(url);
       controller.play();
       _states[url] = YTPlayerState.playing;
       _notifySafe();
