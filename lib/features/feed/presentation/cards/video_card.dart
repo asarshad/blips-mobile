@@ -60,6 +60,9 @@ class VideoCard extends HookConsumerWidget {
     return Stack(
       children: [
         FeedCardFrame(
+          // 16:9 ensures YoutubePlayer fills the media section exactly —
+          // no black bars when the inline player is active.
+          mediaAspectRatio: 16 / 9,
           media: _VideoMedia(
             thumbnailUrl: preview,
             controller: controller,

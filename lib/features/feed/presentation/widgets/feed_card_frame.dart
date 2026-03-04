@@ -18,10 +18,12 @@ class FreshnessInfo {
 /// Shared card frame used by article and video cards.
 ///
 /// Layout Strategy:
-/// - Media section: 35% of card height (fixed ratio)
-/// - Content section: 65% of card height (flexible text)
-/// - Text scaling is clamped to 1.15x max to prevent layout overflow
-/// - Summary uses gradient fade for graceful truncation
+/// - If [mediaAspectRatio] is provided, media height = cardWidth / aspectRatio
+///   (pixel-perfect fit, eliminates letterboxing — required for 16:9 video).
+/// - If null, media section uses flex 39% of card height
+///   (correct for article images with BoxFit.cover).
+/// - Content section fills remaining height via Expanded.
+/// - Text scaling is clamped to 1.2x max to prevent layout overflow.
 class FeedCardFrame extends StatelessWidget {
   const FeedCardFrame({
     super.key,
@@ -38,9 +40,15 @@ class FeedCardFrame extends StatelessWidget {
     this.onChat,
     this.onOpenLink,
     this.showActions = true,
+    this.mediaAspectRatio,
   });
 
   final Widget media;
+
+  /// When set, the media section height = cardWidth / mediaAspectRatio.
+  /// Pass [16 / 9] for YouTube videos to eliminate letterboxing.
+  /// Leave null for articles — BoxFit.cover adapts to any flex height.
+  final double? mediaAspectRatio;
   final String category;
   final String title;
   final String summary;
@@ -85,36 +93,91 @@ class FeedCardFrame extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         clipBehavior: Clip.antiAlias,
-        child: Column(
+        child: mediaAspectRatio != null
+            ? _AspectRatioLayout(
+                media: media,
+                aspectRatio: mediaAspectRatio!,
+                contentSection: _buildContent(colorScheme, textTheme),
+              )
+            : _FlexLayout(
+                media: media,
+                contentSection: _buildContent(colorScheme, textTheme),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildContent(ColorScheme colorScheme, TextTheme textTheme) {
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: _maxTextScaleFactor,
+      child: _ContentSection(
+        category: category,
+        title: title,
+        summary: summary,
+        source: source,
+        date: date,
+        freshnessInfo: freshnessInfo,
+        readTime: readTime,
+        showActions: showActions,
+        onShare: onShare,
+        onChat: onChat,
+        onOpenLink: onOpenLink,
+        colorScheme: colorScheme,
+        textTheme: textTheme,
+      ),
+    );
+  }
+}
+
+/// Layout for aspect-ratio-driven media (e.g. 16:9 YouTube video).
+/// Media height = cardWidth / aspectRatio — zero letterboxing guaranteed.
+class _AspectRatioLayout extends StatelessWidget {
+  const _AspectRatioLayout({
+    required this.media,
+    required this.aspectRatio,
+    required this.contentSection,
+  });
+
+  final Widget media;
+  final double aspectRatio;
+  final Widget contentSection;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mediaHeight = constraints.maxWidth / aspectRatio;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Media section (39% — 10% relative increase from 35%)
-            Expanded(flex: 39, child: SizedBox.expand(child: media)),
-            // Content section (61%)
-            Expanded(
-              flex: 61,
-              child: MediaQuery.withClampedTextScaling(
-                maxScaleFactor: _maxTextScaleFactor,
-                child: _ContentSection(
-                  category: category,
-                  title: title,
-                  summary: summary,
-                  source: source,
-                  date: date,
-                  freshnessInfo: freshnessInfo,
-                  readTime: readTime,
-                  showActions: showActions,
-                  onShare: onShare,
-                  onChat: onChat,
-                  onOpenLink: onOpenLink,
-                  colorScheme: colorScheme,
-                  textTheme: textTheme,
-                ),
-              ),
-            ),
+            SizedBox(width: double.infinity, height: mediaHeight, child: media),
+            Expanded(child: contentSection),
           ],
-        ),
-      ),
+        );
+      },
+    );
+  }
+}
+
+/// Layout for flex-based media (e.g. article images with BoxFit.cover).
+/// Media = 39% of card height; content = 61%.
+class _FlexLayout extends StatelessWidget {
+  const _FlexLayout({
+    required this.media,
+    required this.contentSection,
+  });
+
+  final Widget media;
+  final Widget contentSection;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 39, child: SizedBox.expand(child: media)),
+        Expanded(flex: 61, child: contentSection),
+      ],
     );
   }
 }
