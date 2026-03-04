@@ -94,6 +94,7 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
@@ -113,7 +114,7 @@ class _ChatBubble extends StatelessWidget {
               vertical: AppSpacing.md,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFF1D4ED8).withValues(alpha: 0.95),
+              color: primary.withValues(alpha: 0.95),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(AppRadius.xl + 4),
                 topRight: Radius.circular(AppRadius.xl + 4),
@@ -121,7 +122,7 @@ class _ChatBubble extends StatelessWidget {
                 bottomRight: Radius.circular(AppRadius.sm),
               ),
               border: Border.all(
-                color: const Color(0xFF1D4ED8).withValues(alpha: 0.5),
+                color: primary.withValues(alpha: 0.5),
               ),
               boxShadow: [
                 BoxShadow(
@@ -199,6 +200,7 @@ class _AskCustomBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
@@ -226,7 +228,7 @@ class _AskCustomBubble extends StatelessWidget {
                 bottomRight: Radius.circular(AppRadius.sm),
               ),
               border: Border.all(
-                color: const Color(0xFF1D4ED8).withValues(alpha: 0.6),
+                color: primary.withValues(alpha: 0.6),
               ),
             ),
             child: Row(
@@ -235,14 +237,14 @@ class _AskCustomBubble extends StatelessWidget {
                 Icon(
                   Icons.edit_outlined,
                   size: 16,
-                  color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
+                  color: primary.withValues(alpha: 0.9),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Flexible(
                   child: Text(
                     'Ask something else...',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF1D4ED8).withValues(alpha: 0.9),
+                      color: primary.withValues(alpha: 0.9),
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
