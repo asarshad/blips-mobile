@@ -53,7 +53,7 @@ class SettingsPage extends ConsumerWidget {
               children: [
                 _ThemeRadioTile(
                   title: 'System Default',
-                  value: ThemeMode.system,
+                  value: AppThemeMode.system,
                   groupValue: themeMode,
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
@@ -65,7 +65,7 @@ class SettingsPage extends ConsumerWidget {
                     color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Light Mode',
-                  value: ThemeMode.light,
+                  value: AppThemeMode.light,
                   groupValue: themeMode,
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
@@ -77,7 +77,19 @@ class SettingsPage extends ConsumerWidget {
                     color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _ThemeRadioTile(
                   title: 'Dark Mode',
-                  value: ThemeMode.dark,
+                  value: AppThemeMode.dark,
+                  groupValue: themeMode,
+                  onChanged: (val) =>
+                      ref.read(themeModeProvider.notifier).setThemeMode(val),
+                ),
+                Divider(
+                    height: 1,
+                    indent: AppSpacing.lg,
+                    endIndent: AppSpacing.lg,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                _ThemeRadioTile(
+                  title: 'Neon',
+                  value: AppThemeMode.neon,
                   groupValue: themeMode,
                   onChanged: (val) =>
                       ref.read(themeModeProvider.notifier).setThemeMode(val),
@@ -424,9 +436,9 @@ class _ThemeRadioTile extends StatelessWidget {
   });
 
   final String title;
-  final ThemeMode value;
-  final ThemeMode groupValue;
-  final ValueChanged<ThemeMode> onChanged;
+  final AppThemeMode value;
+  final AppThemeMode groupValue;
+  final ValueChanged<AppThemeMode> onChanged;
 
   @override
   Widget build(BuildContext context) {

@@ -1,33 +1,33 @@
-import 'package:flutter/material.dart';
+import 'package:blips_mobile/core/theme/app_theme.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final themeModeProvider =
-    StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
+    StateNotifierProvider<ThemeModeNotifier, AppThemeMode>((ref) {
   return ThemeModeNotifier();
 });
 
-class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.dark) {
+class ThemeModeNotifier extends StateNotifier<AppThemeMode> {
+  ThemeModeNotifier() : super(AppThemeMode.dark) {
     _loadTheme();
   }
 
-  static const _key = 'theme_mode';
+  static const _key = 'app_theme_mode';
 
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_key);
     if (saved != null) {
-      state = ThemeMode.values.firstWhere(
-        (e) => e.toString() == saved,
-        orElse: () => ThemeMode.dark,
+      state = AppThemeMode.values.firstWhere(
+        (e) => e.name == saved,
+        orElse: () => AppThemeMode.dark,
       );
     }
   }
 
-  Future<void> setThemeMode(ThemeMode mode) async {
+  Future<void> setThemeMode(AppThemeMode mode) async {
     state = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, mode.toString());
+    await prefs.setString(_key, mode.name);
   }
 }

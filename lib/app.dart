@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/theme/app_theme.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
 import 'package:blips_mobile/routes/app_router.dart';
@@ -12,14 +13,18 @@ class BlipsApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
-    final themeMode = ref.watch(themeModeProvider);
+    final appThemeMode = ref.watch(themeModeProvider);
+
+    // Neon mode: uses ThemeMode.dark but supplies the neon ThemeData.
+    final darkTheme =
+        appThemeMode == AppThemeMode.neon ? AppTheme.neon() : AppTheme.dark();
 
     return MaterialApp.router(
       title: 'Blips News',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: themeMode,
+      darkTheme: darkTheme,
+      themeMode: appThemeMode.materialMode,
       routerConfig: router,
     );
   }
