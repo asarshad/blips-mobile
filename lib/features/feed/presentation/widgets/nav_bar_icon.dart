@@ -29,7 +29,10 @@ class NavBarIcon extends StatelessWidget {
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: Padding(
-          padding: AppSpacing.allMd,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
           child: Icon(
             isSelected ? selectedIcon : icon,
             size: AppSizes.iconLg,

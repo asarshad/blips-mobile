@@ -340,55 +340,65 @@ class _BottomNavBar extends StatelessWidget {
     // - Android 3-button navigation
     // - Tablets and foldables
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+    final navColor = Theme.of(context).bottomNavigationBarTheme.backgroundColor;
+    final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
 
-    return Container(
-      color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
-      // Add safe area padding below the nav content
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: SizedBox(
-        // Use design system constant for nav height
-        height: AppSizes.bottomNavHeight,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            NavBarIcon(
-              icon: Icons.article_outlined,
-              selectedIcon: Icons.article,
-              label: 'Feed',
-              isSelected: currentIndex == 0,
-              onTap: () => onIndexChanged(0),
+    // Two-layer nav bar: icon row uses nav color, safe zone below uses
+    // scaffold background — this makes the home indicator gap invisible,
+    // matching how Inshorts and other native apps handle this area.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          color: navColor,
+          child: SizedBox(
+            height: AppSizes.bottomNavHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                NavBarIcon(
+                  icon: Icons.article_outlined,
+                  selectedIcon: Icons.article,
+                  label: 'Feed',
+                  isSelected: currentIndex == 0,
+                  onTap: () => onIndexChanged(0),
+                ),
+                NavBarIcon(
+                  icon: Icons.play_circle_outline,
+                  selectedIcon: Icons.play_circle,
+                  label: 'Videos',
+                  isSelected: currentIndex == 1,
+                  onTap: () => onIndexChanged(1),
+                ),
+                NavBarIcon(
+                  icon: Icons.movie_filter_outlined,
+                  selectedIcon: Icons.movie_filter,
+                  label: 'Reels',
+                  isSelected: currentIndex == 2,
+                  onTap: () => onIndexChanged(2),
+                ),
+                NavBarIcon(
+                  icon: Icons.chat_bubble_outline,
+                  selectedIcon: Icons.chat_bubble,
+                  label: 'Chat',
+                  isSelected: currentIndex == 3,
+                  onTap: () => onIndexChanged(3),
+                ),
+                NavBarIcon(
+                  icon: Icons.settings_outlined,
+                  selectedIcon: Icons.settings,
+                  label: 'Settings',
+                  isSelected: currentIndex == 4,
+                  onTap: () => onIndexChanged(4),
+                ),
+              ],
             ),
-            NavBarIcon(
-              icon: Icons.play_circle_outline,
-              selectedIcon: Icons.play_circle,
-              label: 'Videos',
-              isSelected: currentIndex == 1,
-              onTap: () => onIndexChanged(1),
-            ),
-            NavBarIcon(
-              icon: Icons.movie_filter_outlined,
-              selectedIcon: Icons.movie_filter,
-              label: 'Reels',
-              isSelected: currentIndex == 2,
-              onTap: () => onIndexChanged(2),
-            ),
-            NavBarIcon(
-              icon: Icons.chat_bubble_outline,
-              selectedIcon: Icons.chat_bubble,
-              label: 'Chat',
-              isSelected: currentIndex == 3,
-              onTap: () => onIndexChanged(3),
-            ),
-            NavBarIcon(
-              icon: Icons.settings_outlined,
-              selectedIcon: Icons.settings,
-              label: 'Settings',
-              isSelected: currentIndex == 4,
-              onTap: () => onIndexChanged(4),
-            ),
-          ],
+          ),
         ),
-      ),
+        // Safe zone — scaffold background so it blends with the phone bezel,
+        // making the home indicator gap visually invisible (same as Inshorts).
+        Container(color: scaffoldColor, height: bottomInset),
+      ],
     );
   }
 }

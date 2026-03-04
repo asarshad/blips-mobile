@@ -43,7 +43,7 @@ abstract final class AppSizes {
   // Component heights
 
   /// 56.0 - Standard bottom navigation height
-  static const double bottomNavHeight = 50.0;
+  static const double bottomNavHeight = 44.0;
 
   /// 56.0 - Standard app bar height
   static const double appBarHeight = 56.0;
