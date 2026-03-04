@@ -323,8 +323,7 @@ class _Title extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      maxLines: 2, // Reduced from 3 to give summary more room
-      overflow: TextOverflow.ellipsis,
+      // No maxLines — title always wraps fully, never truncated
       style: textTheme.titleLarge?.copyWith(
         color: colorScheme.onSurface,
         fontWeight: FontWeight.bold,
