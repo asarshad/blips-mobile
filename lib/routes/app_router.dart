@@ -15,9 +15,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// to [FeedShellPage] and the redirect no longer fires.
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
+  ref.onDispose(notifier.dispose);
 
   return GoRouter(
-    initialLocation: FeedShellPage.path,
+    initialLocation: InterestSelectionPage.path,
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [

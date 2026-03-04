@@ -5,6 +5,7 @@
 /// never removed from the feed, they're just ranked slightly lower.
 library;
 
+import 'package:blips_mobile/features/feed/presentation/feed_shell_page.dart';
 import 'package:blips_mobile/features/onboarding/domain/categories.dart';
 import 'package:blips_mobile/features/onboarding/presentation/widgets/category_chip.dart';
 import 'package:blips_mobile/features/onboarding/providers/interests_provider.dart';
@@ -177,7 +178,7 @@ class InterestSelectionPage extends ConsumerWidget {
     // Invalidate so the router redirect re-evaluates with the updated value.
     ref.invalidate(onboardingDoneProvider);
     if (context.mounted) {
-      context.go('/');
+      context.go(FeedShellPage.path);
     }
   }
 
@@ -190,7 +191,7 @@ class InterestSelectionPage extends ConsumerWidget {
     // Invalidate so the router redirect re-evaluates with the updated value.
     ref.invalidate(onboardingDoneProvider);
     if (context.mounted) {
-      context.go('/');
+      context.go(FeedShellPage.path);
     }
   }
 }
