@@ -88,11 +88,11 @@ class FeedCardFrame extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Media section (45%)
-            Expanded(flex: 45, child: SizedBox.expand(child: media)),
-            // Content section (55%) - clamp text scaling
+            // Media section (39% — 10% relative increase from 35%)
+            Expanded(flex: 39, child: SizedBox.expand(child: media)),
+            // Content section (61%)
             Expanded(
-              flex: 55,
+              flex: 61,
               child: MediaQuery.withClampedTextScaling(
                 maxScaleFactor: _maxTextScaleFactor,
                 child: _ContentSection(
