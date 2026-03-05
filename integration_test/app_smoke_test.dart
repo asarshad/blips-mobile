@@ -6,6 +6,7 @@ import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/onboarding/providers/interests_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -30,6 +31,9 @@ void main() {
 
     return ProviderScope(
       overrides: [
+        // Onboarding already done so the router skips InterestSelectionPage
+        // and lands on FeedShellPage (the bottom-nav shell).
+        onboardingDoneProvider.overrideWith((ref) async => true),
         feedRepositoryProvider.overrideWithValue(repo),
         feedCacheProvider.overrideWithValue(FakeFeedCache()),
         youtubePlayerManagerProvider.overrideWith(
