@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -49,6 +51,11 @@ class VideoCard extends HookConsumerWidget {
       if (!isVisible) {
         videoManager.pauseVideo(entry.link);
         showBubbles.value = false;
+      } else {
+        // Auto-play when this card becomes the visible current page.
+        // isVisible is true only when the Videos tab is active AND this
+        // card is the current page in the FeedTab PageView.
+        unawaited(videoManager.playVideo(entry.link));
       }
       return null;
     }, [isVisible]);

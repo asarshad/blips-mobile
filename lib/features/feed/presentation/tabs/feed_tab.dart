@@ -140,24 +140,28 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     YoutubePlayerManagerBase videoManager,
   ) {
-    // Collect video URLs, skipping non-video entries (e.g. ads)
-    final videoEntries = <int, String>{};
-    for (var i = 0; i < entries.length; i++) {
-      final e = entries[i];
-      if (e is VideoFeedEntry) {
-        videoEntries[i] = e.link;
-      }
-    }
+    // Only process if the current entry is actually a video.
+    final currentEntry = entries[index];
+    if (currentEntry is! VideoFeedEntry) return;
 
-    if (videoEntries.isEmpty) return;
+    // Build video-only URL list (skip ad entries).
+    final videoUrls = entries
+        .map((e) => e is VideoFeedEntry ? e.link : '')
+        .where((url) => url.isNotEmpty)
+        .toList();
 
-    // Use the centralized page change handler with the video-only URLs
+    if (videoUrls.isEmpty) return;
+
+    // Find the position of the current video in the video-only list so
+    // onPageChanged receives a consistent index/videoUrls pair.
+    // Previously `index` (entry-list index) was passed directly, which
+    // was wrong when ad entries shifted the effective position.
+    final videoIndex = videoUrls.indexOf(currentEntry.link);
+    if (videoIndex == -1) return;
+
     videoManager.onPageChanged(
-      currentIndex: index,
-      videoUrls: entries
-          .map((e) => e is VideoFeedEntry ? e.link : '')
-          .where((url) => url.isNotEmpty)
-          .toList(),
+      currentIndex: videoIndex,
+      videoUrls: videoUrls,
     );
   }
 }
