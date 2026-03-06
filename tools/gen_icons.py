@@ -32,10 +32,6 @@ FLATTENED = os.path.join(ROOT, "icons", "flattened")
 APPICONSET = os.path.join(
     ROOT, "ios", "Runner", "Assets.xcassets", "AppIcon.appiconset"
 )
-LAUNCH_IMAGESET = os.path.join(
-    ROOT, "ios", "Runner", "Assets.xcassets", "LaunchImage.imageset"
-)
-LEGACY_SPLASH = os.path.join(ROOT, "assets", "splash", "splash_logo.png")
 
 # ── Step 1: Flatten the 1024-px Default source ────────────────────────────────
 print("── Step 1: Flattening 1024-px Default source ───────────────────────────")
@@ -151,33 +147,35 @@ for src_name, dst_name in NAMED_VARIANTS:
     else:
         print(f"  SKIP (not found): {src_name}")
 
-# ── Step 5: Regenerate splash LaunchImage assets ──────────────────────────────
-print("\n── Step 5: Regenerating splash screen assets ────────────────────────────")
+# ── Step 5: Update splash source image, then delegate to flutter_native_splash ─
+print("\n── Step 5: Updating splash source and regenerating splash screen ────────")
 
-# Use the transparent new export for the splash (preserves rounded corners).
+import subprocess
+
+# Update the splash source PNG from the new icon export (preserves transparency
+# for rounded-corner rendering that flutter_native_splash handles per-platform).
 splash_src = os.path.join(NEW_EXPORTS, "Icon-iOS-Default-1024x1024@1x.png")
 splash_base = Image.open(splash_src).convert("RGBA")
 
-LOGICAL_PT = 120
-SPLASH_SCALES = {
-    "1x": LOGICAL_PT * 1,   # 120 px
-    "2x": LOGICAL_PT * 2,   # 240 px
-    "3x": LOGICAL_PT * 3,   # 360 px
-}
-SPLASH_FILES = {
-    "1x": os.path.join(LAUNCH_IMAGESET, "LaunchImage.png"),
-    "2x": os.path.join(LAUNCH_IMAGESET, "LaunchImage@2x.png"),
-    "3x": os.path.join(LAUNCH_IMAGESET, "LaunchImage@3x.png"),
-}
+# Keep splash_logo.png at 1024px so flutter_native_splash can scale it as needed.
+LEGACY_SPLASH = os.path.join(ROOT, "assets", "splash", "splash_logo.png")
+splash_base.save(LEGACY_SPLASH)
+print(f"  Updated splash_logo.png → {splash_base.size[0]}×{splash_base.size[1]}px RGBA")
 
-for scale, px in SPLASH_SCALES.items():
-    resized = splash_base.resize((px, px), Image.LANCZOS)
-    out = SPLASH_FILES[scale]
-    resized.save(out)
-    print(f"  [{scale}] LaunchImage  {px}×{px}px  →  {LOGICAL_PT}pt logical")
-
-# Legacy copy (used by Android splash / other consumers).
-shutil.copy2(SPLASH_FILES["3x"], LEGACY_SPLASH)
-print(f"  Legacy copy → {os.path.relpath(LEGACY_SPLASH, ROOT)}")
+# Delegate all launch-image generation to flutter_native_splash so that iOS and
+# Android splash assets are always generated from one consistent source with the
+# correct background colour and sizing rules from pubspec.yaml.
+print("  Running flutter_native_splash:create …")
+result = subprocess.run(
+    ["dart", "run", "flutter_native_splash:create"],
+    cwd=ROOT,
+    capture_output=True,
+    text=True,
+)
+if result.returncode == 0:
+    print("  flutter_native_splash:create ✓")
+else:
+    print("  flutter_native_splash:create FAILED:")
+    print(result.stderr or result.stdout)
 
 print("\n✓ All done.")
