@@ -37,14 +37,24 @@ class VideoCard extends HookConsumerWidget {
     final playerState = videoManager.getState(entry.link);
 
     // Listen to controller changes to update UI
-    final dummyListenable = useMemoized(ChangeNotifier.new);
-    useListenable(controller ?? dummyListenable);
 
     final isPlayerReady = playerState == YTPlayerState.ready ||
         playerState == YTPlayerState.playing ||
         playerState == YTPlayerState.paused;
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
+
+    // Resume video when app returns to foreground (Videos tab lifecycle fix).
+    // The manager's WidgetsBindingObserver handles pause-on-background but
+    // resume must be triggered per-card since only this widget knows whether
+    // it is the currently visible page.
+    useEffect(() {
+      if (!isVisible) return null;
+      final listener = AppLifecycleListener(
+        onResume: () => unawaited(videoManager.playVideo(entry.link)),
+      );
+      return listener.dispose;
+    }, [isVisible]);
 
     // Handle visibility changes
     useEffect(() {
@@ -170,27 +180,15 @@ class _VideoMedia extends StatelessWidget {
   final bool isPlayerReady;
   final bool isLoading;
 
-  /// Checks if controller is valid and not in a disposed state.
+  /// Checks if controller is valid and in a ready/playable state.
   bool get _isControllerValid {
-    if (controller == null) return false;
-    try {
-      // Try to access the value to check if it's disposed
-      // ignore: unused_local_variable
-      final _ = controller!.value;
-      return true;
-    } catch (_) {
-      return false;
-    }
+    return controller != null && isPlayerReady;
   }
 
   /// Determines if play button should be shown.
   bool _shouldShowPlayButton(bool showPlayer) {
     if (!showPlayer) return true;
-    try {
-      return controller!.value.playerState != PlayerState.playing;
-    } catch (_) {
-      return true;
-    }
+    return controller?.value.playerState != PlayerState.playing;
   }
 
   @override

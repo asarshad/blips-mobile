@@ -84,9 +84,7 @@ class ReelItem extends HookConsumerWidget {
               // Show when paused (user tapped pause) or ready (auto-play
               // hasn't fired yet, tap re-arms it).  Intentionally hidden
               // during loading/idle so the spinner is the only indicator.
-              if (isActive &&
-                  (playerState == YTPlayerState.paused ||
-                      playerState == YTPlayerState.ready))
+              if (isActive && playerState == YTPlayerState.paused)
                 const _PlayIndicator(),
 
               // Loading Indicator
@@ -139,6 +137,13 @@ class ReelItem extends HookConsumerWidget {
           }
 
           controller.addListener(listener);
+          // Eagerly restore thumbnail if item was swiped off-screen before
+          // the controller fires another event (fast-swipe black frame fix).
+          if (!isActive && !showThumbnail.value) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (isMounted()) showThumbnail.value = true;
+            });
+          }
           return () => controller.removeListener(listener);
         } else {
           // Controller was released (e.g. retryVideo after returning from

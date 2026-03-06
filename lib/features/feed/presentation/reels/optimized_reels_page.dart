@@ -33,6 +33,8 @@ class OptimizedReelsPage extends HookConsumerWidget {
     _useVisibilityHandler(reelsFeed, videoManager, isVisible, currentIndex);
     _useLifecycleObserver(reelsFeed, videoManager, isVisible, currentIndex);
 
+    final isMounted = useIsMounted();
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: reelsFeed.when(
@@ -41,6 +43,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           controller: controller,
           videoManager: videoManager,
           currentIndex: currentIndex,
+          isMounted: isMounted,
           ref: ref,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -174,6 +177,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
     required PageController controller,
     required YoutubePlayerManagerBase videoManager,
     required ValueNotifier<int> currentIndex,
+    required bool Function() isMounted,
     required WidgetRef ref,
   }) {
     if (entries.isEmpty) {
@@ -204,9 +208,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
         // Pagination: Load more when close to end
         if (index >= entries.length - 3) {
-          Future.microtask(
-            () => ref.read(reelsFeedProvider.notifier).loadMore(),
-          );
+          Future.microtask(() {
+            if (isMounted()) ref.read(reelsFeedProvider.notifier).loadMore();
+          });
         }
       },
       itemCount: entries.length,

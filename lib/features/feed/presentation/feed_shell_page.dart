@@ -101,6 +101,7 @@ class FeedShellPage extends HookConsumerWidget {
     YoutubePlayerManagerBase videoManager,
   ) {
     useEffect(() {
+      var mounted = true;
       // Defer reels loading until after first frame to avoid blocking UI
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Future.microtask(() async {
@@ -112,6 +113,7 @@ class FeedShellPage extends HookConsumerWidget {
               orElse: () {
                 // If loading/error, wait a bit then check again
                 Future.delayed(const Duration(milliseconds: 500), () {
+                  if (!mounted) return;
                   final reelsData = ref.read(reelsFeedProvider).valueOrNull;
                   if (reelsData != null) {
                     _preloadReels(reelsData, videoManager);
@@ -129,7 +131,7 @@ class FeedShellPage extends HookConsumerWidget {
           }
         });
       });
-      return null;
+      return () => mounted = false;
     }, []);
   }
 
@@ -191,7 +193,15 @@ class FeedShellPage extends HookConsumerWidget {
     int currentIndex,
     YoutubePlayerManagerBase videoManager,
   ) {
+    // useRef persists a flag across rebuilds without triggering a rebuild.
+    // We skip the very first run so that mounting the shell (currentIndex=0)
+    // does not call pauseAll() and wipe _currentActiveUrl before preloads land.
+    final hasMounted = useRef(false);
     useEffect(() {
+      if (!hasMounted.value) {
+        hasMounted.value = true;
+        return null;
+      }
       final isOnVideoTab = currentIndex == 1 || currentIndex == 2;
       if (!isOnVideoTab) {
         // Pause all videos when leaving video tabs (don't release - let pool manager handle it)

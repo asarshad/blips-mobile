@@ -197,7 +197,6 @@ class SettingsPage extends ConsumerWidget {
                     color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 _SettingsTile(
                   title: 'Support',
-                  subtitle: 'info@husniconsulting.ca',
                   icon: Icons.help_outline,
                   onTap: () => _launchUrl('https://husniconsulting.ca/support'),
                 ),

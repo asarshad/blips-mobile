@@ -255,7 +255,10 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       controller = await initController(url);
     }
 
-    if (_isDisposed) return;
+    // Guard against stale play requests: the user may have swiped to another
+    // video while initController was awaiting, or the manager may have been
+    // disposed. Either way, playing the old URL would cause ghost audio.
+    if (_isDisposed || _currentActiveUrl != url) return;
 
     // If ready, play immediately.  The actual playing/buffering events from the
     // iframe will update _states[url] — we never set it optimistically here,
@@ -419,6 +422,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (kDebugMode) {
       debugPrint('YoutubePlayerManager: releaseVideo($url)');
     }
+    // Clear pending init so retryVideo doesn't leave an orphaned listener.
+    _pendingInit.remove(url);
     if (_currentActiveUrl == url) _currentActiveUrl = null;
     final controller = _controllers.remove(url);
     if (controller != null) {
@@ -464,7 +469,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
   /// Manages pool size by disposing least recently used controllers.
   Future<void> _managePoolSize(String currentUrl) async {
-    if (_controllers.length < maxControllers) return;
+    // Count pending inits to prevent bypassing the pool limit via concurrent calls.
+    if (_controllers.length + _pendingInit.length <= maxControllers) return;
 
     // Find controllers to dispose (not current, not pending)
     final urlsToDispose = _controllers.keys
@@ -479,7 +485,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
   void _notifySafe() {
     if (!_isDisposed) {
-      Future.microtask(notifyListeners);
+      Future.microtask(() {
+        if (!_isDisposed) notifyListeners();
+      });
     }
   }
 
