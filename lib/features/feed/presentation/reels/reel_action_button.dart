@@ -43,7 +43,6 @@ class ReelActionButton extends StatelessWidget {
               fontWeight: FontWeight.w500,
               shadows: [
                 Shadow(
-                  color: Colors.black,
                   offset: Offset(0, 1),
                   blurRadius: 2,
                 ),

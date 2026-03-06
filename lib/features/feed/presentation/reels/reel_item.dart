@@ -80,8 +80,13 @@ class ReelItem extends HookConsumerWidget {
               // Gradient Overlay
               const _GradientOverlay(),
 
-              // Play indicator - show when paused OR when there's an error (tap to retry)
-              if (isActive && playerState != YTPlayerState.playing)
+              // Play/pause indicator.
+              // Show when paused (user tapped pause) or ready (auto-play
+              // hasn't fired yet, tap re-arms it).  Intentionally hidden
+              // during loading/idle so the spinner is the only indicator.
+              if (isActive &&
+                  (playerState == YTPlayerState.paused ||
+                      playerState == YTPlayerState.ready))
                 const _PlayIndicator(),
 
               // Loading Indicator
@@ -114,29 +119,42 @@ class ReelItem extends HookConsumerWidget {
     required ValueNotifier<bool> showThumbnail,
     required bool Function() isMounted,
   }) {
-    useEffect(() {
-      if (controller != null) {
-        void listener() {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!isMounted()) return;
+    useEffect(
+      () {
+        if (controller != null) {
+          void listener() {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!isMounted()) return;
 
-            final isPlaying =
-                controller.value.playerState == PlayerState.playing;
+              final isPlaying =
+                  controller.value.playerState == PlayerState.playing;
 
-            // Hide thumbnail as soon as video starts playing
-            if (isPlaying && showThumbnail.value) {
-              showThumbnail.value = false;
-            } else if (!isActive && !showThumbnail.value) {
-              showThumbnail.value = true;
-            }
-          });
+              // Hide thumbnail as soon as video starts playing.
+              if (isPlaying && showThumbnail.value) {
+                showThumbnail.value = false;
+              } else if (!isActive && !showThumbnail.value) {
+                showThumbnail.value = true;
+              }
+            });
+          }
+
+          controller.addListener(listener);
+          return () => controller.removeListener(listener);
+        } else {
+          // Controller was released (e.g. retryVideo after returning from
+          // background or browser).  Restore the thumbnail so the user sees
+          // a placeholder while the fresh controller loads, rather than a
+          // black frame.
+          if (!showThumbnail.value) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (isMounted()) showThumbnail.value = true;
+            });
+          }
+          return null;
         }
-
-        controller.addListener(listener);
-        return () => controller.removeListener(listener);
-      }
-      return null;
-    }, [controller, isActive]);
+      },
+      [controller, isActive],
+    );
   }
 
   void _handleTap(
@@ -181,7 +199,6 @@ class _YoutubeVideoLayer extends StatelessWidget {
           height: MediaQuery.of(context).size.width * 16 / 9,
           child: YoutubePlayer(
             controller: controller,
-            showVideoProgressIndicator: false,
             progressColors: const ProgressBarColors(
               playedColor: Colors.white,
               handleColor: Colors.white,
@@ -277,7 +294,7 @@ class _ActionButtons extends StatelessWidget {
           ReelActionButton(
             icon: Icons.share,
             label: 'Share',
-            onTap: () => _shareReel(),
+            onTap: _shareReel,
           ),
           const SizedBox(height: 12),
           ReelActionButton(
@@ -399,8 +416,8 @@ class _ErrorIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String message = 'Failed to load video';
-    String hint = 'Tap to retry';
+    var message = 'Failed to load video';
+    var hint = 'Tap to retry';
 
     if (error != null) {
       if (error!.isPlaybackDisabled) {
