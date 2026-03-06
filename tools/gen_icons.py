@@ -23,7 +23,7 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # New pre-sized exports — use these directly where available.
-NEW_EXPORTS = os.path.join(ROOT, "assets", "Icon Exports")
+NEW_EXPORTS = os.path.join(ROOT, "icons", "Icon Exports")
 
 # Legacy exports — still used for dark / tinted adaptive-icon variants.
 LEGACY_EXPORTS = os.path.join(ROOT, "icons", "blips Exports")
