@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -17,7 +20,16 @@ final youtubePlayerManagerProvider =
 /// This uses the official YouTube IFrame Player API which is more reliable
 /// than extracting stream URLs. The trade-off is slightly higher latency
 /// but guaranteed compatibility.
-class YoutubePlayerManager extends YoutubePlayerManagerBase {
+///
+/// Implements [WidgetsBindingObserver] to pause all videos when the app
+/// is backgrounded, preserving [_currentActiveUrl] so [OptimizedReelsPage]
+/// can resume the correct video on foreground.
+class YoutubePlayerManager extends YoutubePlayerManagerBase
+    with WidgetsBindingObserver {
+  YoutubePlayerManager() {
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   /// Maximum number of controllers to keep in memory.
   /// Configured via MemoryConfig.playerPoolSize.
   /// Lower values save memory. Higher values improve scroll smoothness.
@@ -28,10 +40,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
   final Map<String, YTPlayerError?> _errors = {};
   final Set<String> _pendingInit = {};
 
-  // The URL that should be auto-played when its iframe becomes ready.
-  // Only one reel is ever "intended to play" at a time, so a simple string
-  // replaces the old Set<String> _autoPlayUrls, eliminating races where
-  // buffering events would re-trigger play() multiple times.
+  /// The single URL that is currently intended to be playing.
+  ///
+  /// Set synchronously by [playVideo] and [onPageChanged] so that
+  /// [_handleControllerUpdate] always knows which video should auto-play
+  /// when its iframe fires the first `unStarted`/`cued` event — eliminating
+  /// the race that existed when a `Set<String> _autoPlayUrls` was cleared by
+  /// a concurrent `onPageChanged` microtask before the ready event fired.
+  ///
+  /// Intentionally *not* cleared by [_pauseAllForBackground] so that the
+  /// correct video can be resumed when the app returns to the foreground.
   String? _currentActiveUrl;
   bool _isDisposed = false;
 
@@ -130,9 +148,13 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
         _handleControllerUpdate(url, controller);
       });
 
-      debugPrint('YoutubePlayerManager: Initialized controller for $videoId');
-      // Note: Don't call play() here - iframe isn't mounted yet
-      // Auto-play will be triggered in _handleControllerUpdate when player is ready
+      if (kDebugMode) {
+        debugPrint('YoutubePlayerManager: initController complete for $videoId'
+            ' — state=${_states[url]}, pendingPlay=${_currentActiveUrl == url}');
+      }
+      // Note: Don't call play() here — iframe isn't mounted yet.
+      // If this URL is _currentActiveUrl, _handleControllerUpdate will
+      // auto-play once the `unStarted` event fires from the iframe.
 
       _notifySafe();
       return controller;
@@ -173,7 +195,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
         url == _currentActiveUrl &&
         (playerState == PlayerState.unStarted ||
             playerState == PlayerState.cued)) {
-      debugPrint('YoutubePlayerManager: iframe ready, auto-playing $url');
+      if (kDebugMode) {
+        debugPrint('YoutubePlayerManager: [auto-play] iframe ready → $url');
+      }
       controller.play();
       // State will be updated by the subsequent playing/buffering events.
       return;
@@ -218,7 +242,10 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
   Future<void> playVideo(String url) async {
     if (_isDisposed) return;
 
-    debugPrint('YoutubePlayerManager: playVideo called for $url');
+    if (kDebugMode) {
+      debugPrint('YoutubePlayerManager: playVideo($url)'
+          ' — ready=${_controllers[url]?.value.isReady}');
+    }
     _currentActiveUrl = url;
 
     var controller = _controllers[url];
@@ -234,18 +261,22 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
     // iframe will update _states[url] — we never set it optimistically here,
     // which prevents the UI from showing a frozen "playing" state.
     if (controller != null && controller.value.isReady) {
-      debugPrint('YoutubePlayerManager: Controller ready, playing immediately');
+      if (kDebugMode) {
+        debugPrint('YoutubePlayerManager: [play] controller ready → $url');
+      }
       controller.play();
     } else {
-      debugPrint(
-        'YoutubePlayerManager: Controller not ready yet, auto-play armed via _currentActiveUrl',
-      );
+      if (kDebugMode) {
+        debugPrint(
+            'YoutubePlayerManager: [play] controller not ready → armed for $url');
+      }
     }
   }
 
   /// Pauses a video.
   @override
   void pauseVideo(String url) {
+    if (kDebugMode) debugPrint('YoutubePlayerManager: pauseVideo($url)');
     // Clear active intent only for the specific video being paused so that
     // other videos (e.g. in the pool) do not accidentally inherit it.
     if (_currentActiveUrl == url) _currentActiveUrl = null;
@@ -257,9 +288,14 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
     }
   }
 
-  /// Pauses all videos.
+  /// Pauses all videos and clears the active-play intent.
+  ///
+  /// Use for tab-navigation pauses.  For app-background pauses use
+  /// [_pauseAllForBackground] which preserves [_currentActiveUrl] so the
+  /// correct video can be resumed when the app returns to foreground.
   @override
   void pauseAll() {
+    if (kDebugMode) debugPrint('YoutubePlayerManager: pauseAll()');
     _currentActiveUrl = null;
     for (final entry in _controllers.entries) {
       entry.value.pause();
@@ -268,47 +304,108 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
     _notifySafe();
   }
 
+  /// Pauses all videos WITHOUT clearing [_currentActiveUrl].
+  ///
+  /// Called when the app is backgrounded so the correct video can be
+  /// resumed when the app returns to the foreground (handled by
+  /// [OptimizedReelsPage] via its lifecycle observer).
+  void _pauseAllForBackground() {
+    if (kDebugMode)
+      debugPrint('YoutubePlayerManager: _pauseAllForBackground()');
+    for (final entry in _controllers.entries) {
+      entry.value.pause();
+      _states[entry.key] = YTPlayerState.paused;
+    }
+    _notifySafe();
+  }
+
+  // ── App Lifecycle ─────────────────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kDebugMode) {
+      debugPrint('YoutubePlayerManager: AppLifecycleState → $state');
+    }
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        // Pause all but preserve _currentActiveUrl so the page-level
+        // lifecycle observer can resume the correct video on foreground.
+        _pauseAllForBackground();
+      default:
+        // 'resumed' is intentionally handled by OptimizedReelsPage's
+        // lifecycle hook which has visibility awareness and knows whether
+        // the Reels tab is currently on screen.
+        break;
+    }
+  }
+
   @override
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
   }) {
-    // Fire-and-forget: base contract is sync, and callers don't await.
+    if (_isDisposed) return;
+    if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
+
+    final currentUrl = videoUrls[currentIndex];
+
+    if (kDebugMode) {
+      debugPrint(
+          'YoutubePlayerManager: onPageChanged(index=$currentIndex, url=$currentUrl)');
+    }
+
+    // ── SYNCHRONOUS SECTION ─────────────────────────────────────────────────
+    // Setting _currentActiveUrl synchronously is critical: if a preloaded
+    // controller fires its `unStarted` event *before* the microtask below
+    // runs, _handleControllerUpdate needs to see the correct target URL or
+    // the video will be silently skipped.
+    _currentActiveUrl = currentUrl;
+
+    // Pause all other controllers synchronously to prevent audio bleed.
+    for (final entry in _controllers.entries) {
+      if (entry.key != currentUrl) {
+        entry.value.pause();
+        _states[entry.key] = YTPlayerState.paused;
+      }
+    }
+
+    // Play current if the controller is already ready; otherwise
+    // _handleControllerUpdate will auto-play when the iframe fires unStarted.
+    final controller = _controllers[currentUrl];
+    if (controller != null && controller.value.isReady) {
+      if (kDebugMode) {
+        debugPrint(
+            'YoutubePlayerManager: [onPageChanged] playing ready controller → $currentUrl');
+      }
+      controller.play();
+    }
+    _notifySafe();
+    // ── END SYNCHRONOUS SECTION ─────────────────────────────────────────────
+
+    // Async: initialise current if missing, preload next, release old.
     Future.microtask(() async {
-      if (_isDisposed) return;
-      if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
+      if (_isDisposed || _currentActiveUrl != currentUrl) return; // stale swipe
 
-      final currentUrl = videoUrls[currentIndex];
-
-      // Pause all videos except current.
-      for (final entry in _controllers.entries) {
-        if (entry.key != currentUrl) {
-          entry.value.pause();
-          _states[entry.key] = YTPlayerState.paused;
-        }
+      if (controller == null && !_pendingInit.contains(currentUrl)) {
+        // Controller doesn't exist yet. initController sets _currentActiveUrl
+        // isn't needed here since we already set it above; _handleControllerUpdate
+        // will auto-play when the iframe fires its first event.
+        await initController(currentUrl);
       }
 
-      // Declare intent and play.  Do NOT set _states optimistically — the
-      // iframe events will update it, keeping UI and reality in sync.
-      _currentActiveUrl = currentUrl;
+      if (_isDisposed || _currentActiveUrl != currentUrl) return;
 
-      final controller = _controllers[currentUrl];
-      if (controller != null) {
-        controller.play();
-        _notifySafe();
-      } else {
-        await playVideo(currentUrl);
-      }
-
-      // Preload next 3 videos in background
+      // Preload next 3 videos in background.
       for (var i = 1; i <= 3; i++) {
         final nextIndex = currentIndex + i;
         if (nextIndex < videoUrls.length) {
-          initController(videoUrls[nextIndex]);
+          unawaited(initController(videoUrls[nextIndex]));
         }
       }
 
-      // Keep 2 videos behind for back-swipe, release older ones
+      // Keep 2 videos behind for back-swipe, release older ones.
       for (var i = 0; i < currentIndex - 2; i++) {
         if (i >= 0 && i < videoUrls.length) {
           releaseVideo(videoUrls[i]);
@@ -319,6 +416,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
 
   /// Releases a specific video controller.
   void releaseVideo(String url) {
+    if (kDebugMode) {
+      debugPrint('YoutubePlayerManager: releaseVideo($url)');
+    }
     if (_currentActiveUrl == url) _currentActiveUrl = null;
     final controller = _controllers.remove(url);
     if (controller != null) {
@@ -385,6 +485,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _isDisposed = true;
     for (final entry in _controllers.entries) {
       try {

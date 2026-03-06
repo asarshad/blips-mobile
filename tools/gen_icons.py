@@ -158,11 +158,11 @@ print("\n── Step 5: Regenerating splash screen assets ───────�
 splash_src = os.path.join(NEW_EXPORTS, "Icon-iOS-Default-1024x1024@1x.png")
 splash_base = Image.open(splash_src).convert("RGBA")
 
-LOGICAL_PT = 200
+LOGICAL_PT = 120
 SPLASH_SCALES = {
-    "1x": LOGICAL_PT * 1,   # 200 px
-    "2x": LOGICAL_PT * 2,   # 400 px
-    "3x": LOGICAL_PT * 3,   # 600 px
+    "1x": LOGICAL_PT * 1,   # 120 px
+    "2x": LOGICAL_PT * 2,   # 240 px
+    "3x": LOGICAL_PT * 3,   # 360 px
 }
 SPLASH_FILES = {
     "1x": os.path.join(LAUNCH_IMAGESET, "LaunchImage.png"),

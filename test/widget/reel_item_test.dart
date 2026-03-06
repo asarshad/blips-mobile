@@ -176,5 +176,191 @@ void main() {
       // Should not crash and should still show title
       expect(find.text('No Thumbnail Reel'), findsOneWidget);
     });
+
+    // ── Play-indicator state-sync (Bug 2 regression) ──────────────────────
+
+    testWidgets('shows play indicator when active and state is not playing',
+        (tester) async {
+      mockManager.setMockState(testReel.link, YTPlayerState.paused);
+
+      await tester.pumpWidget(buildTestWidget(entry: testReel, isActive: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Play indicator (Icons.play_arrow) is visible when paused.
+      expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    });
+
+    testWidgets('hides play indicator when state is playing', (tester) async {
+      mockManager.setMockState(testReel.link, YTPlayerState.playing);
+
+      await tester.pumpWidget(buildTestWidget(entry: testReel, isActive: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Play indicator must be hidden when video is actually playing
+      // (Bug 2: frozen "playing" state caused indicator to disappear even
+      // though the video was not actually playing).
+      expect(find.byIcon(Icons.play_arrow), findsNothing);
+    });
+
+    testWidgets('tap while paused calls playVideo (not pauseVideo)',
+        (tester) async {
+      // Track method calls.
+      final calls = <String>[];
+      final trackingManager = _TrackingYoutubePlayerManager(
+        delegate: mockManager,
+        onPlayVideo: (url) => calls.add('play:$url'),
+        onPauseVideo: (url) => calls.add('pause:$url'),
+      );
+      mockManager.setMockState(testReel.link, YTPlayerState.paused);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                height: 600,
+                child: ReelItem(
+                  entry: testReel,
+                  isActive: true,
+                  isVisible: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Tap the video area.
+      await tester.tap(find.byType(GestureDetector).first);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // When paused, tap must trigger play — not pause.
+      expect(
+        calls,
+        contains(startsWith('play:')),
+        reason: 'tapping a paused reel must call playVideo, not pauseVideo',
+      );
+      expect(
+        calls,
+        isNot(contains(startsWith('pause:'))),
+        reason: 'tapping a paused reel must not call pauseVideo',
+      );
+    });
+
+    testWidgets('tap while in error state calls retryVideo', (tester) async {
+      final calls = <String>[];
+      final trackingManager = _TrackingYoutubePlayerManager(
+        delegate: mockManager,
+        onRetryVideo: (url) => calls.add('retry:$url'),
+      );
+      mockManager.setMockState(testReel.link, YTPlayerState.error);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                height: 600,
+                child: ReelItem(
+                  entry: testReel,
+                  isActive: true,
+                  isVisible: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byType(GestureDetector).first);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        calls,
+        contains(startsWith('retry:')),
+        reason: 'tapping an error reel must call retryVideo',
+      );
+    });
   });
+}
+
+/// A [YoutubePlayerManagerBase] wrapper that records method invocations for
+/// assertion in tests.
+class _TrackingYoutubePlayerManager extends YoutubePlayerManagerBase {
+  _TrackingYoutubePlayerManager({
+    required this.delegate,
+    this.onPlayVideo,
+    this.onPauseVideo,
+    this.onRetryVideo,
+  });
+
+  final MockYoutubePlayerManager delegate;
+  final void Function(String url)? onPlayVideo;
+  final void Function(String url)? onPauseVideo;
+  final void Function(String url)? onRetryVideo;
+
+  @override
+  YoutubePlayerController? getController(String url) =>
+      delegate.getController(url);
+
+  @override
+  YTPlayerState getState(String url) => delegate.getState(url);
+
+  @override
+  YTPlayerError? getError(String url) => delegate.getError(url);
+
+  @override
+  bool isReady(String url) => delegate.isReady(url);
+
+  @override
+  bool isPlaying(String url) => delegate.isPlaying(url);
+
+  @override
+  String? extractVideoId(String url) => delegate.extractVideoId(url);
+
+  @override
+  Future<YoutubePlayerController?> initController(String url) =>
+      delegate.initController(url);
+
+  @override
+  Future<void> playVideo(String url) async {
+    onPlayVideo?.call(url);
+    await delegate.playVideo(url);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> retryVideo(String url) async {
+    onRetryVideo?.call(url);
+    await delegate.retryVideo(url);
+    notifyListeners();
+  }
+
+  @override
+  void pauseVideo(String url) {
+    onPauseVideo?.call(url);
+    delegate.pauseVideo(url);
+    notifyListeners();
+  }
+
+  @override
+  void pauseAll() {
+    delegate.pauseAll();
+    notifyListeners();
+  }
+
+  @override
+  void onPageChanged({
+    required int currentIndex,
+    required List<String> videoUrls,
+  }) =>
+      delegate.onPageChanged(currentIndex: currentIndex, videoUrls: videoUrls);
 }

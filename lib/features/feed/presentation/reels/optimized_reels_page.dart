@@ -4,6 +4,7 @@ import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -69,9 +70,11 @@ class OptimizedReelsPage extends HookConsumerWidget {
   ) {
     useEffect(
       () {
-        debugPrint(
-          'ReelsPage: _useInitialPreload effect - hasValue=${reelsFeed.hasValue}, isVisible=$isVisible',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            'ReelsPage: _useInitialPreload effect — hasValue=${reelsFeed.hasValue}, isVisible=$isVisible',
+          );
+        }
         if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
           final entries = reelsFeed.value!;
 
@@ -104,12 +107,16 @@ class OptimizedReelsPage extends HookConsumerWidget {
           // Play current video when becoming visible
           final index = currentIndex.value.clamp(0, entries.length - 1);
           final link = entries[index].link;
-          debugPrint(
-              'ReelsPage: Visibility ON - playing video at index $index');
+          if (kDebugMode) {
+            debugPrint(
+                'ReelsPage: Visibility ON — playing video at index $index');
+          }
           videoManager.playVideo(link);
         } else {
           // Pause all when leaving (keep cached for faster resume)
-          debugPrint('ReelsPage: Visibility OFF - pausing all');
+          if (kDebugMode) {
+            debugPrint('ReelsPage: Visibility OFF — pausing all');
+          }
           videoManager.pauseAll();
         }
         return null;
