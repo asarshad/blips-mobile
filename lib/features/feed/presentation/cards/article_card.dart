@@ -7,10 +7,16 @@ import 'package:url_launcher/url_launcher.dart';
 /// Card widget for displaying article feed entries.
 /// Includes media preview, metadata, and action buttons.
 class ArticleCard extends HookWidget {
-  const ArticleCard({super.key, required this.entry, this.isVisible = true});
+  const ArticleCard({
+    super.key,
+    required this.entry,
+    this.isVisible = true,
+    this.isNewSinceLastSeen = false,
+  });
 
   final ArticleFeedEntry entry;
   final bool isVisible;
+  final bool isNewSinceLastSeen;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +44,7 @@ class ArticleCard extends HookWidget {
             publishedAt: entry.publishedAt,
             addedAt: entry.addedAt,
             tier: entry.freshnessTier,
+            isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: '${entry.readTime} min read',
           onTap: () => _handleTap(showBubbles),

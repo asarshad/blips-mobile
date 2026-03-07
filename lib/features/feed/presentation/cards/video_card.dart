@@ -22,10 +22,12 @@ class VideoCard extends HookConsumerWidget {
     super.key,
     required this.entry,
     this.isVisible = true,
+    this.isNewSinceLastSeen = false,
   });
 
   final VideoFeedEntry entry;
   final bool isVisible;
+  final bool isNewSinceLastSeen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,10 +40,12 @@ class VideoCard extends HookConsumerWidget {
 
     // Listen to controller changes to update UI
 
-    final isPlayerReady = playerState == YTPlayerState.ready ||
+    final isPlayerReady =
+        playerState == YTPlayerState.ready ||
         playerState == YTPlayerState.playing ||
         playerState == YTPlayerState.paused;
-    final isLoading = playerState == YTPlayerState.loading ||
+    final isLoading =
+        playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
 
     // Resume video when app returns to foreground (Videos tab lifecycle fix).
@@ -94,6 +98,7 @@ class VideoCard extends HookConsumerWidget {
             publishedAt: entry.publishedAt,
             addedAt: entry.addedAt,
             tier: entry.freshnessTier,
+            isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: '${entry.readTime} min watch',
           onTap: () => _handleTap(
@@ -149,8 +154,9 @@ class VideoCard extends HookConsumerWidget {
   }
 
   Future<void> _shareVideo(BuildContext context) async {
-    final dateLabel =
-        DateFormat('MMM d, yyyy').format(entry.publishedAt.toLocal());
+    final dateLabel = DateFormat(
+      'MMM d, yyyy',
+    ).format(entry.publishedAt.toLocal());
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
 
     await ShareService.instance.shareVideo(
@@ -272,9 +278,7 @@ class _VideoMedia extends StatelessWidget {
 
           // Loading indicator - show when loading (with or without controller)
           if (isLoading)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
         ],
       ),
     );

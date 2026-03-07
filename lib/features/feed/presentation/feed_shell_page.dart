@@ -137,7 +137,9 @@ class FeedShellPage extends HookConsumerWidget {
 
   /// Preload first 5 reels in background for instant playback.
   void _preloadReels(
-      List<ReelFeedEntry> reels, YoutubePlayerManagerBase manager) {
+    List<ReelFeedEntry> reels,
+    YoutubePlayerManagerBase manager,
+  ) {
     if (reels.isEmpty) return;
 
     // Preload first 5 reels in background
@@ -257,10 +259,12 @@ class FeedShellPage extends HookConsumerWidget {
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
         builder: (entry, isCurrentPage) {
+          final feedNotifier = ref.read(paginatedFeedProvider.notifier);
           if (entry is AdFeedEntry) return AdCard(entry: entry);
           return ArticleCard(
             entry: entry as ArticleFeedEntry,
             isVisible: currentIndex.value == 0 && isCurrentPage,
+            isNewSinceLastSeen: feedNotifier.isEntryNewSinceLastSeen(entry.id),
           );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
@@ -274,10 +278,12 @@ class FeedShellPage extends HookConsumerWidget {
         emptyLabel: 'Videos are warming up.',
         containsVideos: true,
         builder: (entry, isCurrentPage) {
+          final feedNotifier = ref.read(paginatedFeedProvider.notifier);
           if (entry is AdFeedEntry) return AdCard(entry: entry);
           return VideoCard(
             entry: entry as VideoFeedEntry,
             isVisible: currentIndex.value == 1 && isCurrentPage,
+            isNewSinceLastSeen: feedNotifier.isEntryNewSinceLastSeen(entry.id),
           );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
@@ -297,11 +303,7 @@ class FeedShellPage extends HookConsumerWidget {
       controller: pageController,
       onPageChanged: (index) => currentIndex.value = index,
       children: allTabs
-          .map(
-            (tab) => _KeepAliveWrapper(
-              child: ErrorBoundary(child: tab),
-            ),
-          )
+          .map((tab) => _KeepAliveWrapper(child: ErrorBoundary(child: tab)))
           .toList(),
     );
   }

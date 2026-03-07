@@ -9,6 +9,12 @@ abstract interface class FeedCacheInterface {
 
   Future<void> cacheFeed(List<FeedEntry> entries);
 
+  /// Last timestamp when the user viewed the main feed.
+  Future<DateTime?> getFeedLastSeenAt();
+
+  /// Persist the timestamp for "new since last seen" UX.
+  Future<void> setFeedLastSeenAt(DateTime lastSeenAt);
+
   Future<List<ReelFeedEntry>> getCachedReels({int limit = 50});
 
   Future<void> cacheReels(List<ReelFeedEntry> reels);

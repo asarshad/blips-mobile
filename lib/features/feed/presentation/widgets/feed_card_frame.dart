@@ -1,5 +1,6 @@
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/freshness_label.dart';
 import 'package:flutter/material.dart';
 
 /// Information about content freshness for display.
@@ -8,11 +9,13 @@ class FreshnessInfo {
     required this.publishedAt,
     this.addedAt,
     this.tier = FreshnessTier.fresh,
+    this.isNewSinceLastSeen = false,
   });
 
   final DateTime publishedAt;
   final DateTime? addedAt;
   final FreshnessTier tier;
+  final bool isNewSinceLastSeen;
 }
 
 /// Shared card frame used by article and video cards.
@@ -162,10 +165,7 @@ class _AspectRatioLayout extends StatelessWidget {
 /// Layout for flex-based media (e.g. article images with BoxFit.cover).
 /// Media = 39% of card height; content = 61%.
 class _FlexLayout extends StatelessWidget {
-  const _FlexLayout({
-    required this.media,
-    required this.contentSection,
-  });
+  const _FlexLayout({required this.media, required this.contentSection});
 
   final Widget media;
   final Widget contentSection;
@@ -351,11 +351,7 @@ class _Summary extends StatelessWidget {
       shaderCallback: (bounds) => LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Colors.white,
-          Colors.white,
-          Colors.white.withValues(alpha: 0),
-        ],
+        colors: [Colors.white, Colors.white, Colors.white.withValues(alpha: 0)],
         stops: const [0.0, 0.8, 1.0],
       ).createShader(bounds),
       blendMode: BlendMode.dstIn,
@@ -398,18 +394,19 @@ class _Footer extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Icon(Icons.calendar_today_outlined,
-                  size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.calendar_today_outlined,
+                size: AppSizes.iconXs,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: AppSpacing.xs),
               if (freshnessInfo != null)
                 Flexible(
-                  child: Text(
-                    _formatPublishedDate(freshnessInfo!.publishedAt),
-                    style: textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                  child: FreshnessLabel(
+                    publishedAt: freshnessInfo!.publishedAt,
+                    addedAt: freshnessInfo!.addedAt,
+                    freshnessTier: freshnessInfo!.tier,
+                    isNewSinceLastSeen: freshnessInfo!.isNewSinceLastSeen,
                   ),
                 )
               else if (date != null)
@@ -424,8 +421,11 @@ class _Footer extends StatelessWidget {
                   ),
                 ),
               const SizedBox(width: AppSpacing.md),
-              Icon(Icons.access_time,
-                  size: AppSizes.iconXs, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.access_time,
+                size: AppSizes.iconXs,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: AppSpacing.xs),
               Text(
                 readTime,
@@ -439,23 +439,6 @@ class _Footer extends StatelessWidget {
         if (showActions) _ChatButton(onChat: onChat, colorScheme: colorScheme),
       ],
     );
-  }
-
-  /// Formats the published date as a readable string.
-  String _formatPublishedDate(DateTime publishedAt) {
-    final now = DateTime.now();
-    final diff = now.difference(publishedAt);
-
-    // Anything within 24 hours (including slightly future due to UTC offset)
-    if (diff.inHours.abs() < 24) {
-      return 'Today';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
-    } else if (diff.inDays < 30) {
-      return '${diff.inDays ~/ 7}w ago';
-    } else {
-      return '${diff.inDays ~/ 30}mo ago';
-    }
   }
 }
 
@@ -536,8 +519,11 @@ class _ActionIcon extends StatelessWidget {
       customBorder: const CircleBorder(),
       child: Padding(
         padding: AppSpacing.allXs,
-        child: Icon(icon,
-            color: colorScheme.onSurfaceVariant, size: AppSizes.iconSm),
+        child: Icon(
+          icon,
+          color: colorScheme.onSurfaceVariant,
+          size: AppSizes.iconSm,
+        ),
       ),
     );
   }

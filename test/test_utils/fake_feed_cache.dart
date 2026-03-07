@@ -5,11 +5,15 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 final class FakeFeedCache implements FeedCacheInterface {
   List<FeedEntry> _feed = const [];
   List<ReelFeedEntry> _reels = const [];
+  DateTime? _feedLastSeenAt;
 
   @override
   Future<void> cacheFeed(List<FeedEntry> entries) async {
     _feed = List<FeedEntry>.from(entries);
   }
+
+  @override
+  Future<DateTime?> getFeedLastSeenAt() async => _feedLastSeenAt;
 
   @override
   Future<List<FeedEntry>> getCachedFeed({
@@ -23,6 +27,11 @@ final class FakeFeedCache implements FeedCacheInterface {
   @override
   Future<void> cacheReels(List<ReelFeedEntry> reels) async {
     _reels = List<ReelFeedEntry>.from(reels);
+  }
+
+  @override
+  Future<void> setFeedLastSeenAt(DateTime lastSeenAt) async {
+    _feedLastSeenAt = lastSeenAt;
   }
 
   @override
