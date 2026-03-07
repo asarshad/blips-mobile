@@ -9,6 +9,7 @@ import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/domain/feed_freshness.dart';
+import 'package:blips_mobile/features/feed/domain/feed_ordering.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Provides a singleton [FeedRepository].
@@ -159,53 +160,26 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       final currentList = state.valueOrNull;
       if (currentList == null || currentList.isEmpty) {
         // No existing data, just replace
+        _page = 1;
+        _hasMore = true;
         state = AsyncValue.data(freshItems);
         _updateNewSinceLastSeen(freshItems);
         return;
       }
 
-      // Find the ID of the currently viewed item
-      final currentItem = _currentViewIndex < currentList.length
-          ? currentList[_currentViewIndex]
-          : null;
-
-      if (currentItem == null) {
-        // No current item, just replace
-        state = AsyncValue.data(freshItems);
-        _updateNewSinceLastSeen(freshItems);
-        return;
-      }
-
-      // Check if current item exists in fresh data
-      final freshIndex = freshItems.indexWhere(
-        (item) => item.id == currentItem.id,
+      final merged = mergeFeedWithStableOrdering(
+        currentItems: currentList,
+        freshItems: freshItems,
+      );
+      logger.debug(
+        'Feed refresh merged with stable ordering (current_index=$_currentViewIndex)',
+        category: LogCategory.app,
       );
 
-      if (freshIndex >= 0) {
-        // Current item exists in fresh data - use fresh list
-        // The UI should maintain scroll position based on index
-        _page = 1;
-        _hasMore = true;
-        state = AsyncValue.data(freshItems);
-        _updateNewSinceLastSeen(freshItems);
-      } else {
-        // Current item not in fresh data - merge lists
-        // Keep items from current position onwards, prepend new items
-        final itemsBeforeCurrent = freshItems;
-        final itemsFromCurrent = currentList.sublist(_currentViewIndex);
-
-        // Deduplicate: remove from fresh any items that exist in itemsFromCurrent
-        final currentIds = itemsFromCurrent.map((e) => e.id).toSet();
-        final uniqueFresh = itemsBeforeCurrent
-            .where((item) => !currentIds.contains(item.id))
-            .toList();
-
-        final merged = [...uniqueFresh, ...itemsFromCurrent];
-        _page = 1;
-        _hasMore = true;
-        state = AsyncValue.data(merged);
-        _updateNewSinceLastSeen(merged);
-      }
+      _page = 1;
+      _hasMore = merged.isNotEmpty;
+      state = AsyncValue.data(merged);
+      _updateNewSinceLastSeen(merged);
     } catch (e, st) {
       // Background refresh failed - keep showing cached data
       logger.warning(
