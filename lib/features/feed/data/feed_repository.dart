@@ -1,6 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
-import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
 import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -9,9 +8,16 @@ import 'package:dio/dio.dart';
 /// Repository responsible for loading feed items from the backend.
 class FeedRepository {
   /// Creates the repository with the provided API client.
-  const FeedRepository(this._api);
+  FeedRepository(this._api);
 
   final BackendApiClient _api;
+  static const String _sessionPlaylistPath = '/session/playlist';
+
+  // Session snapshot state for cursor-based continuation.
+  String? _articleSessionId;
+  int? _articleCursor;
+  String? _videoSessionId;
+  int? _videoCursor;
 
   /// Fetches both recent articles and videos, merging them into one list.
   ///
@@ -27,36 +33,19 @@ class FeedRepository {
     int page = 1,
   }) async {
     try {
-      final articlesFuture = _api.get(
-        '/articles/recent',
-        queryParameters: {
-          'limit': articleLimit,
-          'page': page,
-        },
-      );
-      final videosFuture = _api.get(
-        '/videos/recent',
-        queryParameters: {
-          'limit': videoLimit,
-          'page': page,
-        },
-      );
+      if (page <= 1) {
+        _resetSessionSnapshots();
+      }
 
-      final responses = await Future.wait([articlesFuture, videosFuture]);
-
-      // Parse articles — may contain injected AD items from the backend mixer
-      final articlesJson =
-          responses[0]['articles'] as List<dynamic>? ?? const [];
-      final articleItems = _parseMixedList(
-        articlesJson.cast<Map<String, dynamic>>(),
-        (json) => ArticleDto.fromJson(json).toDomain(),
+      final articleItems = await _fetchSessionPlaylist(
+        type: 'ARTICLE',
+        page: page,
+        size: articleLimit,
       );
-
-      // Parse videos — may also contain injected AD items
-      final videosJson = responses[1]['videos'] as List<dynamic>? ?? const [];
-      final videoItems = _parseMixedList(
-        videosJson.cast<Map<String, dynamic>>(),
-        (json) => VideoDto.fromJson(json).toDomain(),
+      final videoItems = await _fetchSessionPlaylist(
+        type: 'VIDEO',
+        page: page,
+        size: videoLimit,
       );
 
       // Separate organic from ads for proper sorting
@@ -86,6 +75,159 @@ class FeedRepository {
     } catch (e, stack) {
       throw DataException.fromParseError(e, stack);
     }
+  }
+
+  Future<List<FeedEntry>> _fetchSessionPlaylist({
+    required String type,
+    required int page,
+    required int size,
+  }) async {
+    final query = <String, dynamic>{
+      'type': type,
+      'size': size,
+      if (page > 1) ..._sessionContinuationQuery(type),
+    };
+
+    final response = await _api.get(
+      _sessionPlaylistPath,
+      queryParameters: query,
+    );
+    final items = (response['items'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+
+    _captureSessionState(
+      type: type,
+      sessionId: response['session_id'] as String?,
+      cursor: response['cursor'] as int?,
+    );
+
+    final parsed = _parsePlaylistItems(items);
+    if (parsed.isNotEmpty) {
+      return parsed;
+    }
+
+    // Backward-compatible fallback for environments without /session/playlist support.
+    return _fetchLegacyFeed(type: type, page: page, size: size);
+  }
+
+  Map<String, dynamic> _sessionContinuationQuery(String type) {
+    final sessionId = type == 'ARTICLE' ? _articleSessionId : _videoSessionId;
+    final cursor = type == 'ARTICLE' ? _articleCursor : _videoCursor;
+    return {
+      if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
+      if (cursor != null) 'cursor': cursor,
+    };
+  }
+
+  void _captureSessionState({
+    required String type,
+    String? sessionId,
+    int? cursor,
+  }) {
+    if (type == 'ARTICLE') {
+      _articleSessionId = sessionId ?? _articleSessionId;
+      _articleCursor = cursor;
+      return;
+    }
+    _videoSessionId = sessionId ?? _videoSessionId;
+    _videoCursor = cursor;
+  }
+
+  void _resetSessionSnapshots() {
+    _articleSessionId = null;
+    _articleCursor = null;
+    _videoSessionId = null;
+    _videoCursor = null;
+  }
+
+  List<FeedEntry> _parsePlaylistItems(List<Map<String, dynamic>> items) {
+    final parsed = <FeedEntry>[];
+    for (final item in items) {
+      final itemType = (item['type'] as String? ?? '').toUpperCase();
+      if (itemType == 'ARTICLE') {
+        final dto = _playlistArticleToDto(item);
+        parsed.add(dto.toDomain());
+      } else if (itemType == 'VIDEO') {
+        final dto = _playlistVideoToDto(item);
+        parsed.add(dto.toDomain());
+      } else if (itemType == 'AD' && item['item_type'] == 'AD') {
+        parsed.add(AdFeedEntry.fromJson(item));
+      }
+    }
+    return parsed;
+  }
+
+  ArticleDto _playlistArticleToDto(Map<String, dynamic> item) {
+    final topics = (item['topics'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    return ArticleDto.fromJson({
+      'id': item['id'],
+      'title': item['title'],
+      'source_url': item['source_url'] ?? '',
+      'summary': item['summary'],
+      'image_url': item['image_url'],
+      'published_at': item['published_at'],
+      'created_at': item['published_at'],
+      'published_date': item['published_at'],
+      'read_time_minutes': item['read_time_minutes'],
+      'tags': topics.map((topic) => {'name': topic}).toList(growable: false),
+      'conversation_starters': item['conversation_starters'],
+    });
+  }
+
+  VideoDto _playlistVideoToDto(Map<String, dynamic> item) {
+    final topics = (item['topics'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    return VideoDto.fromJson({
+      'id': item['id'],
+      'title': item['title'],
+      'video_url': item['video_url'] ?? item['source_url'] ?? '',
+      'source_url': item['source_url'] ?? '',
+      'summary': item['summary'],
+      'thumbnail_url': item['image_url'],
+      'source': item['source'],
+      'category': topics.isNotEmpty ? topics.first : null,
+      'duration_seconds': item['duration'],
+      'created_at': item['published_at'],
+      'published_at': item['published_at'],
+      'conversation_starters': item['conversation_starters'],
+    });
+  }
+
+  Future<List<FeedEntry>> _fetchLegacyFeed({
+    required String type,
+    required int page,
+    required int size,
+  }) async {
+    if (type == 'ARTICLE') {
+      final response = await _api.get(
+        '/articles/recent',
+        queryParameters: {
+          'limit': size,
+          'page': page,
+        },
+      );
+      final articlesJson = response['articles'] as List<dynamic>? ?? const [];
+      return _parseMixedList(
+        articlesJson.cast<Map<String, dynamic>>(),
+        (json) => ArticleDto.fromJson(json).toDomain(),
+      );
+    }
+
+    final response = await _api.get(
+      '/videos/recent',
+      queryParameters: {
+        'limit': size,
+        'page': page,
+      },
+    );
+    final videosJson = response['videos'] as List<dynamic>? ?? const [];
+    return _parseMixedList(
+      videosJson.cast<Map<String, dynamic>>(),
+      (json) => VideoDto.fromJson(json).toDomain(),
+    );
   }
 
   /// Fetches recent reels (short videos).
