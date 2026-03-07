@@ -13,6 +13,7 @@ class FreshnessLabel extends StatelessWidget {
     required this.publishedAt,
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
+    this.isNewSinceLastSeen = false,
     this.showTierIndicator = true,
   });
 
@@ -25,6 +26,9 @@ class FreshnessLabel extends StatelessWidget {
   /// The freshness tier for this content.
   final FreshnessTier freshnessTier;
 
+  /// Whether the entry was added after the user's last seen timestamp.
+  final bool isNewSinceLastSeen;
+
   /// Whether to show tier indicator badge for non-fresh content.
   final bool showTierIndicator;
 
@@ -36,12 +40,17 @@ class FreshnessLabel extends StatelessWidget {
 
     final now = DateTime.now();
     final publishedAge = _formatAge(now.difference(publishedAt));
-    final addedAge =
-        addedAt != null ? _formatAge(now.difference(addedAt!)) : null;
+    final addedAge = addedAt != null
+        ? _formatAge(now.difference(addedAt!))
+        : null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (isNewSinceLastSeen) ...[
+          _NewBadge(colorScheme: colorScheme),
+          const SizedBox(width: AppSpacing.sm),
+        ],
         // Tier indicator badge (only for non-fresh content)
         if (showTierIndicator && freshnessTier != FreshnessTier.fresh) ...[
           _TierBadge(tier: freshnessTier, colorScheme: colorScheme),
@@ -93,6 +102,36 @@ class FreshnessLabel extends StatelessWidget {
 
     final months = days ~/ 30;
     return '${months}mo ago';
+  }
+}
+
+class _NewBadge extends StatelessWidget {
+  const _NewBadge({required this.colorScheme});
+
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Text(
+        'New',
+        style: textTheme.labelSmall?.copyWith(
+          color: colorScheme.primary,
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+        ),
+      ),
+    );
   }
 }
 

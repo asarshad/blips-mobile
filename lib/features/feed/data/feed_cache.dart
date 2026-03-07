@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 class FeedCache implements FeedCacheInterface {
   static final FeedCache instance = FeedCache._init();
   static Database? _database;
+  static const String _feedLastSeenAtKey = 'feed_last_seen_at';
 
   FeedCache._init();
 
@@ -24,7 +25,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -85,36 +86,62 @@ class FeedCache implements FeedCacheInterface {
 
     // Index for faster sorting
     await db.execute(
-        'CREATE INDEX idx_articles_published ON articles(published_at DESC)');
+      'CREATE INDEX idx_articles_published ON articles(published_at DESC)',
+    );
     await db.execute(
-        'CREATE INDEX idx_videos_published ON videos(published_at DESC)');
+      'CREATE INDEX idx_videos_published ON videos(published_at DESC)',
+    );
     await db.execute(
-        'CREATE INDEX idx_reels_published ON reels(published_at DESC)');
+      'CREATE INDEX idx_reels_published ON reels(published_at DESC)',
+    );
 
     // Index for cache cleanup queries
     await db.execute('CREATE INDEX idx_articles_cached ON articles(cached_at)');
     await db.execute('CREATE INDEX idx_videos_cached ON videos(cached_at)');
     await db.execute('CREATE INDEX idx_reels_cached ON reels(cached_at)');
+
+    // Metadata key/value store.
+    await db.execute('''
+      CREATE TABLE cache_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       // v2: Add conversation_starters column to all tables
       await db.execute(
-          'ALTER TABLE articles ADD COLUMN conversation_starters TEXT');
-      await db
-          .execute('ALTER TABLE videos ADD COLUMN conversation_starters TEXT');
-      await db
-          .execute('ALTER TABLE reels ADD COLUMN conversation_starters TEXT');
+        'ALTER TABLE articles ADD COLUMN conversation_starters TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE videos ADD COLUMN conversation_starters TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE reels ADD COLUMN conversation_starters TEXT',
+      );
     }
     if (oldVersion < 3) {
       // v3: Add cached_at indexes for faster cleanup queries
       await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)');
+        'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)',
+      );
       await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_videos_cached ON videos(cached_at)');
+        'CREATE INDEX IF NOT EXISTS idx_videos_cached ON videos(cached_at)',
+      );
       await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_reels_cached ON reels(cached_at)');
+        'CREATE INDEX IF NOT EXISTS idx_reels_cached ON reels(cached_at)',
+      );
+    }
+    if (oldVersion < 4) {
+      // v4: Add cache metadata store for feed UX flags.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cache_meta (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
     }
   }
 
@@ -140,26 +167,22 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final article in articles) {
-      batch.insert(
-        'articles',
-        {
-          'id': article.id,
-          'title': article.title,
-          'summary': article.summary,
-          'source': article.source,
-          'published_at': article.publishedAt.toIso8601String(),
-          'url': article.url,
-          'image_url': article.imageUrl,
-          'category': article.category,
-          'read_time': article.readTime,
-          'tags': jsonEncode(article.tags),
-          'conversation_starters': article.conversationStarters.isNotEmpty
-              ? jsonEncode(article.conversationStarters)
-              : null,
-          'cached_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('articles', {
+        'id': article.id,
+        'title': article.title,
+        'summary': article.summary,
+        'source': article.source,
+        'published_at': article.publishedAt.toIso8601String(),
+        'url': article.url,
+        'image_url': article.imageUrl,
+        'category': article.category,
+        'read_time': article.readTime,
+        'tags': jsonEncode(article.tags),
+        'conversation_starters': article.conversationStarters.isNotEmpty
+            ? jsonEncode(article.conversationStarters)
+            : null,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -204,26 +227,22 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final video in videos) {
-      batch.insert(
-        'videos',
-        {
-          'id': video.id,
-          'title': video.title,
-          'summary': video.summary,
-          'video_url': video.videoUrl,
-          'link': video.link,
-          'source': video.source,
-          'category': video.category,
-          'published_at': video.publishedAt.toIso8601String(),
-          'read_time': video.readTime,
-          'thumbnail_url': video.thumbnailUrl,
-          'conversation_starters': video.conversationStarters.isNotEmpty
-              ? jsonEncode(video.conversationStarters)
-              : null,
-          'cached_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('videos', {
+        'id': video.id,
+        'title': video.title,
+        'summary': video.summary,
+        'video_url': video.videoUrl,
+        'link': video.link,
+        'source': video.source,
+        'category': video.category,
+        'published_at': video.publishedAt.toIso8601String(),
+        'read_time': video.readTime,
+        'thumbnail_url': video.thumbnailUrl,
+        'conversation_starters': video.conversationStarters.isNotEmpty
+            ? jsonEncode(video.conversationStarters)
+            : null,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -266,24 +285,20 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final reel in reels) {
-      batch.insert(
-        'reels',
-        {
-          'id': reel.id,
-          'title': reel.title,
-          'summary': reel.summary,
-          'video_url': reel.videoUrl,
-          'link': reel.link,
-          'source': reel.source,
-          'published_at': reel.publishedAt.toIso8601String(),
-          'thumbnail_url': reel.thumbnailUrl,
-          'conversation_starters': reel.conversationStarters.isNotEmpty
-              ? jsonEncode(reel.conversationStarters)
-              : null,
-          'cached_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('reels', {
+        'id': reel.id,
+        'title': reel.title,
+        'summary': reel.summary,
+        'video_url': reel.videoUrl,
+        'link': reel.link,
+        'source': reel.source,
+        'published_at': reel.publishedAt.toIso8601String(),
+        'thumbnail_url': reel.thumbnailUrl,
+        'conversation_starters': reel.conversationStarters.isNotEmpty
+            ? jsonEncode(reel.conversationStarters)
+            : null,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -344,6 +359,31 @@ class FeedCache implements FeedCacheInterface {
     ]);
   }
 
+  @override
+  Future<DateTime?> getFeedLastSeenAt() async {
+    final db = await database;
+    final rows = await db.query(
+      'cache_meta',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [_feedLastSeenAtKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final raw = rows.first['value'] as String?;
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  @override
+  Future<void> setFeedLastSeenAt(DateTime lastSeenAt) async {
+    final db = await database;
+    await db.insert('cache_meta', {
+      'key': _feedLastSeenAtKey,
+      'value': lastSeenAt.toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Cache management
   // ─────────────────────────────────────────────────────────────────────────
@@ -370,17 +410,20 @@ class FeedCache implements FeedCacheInterface {
   Future<bool> hasCachedFeed() async {
     final db = await database;
     final articleCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM articles'));
-    final videoCount =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM videos'));
+      await db.rawQuery('SELECT COUNT(*) FROM articles'),
+    );
+    final videoCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM videos'),
+    );
     return (articleCount ?? 0) > 0 || (videoCount ?? 0) > 0;
   }
 
   /// Returns true if there are any cached reels.
   Future<bool> hasCachedReels() async {
     final db = await database;
-    final count =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM reels'));
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM reels'),
+    );
     return (count ?? 0) > 0;
   }
 }
