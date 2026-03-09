@@ -35,18 +35,14 @@ class VideoCard extends HookConsumerWidget {
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
 
     final videoManager = ref.watch(youtubePlayerManagerProvider);
-    final controller = videoManager.getController(entry.link);
-    final playerState = videoManager.getState(entry.link);
+    final playbackUrl = _resolvePlaybackUrl(videoManager);
+    final controller = videoManager.getController(playbackUrl);
+    final playerState = videoManager.getState(playbackUrl);
+    final playerError = videoManager.getError(playbackUrl);
 
-    // Listen to controller changes to update UI
-
-    final isPlayerReady =
-        playerState == YTPlayerState.ready ||
-        playerState == YTPlayerState.playing ||
-        playerState == YTPlayerState.paused;
-    final isLoading =
-        playerState == YTPlayerState.loading ||
+    final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
+    final isError = playerState == YTPlayerState.error;
 
     // Resume video when app returns to foreground (Videos tab lifecycle fix).
     // The manager's WidgetsBindingObserver handles pause-on-background but
@@ -55,24 +51,24 @@ class VideoCard extends HookConsumerWidget {
     useEffect(() {
       if (!isVisible) return null;
       final listener = AppLifecycleListener(
-        onResume: () => unawaited(videoManager.playVideo(entry.link)),
+        onResume: () => unawaited(videoManager.playVideo(playbackUrl)),
       );
       return listener.dispose;
-    }, [isVisible]);
+    }, [isVisible, playbackUrl]);
 
     // Handle visibility changes
     useEffect(() {
       if (!isVisible) {
-        videoManager.pauseVideo(entry.link);
+        videoManager.pauseVideo(playbackUrl);
         showBubbles.value = false;
       } else {
         // Auto-play when this card becomes the visible current page.
         // isVisible is true only when the Videos tab is active AND this
         // card is the current page in the FeedTab PageView.
-        unawaited(videoManager.playVideo(entry.link));
+        unawaited(videoManager.playVideo(playbackUrl));
       }
       return null;
-    }, [isVisible]);
+    }, [isVisible, playbackUrl]);
 
     // Note: Don't release video resources on dispose - let the pool manager handle cleanup.
     // Releasing here causes "IOSInAppWebViewController used after disposed" errors
@@ -87,8 +83,9 @@ class VideoCard extends HookConsumerWidget {
           media: _VideoMedia(
             thumbnailUrl: preview,
             controller: controller,
-            isPlayerReady: isPlayerReady,
             isLoading: isLoading,
+            isError: isError,
+            playerError: playerError,
           ),
           category: entry.category,
           title: entry.title,
@@ -105,6 +102,8 @@ class VideoCard extends HookConsumerWidget {
             showBubbles: showBubbles,
             controller: controller,
             videoManager: videoManager,
+            playbackUrl: playbackUrl,
+            playerState: playerState,
           ),
           onOpenLink: () => _openInBrowser(entry.link),
           onChat: () => showBubbles.value = !showBubbles.value,
@@ -128,22 +127,38 @@ class VideoCard extends HookConsumerWidget {
     required ValueNotifier<bool> showBubbles,
     required YoutubePlayerController? controller,
     required YoutubePlayerManagerBase videoManager,
+    required String playbackUrl,
+    required YTPlayerState playerState,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
       return;
     }
 
+    if (playerState == YTPlayerState.error) {
+      await videoManager.retryVideo(playbackUrl);
+      return;
+    }
+
     if (controller != null) {
       if (controller.value.playerState == PlayerState.playing) {
-        videoManager.pauseVideo(entry.link);
+        videoManager.pauseVideo(playbackUrl);
       } else {
-        videoManager.playVideo(entry.link);
+        videoManager.playVideo(playbackUrl);
       }
     } else {
       // No controller yet, start loading and playing
-      await videoManager.playVideo(entry.link);
+      await videoManager.playVideo(playbackUrl);
     }
+  }
+
+  String _resolvePlaybackUrl(YoutubePlayerManagerBase videoManager) {
+    final preferred = entry.videoUrl.trim();
+    if (preferred.isNotEmpty &&
+        videoManager.extractVideoId(preferred) != null) {
+      return preferred;
+    }
+    return entry.link.trim();
   }
 
   Future<void> _openInBrowser(String url) async {
@@ -177,18 +192,20 @@ class _VideoMedia extends StatelessWidget {
   const _VideoMedia({
     required this.thumbnailUrl,
     required this.controller,
-    required this.isPlayerReady,
     required this.isLoading,
+    required this.isError,
+    required this.playerError,
   });
 
   final String thumbnailUrl;
   final YoutubePlayerController? controller;
-  final bool isPlayerReady;
   final bool isLoading;
+  final bool isError;
+  final YTPlayerError? playerError;
 
-  /// Checks if controller is valid and in a ready/playable state.
+  /// Checks if controller exists and can render the underlying WebView.
   bool get _isControllerValid {
-    return controller != null && isPlayerReady;
+    return controller != null;
   }
 
   /// Determines if play button should be shown.
@@ -199,7 +216,7 @@ class _VideoMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showPlayer = _isControllerValid && isPlayerReady;
+    final showPlayer = _isControllerValid;
 
     return ClipRect(
       clipBehavior: Clip.hardEdge,
@@ -273,13 +290,70 @@ class _VideoMedia extends StatelessWidget {
             ),
           ),
 
+          if (isError) _VideoErrorOverlay(error: playerError),
+
           // Play button overlay - show when no valid player or not playing, but not when loading
-          if (!isLoading && _shouldShowPlayButton(showPlayer)) _PlayButton(),
+          if (!isLoading && !isError && _shouldShowPlayButton(showPlayer))
+            _PlayButton(),
 
           // Loading indicator - show when loading (with or without controller)
           if (isLoading)
             const Center(child: CircularProgressIndicator(color: Colors.white)),
         ],
+      ),
+    );
+  }
+}
+
+class _VideoErrorOverlay extends StatelessWidget {
+  const _VideoErrorOverlay({required this.error});
+
+  final YTPlayerError? error;
+
+  @override
+  Widget build(BuildContext context) {
+    var title = 'Playback failed';
+    var hint = 'Tap to retry';
+
+    if (error != null) {
+      if (error!.isPlaybackDisabled) {
+        title = 'Playback disabled';
+        hint = 'Video owner disabled embedding';
+      } else if (error!.isVideoUnavailable) {
+        title = 'Video unavailable';
+        hint = 'Video may be private or removed';
+      }
+    }
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 28),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              hint,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

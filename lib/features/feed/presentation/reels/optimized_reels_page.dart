@@ -126,7 +126,11 @@ class OptimizedReelsPage extends HookConsumerWidget {
             debugPrint(
                 'ReelsPage: Visibility ON — playing video at index $index');
           }
-          videoManager.onPageChanged(currentIndex: index, videoUrls: urls);
+          videoManager.onPageChanged(
+            currentIndex: index,
+            videoUrls: urls,
+            preloadAhead: MemoryConfig.reelPreloadCount,
+          );
         } else {
           // Pause all when leaving (keep cached for faster resume)
           if (kDebugMode) {
@@ -216,6 +220,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
         videoManager.onPageChanged(
           currentIndex: index,
           videoUrls: urls,
+          preloadAhead: MemoryConfig.reelPreloadCount,
         );
 
         // Pagination: Load more when close to end

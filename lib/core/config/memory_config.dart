@@ -24,6 +24,11 @@ class MemoryConfig {
   /// Higher values provide smoother scrolling but use more memory.
   static const int reelPreloadCount = 1;
 
+  /// Number of long-form videos to preload ahead of current position.
+  ///
+  /// Videos generally tolerate a slightly larger ahead window than reels.
+  static const int videoPreloadCount = 2;
+
   /// Number of articles to preload ahead when scrolling.
   static const int articlePreloadCount = 3;
 

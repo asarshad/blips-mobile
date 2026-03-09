@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -77,9 +78,16 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     final videos = entries.whereType<VideoFeedEntry>().toList();
     if (videos.isEmpty) return;
 
-    videoManager.initController(videos.first.link);
-    if (videos.length > 1) {
-      videoManager.initController(videos[1].link);
+    final preloadUrls = videos
+        .map((entry) => _resolvePlaybackUrl(entry, videoManager))
+        .where((url) => url.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (preloadUrls.isEmpty) return;
+
+    videoManager.initController(preloadUrls.first);
+    if (preloadUrls.length > 1) {
+      videoManager.initController(preloadUrls[1]);
     }
   }
 
@@ -144,24 +152,37 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     final currentEntry = entries[index];
     if (currentEntry is! VideoFeedEntry) return;
 
-    // Build video-only URL list (skip ad entries).
-    final videoUrls = entries
-        .map((e) => e is VideoFeedEntry ? e.link : '')
-        .where((url) => url.isNotEmpty)
-        .toList();
-
-    if (videoUrls.isEmpty) return;
-
-    // Find the position of the current video in the video-only list so
-    // onPageChanged receives a consistent index/videoUrls pair.
-    // Previously `index` (entry-list index) was passed directly, which
-    // was wrong when ad entries shifted the effective position.
-    final videoIndex = videoUrls.indexOf(currentEntry.link);
-    if (videoIndex == -1) return;
+    // Build video-only URL list (skip ad entries) while preserving the exact
+    // current entry position in that filtered list.
+    final videoEntries = entries.whereType<VideoFeedEntry>().toList();
+    final videoUrls = <String>[];
+    var videoIndex = -1;
+    for (final videoEntry in videoEntries) {
+      final playbackUrl = _resolvePlaybackUrl(videoEntry, videoManager);
+      if (playbackUrl.isEmpty) continue;
+      if (videoEntry.id == currentEntry.id) {
+        videoIndex = videoUrls.length;
+      }
+      videoUrls.add(playbackUrl);
+    }
+    if (videoUrls.isEmpty || videoIndex == -1) return;
 
     videoManager.onPageChanged(
       currentIndex: videoIndex,
       videoUrls: videoUrls,
+      preloadAhead: MemoryConfig.videoPreloadCount,
     );
+  }
+
+  String _resolvePlaybackUrl(
+    VideoFeedEntry entry,
+    YoutubePlayerManagerBase videoManager,
+  ) {
+    final preferred = entry.videoUrl.trim();
+    if (preferred.isNotEmpty &&
+        videoManager.extractVideoId(preferred) != null) {
+      return preferred;
+    }
+    return entry.link.trim();
   }
 }

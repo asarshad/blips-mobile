@@ -379,6 +379,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
+    int? preloadAhead,
   }) {
     if (_isDisposed) return;
     if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
@@ -426,20 +427,20 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
       if (_isDisposed || _currentActiveUrl != currentUrl) return;
 
-      var preloadAhead = MemoryConfig.reelPreloadCount;
+      var preloadAheadCount = preloadAhead ?? MemoryConfig.reelPreloadCount;
       final maxAhead = maxControllers > 0 ? maxControllers - 1 : 0;
-      if (preloadAhead < 0) preloadAhead = 0;
-      if (preloadAhead > maxAhead) preloadAhead = maxAhead;
+      if (preloadAheadCount < 0) preloadAheadCount = 0;
+      if (preloadAheadCount > maxAhead) preloadAheadCount = maxAhead;
 
       // Preload next N videos in background (config/pool aware).
-      for (var i = 1; i <= preloadAhead; i++) {
+      for (var i = 1; i <= preloadAheadCount; i++) {
         final nextIndex = currentIndex + i;
         if (nextIndex < videoUrls.length) {
           unawaited(initController(videoUrls[nextIndex]));
         }
       }
 
-      var keepBehind = maxControllers - preloadAhead - 1;
+      var keepBehind = maxControllers - preloadAheadCount - 1;
       if (keepBehind < 0) keepBehind = 0;
 
       // Keep only a bounded history behind current, release older ones.

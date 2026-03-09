@@ -49,9 +49,6 @@ class FeedShellPage extends HookConsumerWidget {
     // Warm reels data in background (controller warm-up is owned by Reels page).
     _useBackgroundReelsWarmup(ref);
 
-    // Preload first videos in background after first frame
-    _useBackgroundVideosPreload(videoFeed, videoManager);
-
     // Pause videos when navigating away from video tabs
     _useVideoPauseOnNavigate(currentIndex.value, videoManager);
 
@@ -129,44 +126,6 @@ class FeedShellPage extends HookConsumerWidget {
       });
       return () => mounted = false;
     }, []);
-  }
-
-  void _useBackgroundVideosPreload(
-    AsyncValue<List<FeedEntry>> videoFeed,
-    YoutubePlayerManagerBase videoManager,
-  ) {
-    useEffect(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.microtask(() {
-          try {
-            final entries = videoFeed.valueOrNull;
-            if (entries == null || entries.isEmpty) return;
-
-            // Only preload actual video entries (skip any ad entries)
-            final videos = entries.whereType<VideoFeedEntry>().toList();
-            if (videos.isEmpty) return;
-
-            // Warm the first 1–2 videos so playback is instant when user enters the tab.
-            videoManager.initController(videos.first.link);
-            if (videos.length > 1) {
-              videoManager.initController(videos[1].link);
-            }
-            logger.debug(
-              'Background preload: First videos queued',
-              category: LogCategory.video,
-            );
-          } catch (e, stack) {
-            logger.warning(
-              'Background videos preload failed',
-              category: LogCategory.video,
-              error: e,
-              stackTrace: stack,
-            );
-          }
-        });
-      });
-      return null;
-    }, [videoFeed.hasValue]);
   }
 
   void _useVideoPauseOnNavigate(

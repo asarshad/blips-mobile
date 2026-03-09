@@ -89,6 +89,7 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
+    int? preloadAhead,
   }) {
     if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
     final currentUrl = videoUrls[currentIndex];

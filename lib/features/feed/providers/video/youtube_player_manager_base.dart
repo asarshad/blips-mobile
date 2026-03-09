@@ -69,5 +69,6 @@ abstract class YoutubePlayerManagerBase extends ChangeNotifier {
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
+    int? preloadAhead,
   });
 }

@@ -51,6 +51,7 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
+    int? preloadAhead,
   }) {}
 
   void setMockState(String url, YTPlayerState state) {
@@ -414,6 +415,11 @@ class _TrackingYoutubePlayerManager extends YoutubePlayerManagerBase {
   void onPageChanged({
     required int currentIndex,
     required List<String> videoUrls,
+    int? preloadAhead,
   }) =>
-      delegate.onPageChanged(currentIndex: currentIndex, videoUrls: videoUrls);
+      delegate.onPageChanged(
+        currentIndex: currentIndex,
+        videoUrls: videoUrls,
+        preloadAhead: preloadAhead,
+      );
 }
