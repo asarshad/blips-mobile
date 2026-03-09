@@ -197,7 +197,9 @@ class FeedShellPage extends HookConsumerWidget {
         unawaited(ref.read(paginatedFeedProvider.notifier).forceRefresh());
         break;
       case 2:
-        unawaited(ref.read(reelsFeedProvider.notifier).forceRefresh());
+        // Keep current page/controller mounted to avoid a brief paused state
+        // after hard refresh; this still fetches fresh data immediately.
+        unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
         break;
       case 3:
         ref.invalidate(chatListProvider);
