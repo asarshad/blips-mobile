@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/error/error_boundary.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
@@ -83,6 +85,11 @@ class FeedShellPage extends HookConsumerWidget {
       bottomNavigationBar: _BottomNavBar(
         currentIndex: currentIndex.value,
         onIndexChanged: (index) {
+          final isRetap = currentIndex.value == index;
+          if (isRetap) {
+            _refreshTabOnRetap(index, ref);
+            return;
+          }
           currentIndex.value = index;
           if (index == 3) {
             // Refresh chat list when entering chat tab
@@ -181,6 +188,24 @@ class FeedShellPage extends HookConsumerWidget {
       }
       return null;
     }, [currentIndex]);
+  }
+
+  void _refreshTabOnRetap(int index, WidgetRef ref) {
+    switch (index) {
+      case 0:
+      case 1:
+        unawaited(ref.read(paginatedFeedProvider.notifier).forceRefresh());
+        break;
+      case 2:
+        unawaited(ref.read(reelsFeedProvider.notifier).forceRefresh());
+        break;
+      case 3:
+        ref.invalidate(chatListProvider);
+        break;
+      case 4:
+        // No-op for settings.
+        break;
+    }
   }
 
   Widget _buildBody({

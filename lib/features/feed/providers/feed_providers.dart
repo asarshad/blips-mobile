@@ -31,8 +31,9 @@ final feedCacheProvider = Provider<FeedCacheInterface>((ref) {
 /// 3. Seamlessly merge new data, preserving user's current position
 class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
   FeedNotifier(this._repository, this._cache)
-    : super(const AsyncValue.loading()) {
+      : super(const AsyncValue.loading()) {
     loadInitial();
+    _startPolling();
   }
 
   final FeedRepository _repository;
@@ -41,8 +42,10 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
   bool _hasMore = true;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
+  Timer? _pollTimer;
   static const int _articleLimit = 15;
   static const int _videoLimit = 10;
+  static const Duration _pollInterval = Duration(seconds: 90);
   DateTime? _lastSeenCutoff;
   Set<int> _newSinceLastSeenIds = <int>{};
 
@@ -251,6 +254,19 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
     await _fetchFromNetwork();
   }
 
+  /// Background refresh without loading spinners or index reset.
+  Future<void> refreshSilently() async {
+    await _refreshInBackground();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
+      if (!mounted) return;
+      _refreshInBackground();
+    });
+  }
+
   Future<void> _loadLastSeenCutoff() async {
     if (_lastSeenCutoff != null) return;
     try {
@@ -276,47 +292,50 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       }
     });
   }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
 }
 
 /// Loads the merged article/video feed for the home experience.
-final paginatedFeedProvider =
-    StateNotifierProvider.autoDispose<
-      FeedNotifier,
-      AsyncValue<List<FeedEntry>>
-    >(
-      (ref) => FeedNotifier(
-        ref.watch(feedRepositoryProvider),
-        ref.watch(feedCacheProvider),
-      ),
-    );
+final paginatedFeedProvider = StateNotifierProvider.autoDispose<FeedNotifier,
+    AsyncValue<List<FeedEntry>>>(
+  (ref) => FeedNotifier(
+    ref.watch(feedRepositoryProvider),
+    ref.watch(feedCacheProvider),
+  ),
+);
 
 /// Filters only article entries from the merged feed.
 final filteredArticleFeedProvider =
     Provider.autoDispose<AsyncValue<List<ArticleFeedEntry>>>((ref) {
-      final feedState = ref.watch(paginatedFeedProvider);
+  final feedState = ref.watch(paginatedFeedProvider);
 
-      return feedState.when(
-        data: (items) => AsyncValue.data(
-          items.whereType<ArticleFeedEntry>().toList(growable: false),
-        ),
-        error: (err, stack) => AsyncValue.error(err, stack),
-        loading: () => const AsyncValue.loading(),
-      );
-    });
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items.whereType<ArticleFeedEntry>().toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
 
 /// Filters only video entries from the merged feed.
 final filteredVideoFeedProvider =
     Provider.autoDispose<AsyncValue<List<VideoFeedEntry>>>((ref) {
-      final feedState = ref.watch(paginatedFeedProvider);
+  final feedState = ref.watch(paginatedFeedProvider);
 
-      return feedState.when(
-        data: (items) => AsyncValue.data(
-          items.whereType<VideoFeedEntry>().toList(growable: false),
-        ),
-        error: (err, stack) => AsyncValue.error(err, stack),
-        loading: () => const AsyncValue.loading(),
-      );
-    });
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items.whereType<VideoFeedEntry>().toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
 
 /// Articles + injected ads for the article tab.
 ///
@@ -324,42 +343,43 @@ final filteredVideoFeedProvider =
 /// (the default) this is identical to [filteredArticleFeedProvider].
 final articleFeedWithAdsProvider =
     Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
-      final feedState = ref.watch(paginatedFeedProvider);
+  final feedState = ref.watch(paginatedFeedProvider);
 
-      return feedState.when(
-        data: (items) => AsyncValue.data(
-          items
-              .where((e) => e is ArticleFeedEntry || e is AdFeedEntry)
-              .toList(growable: false),
-        ),
-        error: (err, stack) => AsyncValue.error(err, stack),
-        loading: () => const AsyncValue.loading(),
-      );
-    });
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items
+          .where((e) => e is ArticleFeedEntry || e is AdFeedEntry)
+          .toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
 
 /// Videos + injected ads for the video tab.
 final videoFeedWithAdsProvider =
     Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
-      final feedState = ref.watch(paginatedFeedProvider);
+  final feedState = ref.watch(paginatedFeedProvider);
 
-      return feedState.when(
-        data: (items) => AsyncValue.data(
-          items
-              .where((e) => e is VideoFeedEntry || e is AdFeedEntry)
-              .toList(growable: false),
-        ),
-        error: (err, stack) => AsyncValue.error(err, stack),
-        loading: () => const AsyncValue.loading(),
-      );
-    });
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      items
+          .where((e) => e is VideoFeedEntry || e is AdFeedEntry)
+          .toList(growable: false),
+    ),
+    error: (err, stack) => AsyncValue.error(err, stack),
+    loading: () => const AsyncValue.loading(),
+  );
+});
 
 /// Manages the paginated state of the reels feed.
 ///
 /// Implements stale-while-revalidate similar to FeedNotifier.
 class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   ReelsNotifier(this._repository, this._cache)
-    : super(const AsyncValue.loading()) {
+      : super(const AsyncValue.loading()) {
     loadInitial();
+    _startPolling();
   }
 
   final FeedRepository _repository;
@@ -368,7 +388,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   bool _hasMore = true;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
+  Timer? _pollTimer;
   static const int _limit = 20;
+  static const Duration _pollInterval = Duration(seconds: 60);
 
   /// Index of the item currently being viewed by the user.
   int _currentViewIndex = 0;
@@ -472,9 +494,8 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       } else {
         final itemsFromCurrent = currentList.sublist(_currentViewIndex);
         final currentIds = itemsFromCurrent.map((e) => e.id).toSet();
-        final uniqueFresh = freshReels
-            .where((item) => !currentIds.contains(item.id))
-            .toList();
+        final uniqueFresh =
+            freshReels.where((item) => !currentIds.contains(item.id)).toList();
 
         final merged = [...uniqueFresh, ...itemsFromCurrent];
         _page = 1;
@@ -543,16 +564,32 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _currentViewIndex = 0;
     await _fetchFromNetwork();
   }
+
+  /// Background refresh without disrupting current playback.
+  Future<void> refreshSilently() async {
+    await _refreshInBackground();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
+      if (!mounted) return;
+      _refreshInBackground();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
 }
 
 /// Loads the reels feed with pagination support.
-final reelsFeedProvider =
-    StateNotifierProvider.autoDispose<
-      ReelsNotifier,
-      AsyncValue<List<ReelFeedEntry>>
-    >(
-      (ref) => ReelsNotifier(
-        ref.watch(feedRepositoryProvider),
-        ref.watch(feedCacheProvider),
-      ),
-    );
+final reelsFeedProvider = StateNotifierProvider.autoDispose<ReelsNotifier,
+    AsyncValue<List<ReelFeedEntry>>>(
+  (ref) => ReelsNotifier(
+    ref.watch(feedRepositoryProvider),
+    ref.watch(feedCacheProvider),
+  ),
+);
