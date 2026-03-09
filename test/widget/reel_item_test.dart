@@ -190,6 +190,21 @@ void main() {
       expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     });
 
+    testWidgets('shows play indicator when active and state is ready',
+        (tester) async {
+      mockManager.setMockState(testReel.link, YTPlayerState.ready);
+
+      await tester.pumpWidget(buildTestWidget(entry: testReel, isActive: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.byIcon(Icons.play_arrow),
+        findsOneWidget,
+        reason:
+            'ready-but-not-playing reels should show play affordance to avoid dead UI',
+      );
+    });
+
     testWidgets('hides play indicator when state is playing', (tester) async {
       mockManager.setMockState(testReel.link, YTPlayerState.playing);
 
@@ -235,7 +250,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Tap the video area.
-      await tester.tap(find.byType(GestureDetector).first);
+      await tester.tap(find.byKey(const ValueKey('reel_playback_tap_overlay')));
       await tester.pump(const Duration(milliseconds: 100));
 
       // When paused, tap must trigger play — not pause.
@@ -280,13 +295,51 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.tap(find.byType(GestureDetector).first);
+      await tester.tap(find.byKey(const ValueKey('reel_playback_tap_overlay')));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
         calls,
         contains(startsWith('retry:')),
         reason: 'tapping an error reel must call retryVideo',
+      );
+    });
+
+    testWidgets(
+        'active visible reel arms autoplay by calling playVideo on mount',
+        (tester) async {
+      final calls = <String>[];
+      final trackingManager = _TrackingYoutubePlayerManager(
+        delegate: mockManager,
+        onPlayVideo: (url) => calls.add('play:$url'),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                height: 600,
+                child: ReelItem(
+                  entry: testReel,
+                  isActive: true,
+                  isVisible: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        calls.where((c) => c == 'play:${testReel.link}'),
+        isNotEmpty,
+        reason:
+            'When reel is active + visible, ReelItem should explicitly arm autoplay',
       );
     });
   });

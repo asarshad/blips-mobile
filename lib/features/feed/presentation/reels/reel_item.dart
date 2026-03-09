@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
@@ -49,54 +51,79 @@ class ReelItem extends HookConsumerWidget {
       isMounted: isMounted,
     );
 
+    // Safety net for missed initial autoplay: when this reel is the active,
+    // visible page, explicitly (re)arm playback after the widget is mounted.
+    useEffect(
+      () {
+        if (isActive && isVisible) {
+          unawaited(videoManager.playVideo(entry.link));
+        }
+        return null;
+      },
+      [entry.link, isActive, isVisible],
+    );
+
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
     final isError = playerState == YTPlayerState.error;
 
-    // Show video when controller exists and ready
-    final showVideo = controller != null &&
-        (playerState == YTPlayerState.ready ||
-            playerState == YTPlayerState.playing ||
-            playerState == YTPlayerState.paused);
+    // Mount the player whenever a controller exists so iframe initialization
+    // can progress while state is still loading. Thumbnail/spinner overlays
+    // remain on top until real playback starts.
+    final showVideo = controller != null;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Video Layer (tappable for play/pause)
-        GestureDetector(
-          onTap: () => _handleTap(controller, videoManager, playerState),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Video Layer - only show when ready
-              if (showVideo) _YoutubeVideoLayer(controller: controller),
+        // Video Layer
+        Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video Layer - only show when ready
+            if (showVideo) _YoutubeVideoLayer(controller: controller),
 
-              // Thumbnail Layer
-              _ThumbnailLayer(
-                thumbnailUrl: entry.thumbnailUrl,
-                isVisible: showThumbnail.value,
+            // Thumbnail Layer
+            _ThumbnailLayer(
+              thumbnailUrl: entry.thumbnailUrl,
+              isVisible: showThumbnail.value,
+            ),
+
+            // Gradient Overlay
+            const _GradientOverlay(),
+
+            // Tap capture overlay above the PlatformView so taps always reach
+            // our play/pause handler, even when WebView swallows gestures.
+            Positioned.fill(
+              child: GestureDetector(
+                key: const ValueKey('reel_playback_tap_overlay'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _handleTap(controller, videoManager, playerState),
               ),
+            ),
 
-              // Gradient Overlay
-              const _GradientOverlay(),
+            // Play/pause indicator.
+            // Show when paused (user tapped pause) or ready (auto-play
+            // hasn't fired yet, tap re-arms it).  Intentionally hidden
+            // during loading/idle so the spinner is the only indicator.
+            if (isActive &&
+                (playerState == YTPlayerState.paused ||
+                    playerState == YTPlayerState.ready))
+              const IgnorePointer(child: _PlayIndicator()),
 
-              // Play/pause indicator.
-              // Show when paused (user tapped pause) or ready (auto-play
-              // hasn't fired yet, tap re-arms it).  Intentionally hidden
-              // during loading/idle so the spinner is the only indicator.
-              if (isActive && playerState == YTPlayerState.paused)
-                const _PlayIndicator(),
-
-              // Loading Indicator
-              if (isActive && isLoading)
-                const Center(
+            // Loading Indicator
+            if (isActive && isLoading)
+              const IgnorePointer(
+                child: Center(
                   child: CircularProgressIndicator(color: Colors.white),
                 ),
+              ),
 
-              // Error indicator
-              if (isError) _ErrorIndicator(error: playerError),
-            ],
-          ),
+            // Error indicator
+            if (isError)
+              IgnorePointer(
+                child: _ErrorIndicator(error: playerError),
+              ),
+          ],
         ),
 
         // Action Buttons

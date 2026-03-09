@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
@@ -81,16 +82,26 @@ class OptimizedReelsPage extends HookConsumerWidget {
         if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
           final entries = reelsFeed.value!;
 
-          // Initialise first 5 controllers so they are warm when the user starts
-          // swiping.  Playback is triggered by _useVisibilityHandler.
-          final preloadCount = entries.length.clamp(0, 5);
-          for (var i = 0; i < preloadCount; i++) {
-            videoManager.initController(entries[i].link);
-          }
+          // Keep warm preloads aligned with pool capacity to avoid churn.
+          final warmTarget =
+              MemoryConfig.reelPreloadCount + 1; // current + ahead
+          final cappedWarmTarget = warmTarget > MemoryConfig.playerPoolSize
+              ? MemoryConfig.playerPoolSize
+              : warmTarget;
+          final preloadCount = entries.length.clamp(0, cappedWarmTarget);
+
+          var cancelled = false;
+          Future.microtask(() async {
+            for (var i = 0; i < preloadCount; i++) {
+              if (cancelled) return;
+              await videoManager.initController(entries[i].link);
+            }
+          });
+          return () => cancelled = true;
         }
         return null;
       },
-      [reelsFeed.hasValue],
+      [reelsFeed.valueOrNull],
     ); // isVisible intentionally excluded — see above
   }
 
@@ -107,14 +118,15 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
         final entries = reelsFeed.value!;
         if (isVisible) {
-          // Play current video when becoming visible
+          // Route through onPageChanged so visible-entry playback uses the
+          // same proven path as manual swipes (pause others + preload next).
           final index = currentIndex.value.clamp(0, entries.length - 1);
-          final link = entries[index].link;
+          final urls = entries.map((e) => e.link).toList(growable: false);
           if (kDebugMode) {
             debugPrint(
                 'ReelsPage: Visibility ON — playing video at index $index');
           }
-          videoManager.playVideo(link);
+          videoManager.onPageChanged(currentIndex: index, videoUrls: urls);
         } else {
           // Pause all when leaving (keep cached for faster resume)
           if (kDebugMode) {
@@ -124,7 +136,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
         }
         return null;
       },
-      [isVisible, reelsFeed.hasValue],
+      [isVisible, reelsFeed.valueOrNull],
     );
   }
 

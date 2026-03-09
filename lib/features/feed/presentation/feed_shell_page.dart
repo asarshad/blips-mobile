@@ -46,8 +46,8 @@ class FeedShellPage extends HookConsumerWidget {
     final videoFeed = ref.watch(videoFeedWithAdsProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
-    // Preload reels in background after first frame
-    _useBackgroundReelsPreload(ref, videoManager);
+    // Warm reels data in background (controller warm-up is owned by Reels page).
+    _useBackgroundReelsWarmup(ref);
 
     // Preload first videos in background after first frame
     _useBackgroundVideosPreload(videoFeed, videoManager);
@@ -96,28 +96,24 @@ class FeedShellPage extends HookConsumerWidget {
     );
   }
 
-  void _useBackgroundReelsPreload(
-    WidgetRef ref,
-    YoutubePlayerManagerBase videoManager,
-  ) {
+  void _useBackgroundReelsWarmup(WidgetRef ref) {
     useEffect(() {
       var mounted = true;
-      // Defer reels loading until after first frame to avoid blocking UI
+      // Defer reels feed warm-up until after first frame to avoid blocking UI.
+      // Reels controller warm-up runs only in OptimizedReelsPage so there is a
+      // single owner for player lifecycle and pool pressure.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Future.microtask(() async {
           try {
-            // Read the reels provider and wait for data
+            // Start provider load eagerly for better first-open latency.
             final reelsAsync = ref.read(reelsFeedProvider);
             reelsAsync.maybeWhen(
-              data: (reels) => _preloadReels(reels, videoManager),
+              data: (_) => null,
               orElse: () {
                 // If loading/error, wait a bit then check again
                 Future.delayed(const Duration(milliseconds: 500), () {
                   if (!mounted) return;
-                  final reelsData = ref.read(reelsFeedProvider).valueOrNull;
-                  if (reelsData != null) {
-                    _preloadReels(reelsData, videoManager);
-                  }
+                  ref.read(reelsFeedProvider);
                 });
               },
             );
@@ -133,24 +129,6 @@ class FeedShellPage extends HookConsumerWidget {
       });
       return () => mounted = false;
     }, []);
-  }
-
-  /// Preload first 5 reels in background for instant playback.
-  void _preloadReels(
-    List<ReelFeedEntry> reels,
-    YoutubePlayerManagerBase manager,
-  ) {
-    if (reels.isEmpty) return;
-
-    // Preload first 5 reels in background
-    final preloadCount = reels.length.clamp(0, 5);
-    for (var i = 0; i < preloadCount; i++) {
-      manager.initController(reels[i].link);
-    }
-    logger.debug(
-      'Background preload: $preloadCount reels queued',
-      category: LogCategory.video,
-    );
   }
 
   void _useBackgroundVideosPreload(
