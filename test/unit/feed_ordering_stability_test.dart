@@ -49,7 +49,7 @@ void main() {
       expect(merged.map((e) => e.id).toList(), [9, 1, 2, 3]);
     });
 
-    test('drops items no longer present in fresh payload', () {
+    test('preserves deep-loaded items missing from page-1 refresh payload', () {
       final current = [_article(1), _article(2), _article(3)];
       final fresh = [_article(3), _article(1)];
 
@@ -58,7 +58,20 @@ void main() {
         freshItems: fresh,
       );
 
-      expect(merged.map((e) => e.id).toList(), [1, 3]);
+      expect(merged.map((e) => e.id).toList(), [1, 2, 3]);
+    });
+
+    test('does not prepend new items when prependNewItems is false', () {
+      final current = [_article(1), _article(2), _article(3)];
+      final fresh = [_article(9), _article(3), _article(2), _article(1)];
+
+      final merged = mergeFeedWithStableOrdering(
+        currentItems: current,
+        freshItems: fresh,
+        prependNewItems: false,
+      );
+
+      expect(merged.map((e) => e.id).toList(), [1, 2, 3]);
     });
   });
 }

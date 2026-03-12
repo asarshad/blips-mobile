@@ -1,37 +1,39 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 
-/// Merge fresh feed data while keeping ordering stable when nothing new exists.
+/// Merge fresh feed data while preserving deep-scroll stability.
+///
+/// [freshItems] may be a partial "page 1" snapshot rather than the
+/// full feed.
+/// To avoid truncating older loaded pages, entries missing from
+/// [freshItems] are preserved from [currentItems].
 ///
 /// Behavior:
-/// - If no new IDs are present in [freshItems], preserve [currentItems] order.
-/// - If new IDs exist, prepend those new entries in fresh rank order.
-/// - Existing entries keep their previous relative order to avoid jumpiness.
+/// - Existing entries keep their previous relative order.
+/// - Entries that also exist in [freshItems] are updated with fresh payload.
+/// - New entries from [freshItems] are prepended only when [prependNewItems]
+///   is true.
 List<FeedEntry> mergeFeedWithStableOrdering({
   required List<FeedEntry> currentItems,
   required List<FeedEntry> freshItems,
+  bool prependNewItems = true,
 }) {
   if (currentItems.isEmpty) return List<FeedEntry>.from(freshItems);
 
-  final currentIds = currentItems.map((entry) => entry.id).toSet();
   final freshById = <int, FeedEntry>{
     for (final item in freshItems) item.id: item,
   };
+  final currentIds = currentItems.map((entry) => entry.id).toSet();
   final newItems = freshItems
       .where((item) => !currentIds.contains(item.id))
-      .toList();
+      .toList(growable: false);
 
-  // No newly approved items: keep today's order stable.
-  if (newItems.isEmpty) {
-    return currentItems
-        .where((item) => freshById.containsKey(item.id))
-        .map((item) => freshById[item.id]!)
-        .toList();
+  final updatedCurrent = currentItems
+      .map((item) => freshById[item.id] ?? item)
+      .toList(growable: false);
+
+  if (newItems.isEmpty || !prependNewItems) {
+    return updatedCurrent;
   }
 
-  // New items surface first; existing entries keep previous order.
-  final carried = currentItems
-      .where((item) => freshById.containsKey(item.id))
-      .map((item) => freshById[item.id]!)
-      .toList();
-  return <FeedEntry>[...newItems, ...carried];
+  return <FeedEntry>[...newItems, ...updatedCurrent];
 }
