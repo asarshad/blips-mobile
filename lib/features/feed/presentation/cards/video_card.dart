@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,11 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 /// Fallback image when video thumbnail is unavailable.
 const _videoFallbackImage =
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800';
+
+enum _VideoCardAction {
+  save,
+  lessFromCreator,
+}
 
 /// Card widget for displaying video feed entries.
 /// Includes inline video playback with thumbnail fallback.
@@ -34,11 +41,20 @@ class VideoCard extends HookConsumerWidget {
     final showBubbles = useState(false);
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
 
+    final feedRepository = ref.read(feedRepositoryProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final playbackUrl = _resolvePlaybackUrl(videoManager);
     final controller = videoManager.getController(playbackUrl);
     final playerState = videoManager.getState(playbackUrl);
     final playerError = videoManager.getError(playbackUrl);
+    final sentImpression = useRef(false);
+    final sentStart = useRef(false);
+    final sent3s = useRef(false);
+    final sent50Pct = useRef(false);
+    final sent95Pct = useRef(false);
+    final sentSkip = useRef(false);
+    final startedAt = useRef<DateTime?>(null);
+    final lastPositionMs = useRef(0);
 
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
@@ -59,6 +75,17 @@ class VideoCard extends HookConsumerWidget {
     // Handle visibility changes
     useEffect(() {
       if (!isVisible) {
+        _recordEarlySkipIfNeeded(
+          repository: feedRepository,
+          sentStart: sentStart.value,
+          sentSkip: sentSkip.value,
+          startedAt: startedAt.value,
+          positionMs: lastPositionMs.value,
+        ).then((didRecord) {
+          if (didRecord) {
+            sentSkip.value = true;
+          }
+        });
         videoManager.pauseVideo(playbackUrl);
         showBubbles.value = false;
       } else {
@@ -69,6 +96,119 @@ class VideoCard extends HookConsumerWidget {
       }
       return null;
     }, [isVisible, playbackUrl]);
+
+    useEffect(() {
+      if (isVisible && !sentImpression.value) {
+        sentImpression.value = true;
+        unawaited(
+          feedRepository.recordInteraction(
+            contentItemId: entry.id,
+            eventType: FeedInteractionEvent.videoImpression,
+            extraData: const {'surface': 'videos'},
+          ),
+        );
+      }
+      return null;
+    }, [isVisible]);
+
+    useEffect(() {
+      void handleProgress() {
+        if (!isVisible) return;
+
+        final controllerState = controller?.value.playerState;
+        final isPlaying = controllerState == PlayerState.playing ||
+            playerState == YTPlayerState.playing;
+        if (controller != null) {
+          lastPositionMs.value = controller.value.position.inMilliseconds;
+        }
+
+        if (isPlaying && !sentStart.value) {
+          sentStart.value = true;
+          startedAt.value = DateTime.now();
+          unawaited(
+            feedRepository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.videoStart,
+              extraData: const {'surface': 'videos'},
+            ),
+          );
+        }
+
+        if (!isPlaying) {
+          return;
+        }
+
+        final positionMs = lastPositionMs.value;
+        final durationMs = _resolveDurationMs(
+          controller: controller,
+          explicitDurationSeconds: entry.durationSeconds,
+          fallbackMinutes: entry.readTime,
+        );
+
+        if (!sent3s.value && positionMs >= 3000) {
+          sent3s.value = true;
+          unawaited(
+            feedRepository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video3s,
+              extraData: const {'surface': 'videos'},
+            ),
+          );
+        }
+        if (durationMs <= 0) {
+          return;
+        }
+
+        final ratio = positionMs / durationMs;
+        if (!sent50Pct.value && ratio >= 0.5) {
+          sent50Pct.value = true;
+          unawaited(
+            feedRepository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video50pct,
+              extraData: const {'surface': 'videos'},
+            ),
+          );
+        }
+        if (!sent95Pct.value && ratio >= 0.95) {
+          sent95Pct.value = true;
+          unawaited(
+            feedRepository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video95pct,
+              extraData: const {'surface': 'videos'},
+            ),
+          );
+        }
+      }
+
+      if (controller != null) {
+        controller.addListener(handleProgress);
+        handleProgress();
+        return () => controller.removeListener(handleProgress);
+      }
+
+      handleProgress();
+      return null;
+    }, [controller, playerState, isVisible, playbackUrl]);
+
+    useEffect(() {
+      return () {
+        unawaited(
+          _recordEarlySkipIfNeeded(
+            repository: feedRepository,
+            sentStart: sentStart.value,
+            sentSkip: sentSkip.value,
+            startedAt: startedAt.value,
+            positionMs: lastPositionMs.value,
+          ).then((didRecord) {
+            if (didRecord) {
+              sentSkip.value = true;
+            }
+          }),
+        );
+      };
+    }, const []);
 
     // Note: Don't release video resources on dispose - let the pool manager handle cleanup.
     // Releasing here causes "IOSInAppWebViewController used after disposed" errors
@@ -105,9 +245,16 @@ class VideoCard extends HookConsumerWidget {
             playbackUrl: playbackUrl,
             playerState: playerState,
           ),
-          onOpenLink: () => _openInBrowser(entry.link),
+          onLongPress: () => _showActionsSheet(context, feedRepository),
+          onOpenLink: () => _openInBrowser(
+            url: entry.link,
+            repository: feedRepository,
+          ),
           onChat: () => showBubbles.value = !showBubbles.value,
-          onShare: () => _shareVideo(context),
+          onShare: () => _shareVideo(
+            context,
+            feedRepository,
+          ),
         ),
         if (showBubbles.value)
           Positioned(
@@ -161,14 +308,30 @@ class VideoCard extends HookConsumerWidget {
     return entry.link.trim();
   }
 
-  Future<void> _openInBrowser(String url) async {
+  Future<void> _openInBrowser({
+    required String url,
+    required FeedRepository repository,
+  }) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.openSource,
+      extraData: const {'surface': 'videos'},
+    );
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
-  Future<void> _shareVideo(BuildContext context) async {
+  Future<void> _shareVideo(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoShare,
+      extraData: const {'surface': 'videos'},
+    );
     final dateLabel = DateFormat(
       'MMM d, yyyy',
     ).format(entry.publishedAt.toLocal());
@@ -185,6 +348,122 @@ class VideoCard extends HookConsumerWidget {
       thumbnailUrl: preview,
       videoUrl: entry.link,
     );
+  }
+
+  Future<void> _showActionsSheet(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    final action = await showModalBottomSheet<_VideoCardAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: const Text('Save video'),
+              subtitle:
+                  const Text('Adds a strong positive signal for this source.'),
+              onTap: () => Navigator.of(context).pop(_VideoCardAction.save),
+            ),
+            ListTile(
+              leading: const Icon(Icons.visibility_off_outlined),
+              title: Text('Less from ${entry.source}'),
+              subtitle:
+                  const Text('De-prioritize this creator in future ranking.'),
+              onTap: () =>
+                  Navigator.of(context).pop(_VideoCardAction.lessFromCreator),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || !context.mounted) return;
+
+    switch (action) {
+      case _VideoCardAction.save:
+        await repository.recordInteraction(
+          contentItemId: entry.id,
+          eventType: FeedInteractionEvent.videoSave,
+          extraData: {
+            'surface': 'videos',
+            'source': entry.source,
+          },
+        );
+        _showFeedback(context, 'Saved for future ranking.');
+        break;
+      case _VideoCardAction.lessFromCreator:
+        await repository.recordInteraction(
+          contentItemId: entry.id,
+          eventType: FeedInteractionEvent.lessFromCreator,
+          extraData: {
+            'surface': 'videos',
+            'source': entry.source,
+          },
+        );
+        _showFeedback(context, 'We will show less from ${entry.source}.');
+        break;
+    }
+  }
+
+  Future<bool> _recordEarlySkipIfNeeded({
+    required FeedRepository repository,
+    required bool sentStart,
+    required bool sentSkip,
+    required DateTime? startedAt,
+    required int positionMs,
+  }) async {
+    if (!sentStart || sentSkip || startedAt == null) {
+      return false;
+    }
+
+    final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+    final consumedMs = positionMs > 0 ? positionMs : elapsedMs;
+    if (consumedMs >= 2000) {
+      return false;
+    }
+
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoSkipLt2s,
+      extraData: {
+        'surface': 'videos',
+        'position_ms': consumedMs,
+      },
+    );
+    return true;
+  }
+
+  int _resolveDurationMs({
+    required YoutubePlayerController? controller,
+    required int? explicitDurationSeconds,
+    required int fallbackMinutes,
+  }) {
+    final controllerDurationMs =
+        controller?.value.metaData.duration.inMilliseconds ?? 0;
+    if (controllerDurationMs > 0) {
+      return controllerDurationMs;
+    }
+    if (explicitDurationSeconds != null && explicitDurationSeconds > 0) {
+      return explicitDurationSeconds * 1000;
+    }
+    return fallbackMinutes > 0 ? fallbackMinutes * 60 * 1000 : 0;
+  }
+
+  void _showFeedback(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1400),
+        ),
+      );
   }
 }
 

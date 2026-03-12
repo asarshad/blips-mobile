@@ -40,6 +40,7 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
   final FeedCacheInterface _cache;
   int _page = 1;
   bool _hasMore = true;
+  FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
   Timer? _pollTimer;
@@ -63,6 +64,12 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
     return _newSinceLastSeenIds.contains(entryId);
   }
 
+  bool get hasMore => _hasMore;
+
+  FeedInventoryState get inventoryState => _inventoryState;
+
+  bool get isCaughtUp => _inventoryState == FeedInventoryState.caughtUp;
+
   Future<void> loadInitial() async {
     if (!mounted) return;
     await _loadLastSeenCutoff();
@@ -80,6 +87,7 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
         _updateNewSinceLastSeen(cached);
         _page = 1;
         _hasMore = true;
+        _inventoryState = FeedInventoryState.healthy;
 
         logger.info(
           'Feed cache HIT: ${cached.length} items served from cache',
@@ -116,7 +124,7 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       if (!mounted) return;
       state = const AsyncValue.loading();
 
-      final items = await _repository.fetchFeed(
+      final page = await _repository.fetchFeedPage(
         page: 1,
         articleLimit: _articleLimit,
         videoLimit: _videoLimit,
@@ -124,12 +132,13 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
 
       if (!mounted) return;
       _page = 1;
-      _hasMore = items.isNotEmpty;
-      state = AsyncValue.data(items);
-      _updateNewSinceLastSeen(items);
+      _hasMore = page.hasMore;
+      _inventoryState = page.inventoryState;
+      state = AsyncValue.data(page.items);
+      _updateNewSinceLastSeen(page.items);
 
       // Cache the fresh data
-      _cacheInBackground(items);
+      _cacheInBackground(page.items);
     } catch (e, st) {
       if (!mounted) return;
       logger.warning(
@@ -148,13 +157,18 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
     _isRefreshing = true;
 
     try {
-      final freshItems = await _repository.fetchFeed(
+      final freshPage = await _repository.fetchFeedPage(
         page: 1,
         articleLimit: _articleLimit,
         videoLimit: _videoLimit,
       );
-
-      if (!mounted || freshItems.isEmpty) return;
+      final freshItems = freshPage.items;
+      _hasMore = freshPage.hasMore;
+      _inventoryState = freshPage.inventoryState;
+      if (!mounted) return;
+      if (freshItems.isEmpty) {
+        return;
+      }
 
       // Cache the fresh data
       _cacheInBackground(freshItems);
@@ -164,7 +178,8 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       if (currentList == null || currentList.isEmpty) {
         // No existing data, just replace
         _page = 1;
-        _hasMore = true;
+        _hasMore = freshPage.hasMore;
+        _inventoryState = freshPage.inventoryState;
         state = AsyncValue.data(freshItems);
         _updateNewSinceLastSeen(freshItems);
         return;
@@ -173,14 +188,14 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       final merged = mergeFeedWithStableOrdering(
         currentItems: currentList,
         freshItems: freshItems,
+        // Avoid prepending while user is deep in the feed to prevent index jumps.
+        prependNewItems: _currentViewIndex <= 1,
       );
       logger.debug(
         'Feed refresh merged with stable ordering (current_index=$_currentViewIndex)',
         category: LogCategory.app,
       );
 
-      _page = 1;
-      _hasMore = merged.isNotEmpty;
       state = AsyncValue.data(merged);
       _updateNewSinceLastSeen(merged);
     } catch (e, st) {
@@ -219,16 +234,23 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
 
     _isLoadingMore = true;
     try {
-      final nextItems = await _repository.fetchFeed(
+      final nextPage = await _repository.fetchFeedPage(
         page: _page + 1,
         articleLimit: _articleLimit,
         videoLimit: _videoLimit,
       );
+      final nextItems = nextPage.items;
 
       if (mounted) {
         _page++;
-        _hasMore = nextItems.isNotEmpty;
-        final merged = [...currentList, ...nextItems];
+        _hasMore = nextPage.hasMore;
+        _inventoryState = nextPage.inventoryState;
+        final latestList = state.valueOrNull ?? currentList;
+        final seenIds = latestList.map((entry) => entry.id).toSet();
+        final uniqueNextItems = nextItems
+            .where((entry) => !seenIds.contains(entry.id))
+            .toList(growable: false);
+        final merged = [...latestList, ...uniqueNextItems];
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
 
@@ -384,8 +406,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   final FeedRepository _repository;
   final FeedCacheInterface _cache;
-  int _page = 1;
   bool _hasMore = true;
+  String? _nextCursor;
+  FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
   Timer? _pollTimer;
@@ -400,6 +423,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _currentViewIndex = index;
   }
 
+  bool get hasMore => _hasMore;
+
+  FeedInventoryState get inventoryState => _inventoryState;
+
+  bool get isCaughtUp => _inventoryState == FeedInventoryState.caughtUp;
+
   Future<void> loadInitial() async {
     if (!mounted) return;
 
@@ -409,8 +438,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
       if (cached.isNotEmpty && mounted) {
         state = AsyncValue.data(cached);
-        _page = 1;
         _hasMore = true;
+        _nextCursor = null;
+        _inventoryState = FeedInventoryState.healthy;
 
         logger.info(
           'Reels cache HIT: ${cached.length} items served from cache',
@@ -440,13 +470,14 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     try {
       if (!mounted) return;
       state = const AsyncValue.loading();
-      final reels = await _repository.fetchReels(page: 1, limit: _limit);
+      final page = await _repository.fetchReelsPage(limit: _limit);
       if (!mounted) return;
-      _page = 1;
-      _hasMore = reels.length >= _limit;
-      state = AsyncValue.data(reels);
+      _hasMore = page.hasMore;
+      _nextCursor = page.nextCursor;
+      _inventoryState = page.inventoryState;
+      state = AsyncValue.data(page.items);
 
-      _cacheInBackground(reels);
+      _cacheInBackground(page.items);
     } catch (e, st) {
       if (!mounted) return;
       logger.warning(
@@ -464,9 +495,15 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _isRefreshing = true;
 
     try {
-      final freshReels = await _repository.fetchReels(page: 1, limit: _limit);
-
-      if (!mounted || freshReels.isEmpty) return;
+      final freshPage = await _repository.fetchReelsPage(limit: _limit);
+      final freshReels = freshPage.items;
+      _hasMore = freshPage.hasMore;
+      _nextCursor = freshPage.nextCursor;
+      _inventoryState = freshPage.inventoryState;
+      if (!mounted) return;
+      if (freshReels.isEmpty) {
+        return;
+      }
 
       _cacheInBackground(freshReels);
 
@@ -488,8 +525,6 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       final freshIndex = freshReels.indexWhere((r) => r.id == currentItem.id);
 
       if (freshIndex >= 0) {
-        _page = 1;
-        _hasMore = true;
         state = AsyncValue.data(freshReels);
       } else {
         final itemsFromCurrent = currentList.sublist(_currentViewIndex);
@@ -498,8 +533,6 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
             freshReels.where((item) => !currentIds.contains(item.id)).toList();
 
         final merged = [...uniqueFresh, ...itemsFromCurrent];
-        _page = 1;
-        _hasMore = true;
         state = AsyncValue.data(merged);
       }
     } catch (e, st) {
@@ -536,15 +569,22 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
     _isLoadingMore = true;
     try {
-      final nextReels = await _repository.fetchReels(
-        page: _page + 1,
+      final nextPage = await _repository.fetchReelsPage(
+        cursor: _nextCursor,
         limit: _limit,
       );
+      final nextReels = nextPage.items;
 
       if (mounted) {
-        _page++;
-        _hasMore = nextReels.length >= _limit;
-        state = AsyncValue.data([...currentList, ...nextReels]);
+        _hasMore = nextPage.hasMore;
+        _nextCursor = nextPage.nextCursor;
+        _inventoryState = nextPage.inventoryState;
+        final latestList = state.valueOrNull ?? currentList;
+        final seenIds = latestList.map((entry) => entry.id).toSet();
+        final uniqueNextReels = nextReels
+            .where((entry) => !seenIds.contains(entry.id))
+            .toList(growable: false);
+        state = AsyncValue.data([...latestList, ...uniqueNextReels]);
 
         _cacheInBackground(nextReels);
       }

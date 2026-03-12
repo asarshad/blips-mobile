@@ -39,6 +39,7 @@ class FeedCardFrame extends StatelessWidget {
     this.freshnessInfo,
     required this.readTime,
     this.onTap,
+    this.onLongPress,
     this.onShare,
     this.onChat,
     this.onOpenLink,
@@ -64,6 +65,7 @@ class FeedCardFrame extends StatelessWidget {
   final FreshnessInfo? freshnessInfo;
   final String readTime;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
   final VoidCallback? onOpenLink;
@@ -81,6 +83,7 @@ class FeedCardFrame extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
           color: theme.cardColor,

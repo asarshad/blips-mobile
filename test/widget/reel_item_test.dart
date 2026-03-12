@@ -1,14 +1,18 @@
 @Tags(['widget'])
 library reel_item_test;
 
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
+import '../test_utils/fake_backend_api_client.dart';
 
 /// Mock video manager for testing reel items without actual playback.
 class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
@@ -89,6 +93,15 @@ void main() {
       return ProviderScope(
         overrides: [
           youtubePlayerManagerProvider.overrideWith((ref) => mockManager),
+          feedRepositoryProvider.overrideWithValue(
+            FeedRepository(
+              FakeBackendApiClient(
+                responses: const {
+                  '/session/interactions': {'success': true},
+                },
+              ),
+            ),
+          ),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -233,6 +246,15 @@ void main() {
         ProviderScope(
           overrides: [
             youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+            feedRepositoryProvider.overrideWithValue(
+              FeedRepository(
+                FakeBackendApiClient(
+                  responses: const {
+                    '/session/interactions': {'success': true},
+                  },
+                ),
+              ),
+            ),
           ],
           child: MaterialApp(
             home: Scaffold(
@@ -279,6 +301,15 @@ void main() {
         ProviderScope(
           overrides: [
             youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+            feedRepositoryProvider.overrideWithValue(
+              FeedRepository(
+                FakeBackendApiClient(
+                  responses: const {
+                    '/session/interactions': {'success': true},
+                  },
+                ),
+              ),
+            ),
           ],
           child: MaterialApp(
             home: Scaffold(
@@ -319,6 +350,15 @@ void main() {
         ProviderScope(
           overrides: [
             youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+            feedRepositoryProvider.overrideWithValue(
+              FeedRepository(
+                FakeBackendApiClient(
+                  responses: const {
+                    '/session/interactions': {'success': true},
+                  },
+                ),
+              ),
+            ),
           ],
           child: MaterialApp(
             home: Scaffold(

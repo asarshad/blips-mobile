@@ -158,5 +158,69 @@ void main() {
         expect(videoPage2['cursor'], 30);
       },
     );
+
+    test('fetchReelsPage parses cursor envelope and inventory state', () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/videos/reels': {
+            'items': [
+              {
+                'id': 77,
+                'title': 'Reel',
+                'video_url': 'https://youtube.com/watch?v=reel123',
+                'source_url': 'https://youtube.com/watch?v=reel123',
+                'source': 'YouTube',
+                'published_at': '2025-01-04T00:00:00Z',
+                'duration_seconds': 42,
+              },
+            ],
+            'next_cursor': '20',
+            'has_more': true,
+            'inventory_state': 'healthy',
+            'served_at': '2025-01-04T01:00:00Z',
+          },
+        },
+      );
+
+      final repo = FeedRepository(api);
+      final page = await repo.fetchReelsPage(limit: 20);
+
+      expect(page.items, hasLength(1));
+      expect(page.items.single.id, 77);
+      expect(page.hasMore, isTrue);
+      expect(page.nextCursor, '20');
+      expect(page.inventoryState, FeedInventoryState.healthy);
+      expect(
+          page.servedAt?.toUtc().toIso8601String(), '2025-01-04T01:00:00.000Z');
+    });
+
+    test('recordInteraction posts the expected payload', () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/interactions': {
+            'success': true,
+          },
+        },
+      );
+
+      final repo = FeedRepository(api);
+      await repo.recordInteraction(
+        contentItemId: 123,
+        eventType: FeedInteractionEvent.videoShare,
+        extraData: const {'surface': 'videos'},
+      );
+
+      expect(api.requests, hasLength(1));
+      expect(api.requests.single.method, 'POST');
+      expect(api.requests.single.path, '/session/interactions');
+      expect(
+        api.requests.single.body,
+        {
+          'content_item_id': 123,
+          'event_type': 'VIDEO_SHARE',
+          'extra_data': {'surface': 'videos'},
+        },
+      );
+    });
   });
 }

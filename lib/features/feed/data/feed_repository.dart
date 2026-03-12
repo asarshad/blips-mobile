@@ -5,6 +5,44 @@ import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:dio/dio.dart';
 
+enum FeedInventoryState {
+  warmingUp,
+  healthy,
+  caughtUp,
+}
+
+class FeedPageResult<T extends FeedEntry> {
+  const FeedPageResult({
+    required this.items,
+    required this.hasMore,
+    required this.inventoryState,
+    this.nextCursor,
+    this.servedAt,
+  });
+
+  final List<T> items;
+  final bool hasMore;
+  final FeedInventoryState inventoryState;
+  final String? nextCursor;
+  final DateTime? servedAt;
+
+  bool get isCaughtUp => inventoryState == FeedInventoryState.caughtUp;
+}
+
+abstract final class FeedInteractionEvent {
+  static const openSource = 'OPEN_SOURCE';
+  static const videoImpression = 'VIDEO_IMPRESSION';
+  static const videoStart = 'VIDEO_START';
+  static const video3s = 'VIDEO_3S';
+  static const video50pct = 'VIDEO_50PCT';
+  static const video95pct = 'VIDEO_95PCT';
+  static const videoSkipLt2s = 'VIDEO_SKIP_LT_2S';
+  static const videoSave = 'VIDEO_SAVE';
+  static const videoShare = 'VIDEO_SHARE';
+  static const lessFromCreator = 'LESS_FROM_CREATOR';
+  static const caughtUp = 'CAUGHT_UP';
+}
+
 /// Repository responsible for loading feed items from the backend.
 class FeedRepository {
   /// Creates the repository with the provided API client.
@@ -12,22 +50,30 @@ class FeedRepository {
 
   final BackendApiClient _api;
   static const String _sessionPlaylistPath = '/session/playlist';
+  static const String _interactionPath = '/session/interactions';
 
   // Session snapshot state for cursor-based continuation.
   String? _articleSessionId;
   int? _articleCursor;
   String? _videoSessionId;
   int? _videoCursor;
+  String? _reelsCursor;
 
   /// Fetches both recent articles and videos, merging them into one list.
-  ///
-  /// The backend ad mixer may inject `item_type: "AD"` objects into the
-  /// articles/videos arrays. These are parsed as [AdFeedEntry] and kept
-  /// in the returned list at roughly the same relative positions.
-  ///
-  /// Throws [NetworkException] on network errors.
-  /// Throws [DataException] on parsing errors.
   Future<List<FeedEntry>> fetchFeed({
+    int articleLimit = 15,
+    int videoLimit = 10,
+    int page = 1,
+  }) async {
+    final result = await fetchFeedPage(
+      articleLimit: articleLimit,
+      videoLimit: videoLimit,
+      page: page,
+    );
+    return result.items;
+  }
+
+  Future<FeedPageResult<FeedEntry>> fetchFeedPage({
     int articleLimit = 15,
     int videoLimit = 10,
     int page = 1,
@@ -37,39 +83,41 @@ class FeedRepository {
         _resetSessionSnapshots();
       }
 
-      final articleItems = await _fetchSessionPlaylist(
+      final articleResult = await _fetchSessionPlaylist(
         type: 'ARTICLE',
         page: page,
         size: articleLimit,
       );
-      final videoItems = await _fetchSessionPlaylist(
+      final videoResult = await _fetchSessionPlaylist(
         type: 'VIDEO',
         page: page,
         size: videoLimit,
       );
 
-      // Separate organic from ads for proper sorting
+      // Separate organic from ads for proper sorting.
       final organic = <FeedEntry>[
-        ...articleItems.whereType<ArticleFeedEntry>(),
-        ...videoItems.whereType<VideoFeedEntry>(),
+        ...articleResult.items.whereType<ArticleFeedEntry>(),
+        ...videoResult.items.whereType<VideoFeedEntry>(),
       ]..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
 
       final ads = <AdFeedEntry>[
-        ...articleItems.whereType<AdFeedEntry>(),
-        ...videoItems.whereType<AdFeedEntry>(),
+        ...articleResult.items.whereType<AdFeedEntry>(),
+        ...videoResult.items.whereType<AdFeedEntry>(),
       ];
 
-      if (ads.isEmpty) return organic;
+      final merged = ads.isEmpty ? organic : _interleaveAds(organic, ads);
+      final hasMore = articleResult.hasMore || videoResult.hasMore;
 
-      // Re-interleave ads at spaced positions
-      final mixed = <FeedEntry>[...organic];
-      for (var i = 0; i < ads.length; i++) {
-        final pos = ((i + 1) * (organic.length ~/ (ads.length + 1)))
-            .clamp(1, mixed.length);
-        mixed.insert(pos + i, ads[i]);
-      }
-
-      return mixed;
+      return FeedPageResult(
+        items: merged,
+        hasMore: hasMore,
+        inventoryState: _parseInventoryState(
+          value: null,
+          hasMore: hasMore,
+          itemCount: merged.length,
+        ),
+        servedAt: _latestServedAt(articleResult.servedAt, videoResult.servedAt),
+      );
     } on DioException catch (e, stack) {
       throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
     } catch (e, stack) {
@@ -77,7 +125,7 @@ class FeedRepository {
     }
   }
 
-  Future<List<FeedEntry>> _fetchSessionPlaylist({
+  Future<FeedPageResult<FeedEntry>> _fetchSessionPlaylist({
     required String type,
     required int page,
     required int size,
@@ -103,11 +151,20 @@ class FeedRepository {
 
     final parsed = _parsePlaylistItems(items);
     if (parsed.isNotEmpty) {
-      return parsed;
+      final hasMore = response['has_more'] as bool? ?? true;
+      return FeedPageResult(
+        items: parsed,
+        hasMore: hasMore,
+        inventoryState: _parseInventoryState(
+          value: response['inventory_state'] as String?,
+          hasMore: hasMore,
+          itemCount: parsed.length,
+        ),
+      );
     }
 
     // Backward-compatible fallback for environments without /session/playlist support.
-    return _fetchLegacyFeed(type: type, page: page, size: size);
+    return _fetchLegacyFeedPage(type: type, page: page, size: size);
   }
 
   Map<String, dynamic> _sessionContinuationQuery(String type) {
@@ -138,6 +195,7 @@ class FeedRepository {
     _articleCursor = null;
     _videoSessionId = null;
     _videoCursor = null;
+    _reelsCursor = null;
   }
 
   List<FeedEntry> _parsePlaylistItems(List<Map<String, dynamic>> items) {
@@ -196,7 +254,7 @@ class FeedRepository {
     });
   }
 
-  Future<List<FeedEntry>> _fetchLegacyFeed({
+  Future<FeedPageResult<FeedEntry>> _fetchLegacyFeedPage({
     required String type,
     required int page,
     required int size,
@@ -210,9 +268,20 @@ class FeedRepository {
         },
       );
       final articlesJson = response['articles'] as List<dynamic>? ?? const [];
-      return _parseMixedList(
+      final items = _parseMixedList(
         articlesJson.cast<Map<String, dynamic>>(),
         (json) => ArticleDto.fromJson(json).toDomain(),
+      );
+      final hasMore =
+          response['has_more'] as bool? ?? articlesJson.length >= size;
+      return FeedPageResult(
+        items: items,
+        hasMore: hasMore,
+        inventoryState: _parseInventoryState(
+          value: response['inventory_state'] as String?,
+          hasMore: hasMore,
+          itemCount: items.length,
+        ),
       );
     }
 
@@ -223,37 +292,134 @@ class FeedRepository {
         'page': page,
       },
     );
-    final videosJson = response['videos'] as List<dynamic>? ?? const [];
-    return _parseMixedList(
-      videosJson.cast<Map<String, dynamic>>(),
+    final videosJson = (response['items'] as List<dynamic>? ??
+            response['videos'] as List<dynamic>? ??
+            const [])
+        .cast<Map<String, dynamic>>();
+    final items = _parseMixedList(
+      videosJson,
       (json) => VideoDto.fromJson(json).toDomain(),
+    );
+    final hasMore = response['has_more'] as bool? ?? videosJson.length >= size;
+    final cursorValue = response['next_cursor'] as String? ??
+        (hasMore ? '${(page - 1) * size + size}' : null);
+    return FeedPageResult(
+      items: items,
+      hasMore: hasMore,
+      inventoryState: _parseInventoryState(
+        value: response['inventory_state'] as String?,
+        hasMore: hasMore,
+        itemCount: items.length,
+      ),
+      nextCursor: cursorValue,
+      servedAt: _parseServedAt(response['served_at']),
     );
   }
 
   /// Fetches recent reels (short videos).
-  ///
-  /// Throws [NetworkException] on network errors.
-  /// Throws [DataException] on parsing errors.
   Future<List<ReelFeedEntry>> fetchReels({int page = 1, int limit = 20}) async {
+    final result = await fetchReelsPage(
+      cursor: page <= 1 ? null : _reelsCursor,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<FeedPageResult<ReelFeedEntry>> fetchReelsPage({
+    String? cursor,
+    int limit = 20,
+  }) async {
     try {
+      if (cursor == null) {
+        _reelsCursor = null;
+      }
+
       final response = await _api.get(
         '/videos/reels',
         queryParameters: {
-          'page': page,
+          if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
           'limit': limit,
         },
       );
-      final videosJson = response['videos'] as List<dynamic>? ?? const [];
-      return videosJson
-          .cast<Map<String, dynamic>>()
+      final videosJson = (response['items'] as List<dynamic>? ??
+              response['videos'] as List<dynamic>? ??
+              const [])
+          .cast<Map<String, dynamic>>();
+      final items = videosJson
           .map(VideoDto.fromJson)
           .map((dto) => dto.toReelDomain())
-          .toList();
+          .toList(growable: false);
+      final hasMore =
+          response['has_more'] as bool? ?? videosJson.length >= limit;
+      final currentOffset = int.tryParse(cursor ?? '0') ?? 0;
+      final nextCursor = response['next_cursor'] as String? ??
+          (hasMore ? '${currentOffset + limit}' : null);
+      _reelsCursor = nextCursor;
+      return FeedPageResult(
+        items: items,
+        hasMore: hasMore,
+        inventoryState: _parseInventoryState(
+          value: response['inventory_state'] as String?,
+          hasMore: hasMore,
+          itemCount: items.length,
+        ),
+        nextCursor: nextCursor,
+        servedAt: _parseServedAt(response['served_at']),
+      );
     } on DioException catch (e, stack) {
       throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
     } catch (e, stack) {
       throw DataException.fromParseError(e, stack);
     }
+  }
+
+  Future<void> recordInteraction({
+    required int contentItemId,
+    required String eventType,
+    Map<String, dynamic>? extraData,
+  }) async {
+    try {
+      await _api.post(
+        _interactionPath,
+        data: {
+          'content_item_id': contentItemId,
+          'event_type': eventType,
+          if (extraData != null && extraData.isNotEmpty)
+            'extra_data': extraData,
+        },
+      );
+    } on DioException catch (e, stack) {
+      logger.warning(
+        'Failed to record feed interaction ($eventType)',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to record feed interaction ($eventType)',
+        category: LogCategory.app,
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  List<FeedEntry> _interleaveAds(
+    List<FeedEntry> organic,
+    List<AdFeedEntry> ads,
+  ) {
+    if (organic.isEmpty) {
+      return List<FeedEntry>.from(ads, growable: false);
+    }
+
+    final mixed = <FeedEntry>[...organic];
+    for (var i = 0; i < ads.length; i++) {
+      final pos = ((i + 1) * (organic.length ~/ (ads.length + 1)))
+          .clamp(1, mixed.length);
+      mixed.insert(pos + i, ads[i]);
+    }
+    return mixed;
   }
 
   /// Parses a mixed JSON list that may contain both organic items and
@@ -267,6 +433,39 @@ class FeedRepository {
         return AdFeedEntry.fromJson(json);
       }
       return organicParser(json);
-    }).toList();
+    }).toList(growable: false);
+  }
+
+  FeedInventoryState _parseInventoryState({
+    required String? value,
+    required bool hasMore,
+    required int itemCount,
+  }) {
+    switch ((value ?? '').toLowerCase()) {
+      case 'caught_up':
+        return FeedInventoryState.caughtUp;
+      case 'healthy':
+        return FeedInventoryState.healthy;
+      case 'warming_up':
+        return FeedInventoryState.warmingUp;
+      default:
+        if (itemCount == 0) return FeedInventoryState.warmingUp;
+        return hasMore
+            ? FeedInventoryState.healthy
+            : FeedInventoryState.caughtUp;
+    }
+  }
+
+  DateTime? _parseServedAt(dynamic value) {
+    if (value is! String || value.trim().isEmpty) {
+      return null;
+    }
+    return DateTime.tryParse(value);
+  }
+
+  DateTime? _latestServedAt(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
   }
 }

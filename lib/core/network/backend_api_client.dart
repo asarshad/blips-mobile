@@ -9,6 +9,12 @@ abstract interface class BackendApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
   });
+
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  });
 }
 
 /// Production implementation backed by Dio.
@@ -24,6 +30,20 @@ final class DioBackendApiClient implements BackendApiClient {
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
       path,
+      queryParameters: queryParameters,
+    );
+    return response.data ?? const <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      path,
+      data: data,
       queryParameters: queryParameters,
     );
     return response.data ?? const <String, dynamic>{};

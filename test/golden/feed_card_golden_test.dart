@@ -6,15 +6,18 @@
 @Tags(['golden'])
 library;
 
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/article_card.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/video_card.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:network_image_mock/network_image_mock.dart';
 
+import '../test_utils/fake_backend_api_client.dart';
 import '../test_utils/fake_youtube_player_manager.dart';
 import 'golden_test_utils.dart';
 
@@ -103,6 +106,15 @@ void main() {
                 overrides: [
                   youtubePlayerManagerProvider.overrideWith(
                     (ref) => FakeYoutubePlayerManager(),
+                  ),
+                  feedRepositoryProvider.overrideWithValue(
+                    FeedRepository(
+                      FakeBackendApiClient(
+                        responses: const {
+                          '/session/interactions': {'success': true},
+                        },
+                      ),
+                    ),
                   ),
                 ],
                 child: Scaffold(

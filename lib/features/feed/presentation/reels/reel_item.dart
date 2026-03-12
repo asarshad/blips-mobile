@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +37,7 @@ class ReelItem extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.read(feedRepositoryProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
     final playerState = videoManager.getState(entry.link);
@@ -42,6 +45,14 @@ class ReelItem extends HookConsumerWidget {
     final showThumbnail = useState(true);
     final isMounted = useIsMounted();
     final isTextExpanded = useState(false);
+    final sentImpression = useRef(false);
+    final sentStart = useRef(false);
+    final sent3s = useRef(false);
+    final sent50Pct = useRef(false);
+    final sent95Pct = useRef(false);
+    final sentSkip = useRef(false);
+    final startedAt = useRef<DateTime?>(null);
+    final lastPositionMs = useRef(0);
 
     // Track when video is actually playing to hide thumbnail
     _useThumbnailVisibility(
@@ -57,11 +68,137 @@ class ReelItem extends HookConsumerWidget {
       () {
         if (isActive && isVisible) {
           unawaited(videoManager.playVideo(entry.link));
+        } else {
+          unawaited(
+            _recordEarlySkipIfNeeded(
+              repository: repository,
+              sentStart: sentStart.value,
+              sentSkip: sentSkip.value,
+              startedAt: startedAt.value,
+              positionMs: lastPositionMs.value,
+            ).then((didRecord) {
+              if (didRecord) {
+                sentSkip.value = true;
+              }
+            }),
+          );
         }
         return null;
       },
       [entry.link, isActive, isVisible],
     );
+
+    useEffect(() {
+      if (isActive && isVisible && !sentImpression.value) {
+        sentImpression.value = true;
+        unawaited(
+          repository.recordInteraction(
+            contentItemId: entry.id,
+            eventType: FeedInteractionEvent.videoImpression,
+            extraData: const {'surface': 'reels'},
+          ),
+        );
+      }
+      return null;
+    }, [isActive, isVisible]);
+
+    useEffect(() {
+      void handleProgress() {
+        if (!isActive || !isVisible) return;
+
+        final controllerState = controller?.value.playerState;
+        final isPlaying = controllerState == PlayerState.playing ||
+            playerState == YTPlayerState.playing;
+        if (controller != null) {
+          lastPositionMs.value = controller.value.position.inMilliseconds;
+        }
+
+        if (isPlaying && !sentStart.value) {
+          sentStart.value = true;
+          startedAt.value = DateTime.now();
+          unawaited(
+            repository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.videoStart,
+              extraData: const {'surface': 'reels'},
+            ),
+          );
+        }
+
+        if (!isPlaying) {
+          return;
+        }
+
+        final positionMs = lastPositionMs.value;
+        final durationMs = _resolveDurationMs(
+          controller: controller,
+          explicitDurationSeconds: entry.durationSeconds,
+        );
+
+        if (!sent3s.value && positionMs >= 3000) {
+          sent3s.value = true;
+          unawaited(
+            repository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video3s,
+              extraData: const {'surface': 'reels'},
+            ),
+          );
+        }
+        if (durationMs <= 0) {
+          return;
+        }
+
+        final ratio = positionMs / durationMs;
+        if (!sent50Pct.value && ratio >= 0.5) {
+          sent50Pct.value = true;
+          unawaited(
+            repository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video50pct,
+              extraData: const {'surface': 'reels'},
+            ),
+          );
+        }
+        if (!sent95Pct.value && ratio >= 0.95) {
+          sent95Pct.value = true;
+          unawaited(
+            repository.recordInteraction(
+              contentItemId: entry.id,
+              eventType: FeedInteractionEvent.video95pct,
+              extraData: const {'surface': 'reels'},
+            ),
+          );
+        }
+      }
+
+      if (controller != null) {
+        controller.addListener(handleProgress);
+        handleProgress();
+        return () => controller.removeListener(handleProgress);
+      }
+
+      handleProgress();
+      return null;
+    }, [controller, playerState, isActive, isVisible]);
+
+    useEffect(() {
+      return () {
+        unawaited(
+          _recordEarlySkipIfNeeded(
+            repository: repository,
+            sentStart: sentStart.value,
+            sentSkip: sentSkip.value,
+            startedAt: startedAt.value,
+            positionMs: lastPositionMs.value,
+          ).then((didRecord) {
+            if (didRecord) {
+              sentSkip.value = true;
+            }
+          }),
+        );
+      };
+    }, const []);
 
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
@@ -127,7 +264,13 @@ class ReelItem extends HookConsumerWidget {
         ),
 
         // Action Buttons
-        _ActionButtons(entry: entry),
+        _ActionButtons(
+          entry: entry,
+          onSave: () => _saveReel(context, repository),
+          onShare: () => _shareReel(repository),
+          onOpen: () => _openReel(repository),
+          onLessFromCreator: () => _lessFromCreator(context, repository),
+        ),
 
         // Info Layer (not tappable for play/pause, but text is tappable for expand/collapse)
         _InfoLayer(
@@ -213,6 +356,116 @@ class ReelItem extends HookConsumerWidget {
     } else {
       videoManager.playVideo(entry.link);
     }
+  }
+
+  Future<void> _saveReel(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoSave,
+      extraData: {
+        'surface': 'reels',
+        'source': entry.source,
+      },
+    );
+    _showFeedback(context, 'Saved for future ranking.');
+  }
+
+  Future<void> _shareReel(FeedRepository repository) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoShare,
+      extraData: const {'surface': 'reels'},
+    );
+    await ShareService.instance.shareReel(
+      title: entry.title,
+      videoUrl: entry.link,
+    );
+  }
+
+  Future<void> _openReel(FeedRepository repository) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.openSource,
+      extraData: const {'surface': 'reels'},
+    );
+    final uri = Uri.parse(entry.link);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _lessFromCreator(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.lessFromCreator,
+      extraData: {
+        'surface': 'reels',
+        'source': entry.source,
+      },
+    );
+    _showFeedback(context, 'We will show less from ${entry.source}.');
+  }
+
+  Future<bool> _recordEarlySkipIfNeeded({
+    required FeedRepository repository,
+    required bool sentStart,
+    required bool sentSkip,
+    required DateTime? startedAt,
+    required int positionMs,
+  }) async {
+    if (!sentStart || sentSkip || startedAt == null) {
+      return false;
+    }
+
+    final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+    final consumedMs = positionMs > 0 ? positionMs : elapsedMs;
+    if (consumedMs >= 2000) {
+      return false;
+    }
+
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoSkipLt2s,
+      extraData: {
+        'surface': 'reels',
+        'position_ms': consumedMs,
+      },
+    );
+    return true;
+  }
+
+  int _resolveDurationMs({
+    required YoutubePlayerController? controller,
+    required int? explicitDurationSeconds,
+  }) {
+    final controllerDurationMs =
+        controller?.value.metaData.duration.inMilliseconds ?? 0;
+    if (controllerDurationMs > 0) {
+      return controllerDurationMs;
+    }
+    if (explicitDurationSeconds != null && explicitDurationSeconds > 0) {
+      return explicitDurationSeconds * 1000;
+    }
+    return 30 * 1000;
+  }
+
+  void _showFeedback(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1400),
+        ),
+      );
   }
 }
 
@@ -311,9 +564,19 @@ class _PlayIndicator extends StatelessWidget {
 }
 
 class _ActionButtons extends StatelessWidget {
-  const _ActionButtons({required this.entry});
+  const _ActionButtons({
+    required this.entry,
+    required this.onSave,
+    required this.onShare,
+    required this.onOpen,
+    required this.onLessFromCreator,
+  });
 
   final ReelFeedEntry entry;
+  final Future<void> Function() onSave;
+  final Future<void> Function() onShare;
+  final Future<void> Function() onOpen;
+  final Future<void> Function() onLessFromCreator;
 
   @override
   Widget build(BuildContext context) {
@@ -324,30 +587,30 @@ class _ActionButtons extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ReelActionButton(
+            icon: Icons.bookmark_add_outlined,
+            label: 'Save',
+            onTap: () => unawaited(onSave()),
+          ),
+          const SizedBox(height: 12),
+          ReelActionButton(
             icon: Icons.share,
             label: 'Share',
-            onTap: _shareReel,
+            onTap: () => unawaited(onShare()),
+          ),
+          const SizedBox(height: 12),
+          ReelActionButton(
+            icon: Icons.visibility_off_outlined,
+            label: 'Less',
+            onTap: () => unawaited(onLessFromCreator()),
           ),
           const SizedBox(height: 12),
           ReelActionButton(
             icon: Icons.open_in_new,
             label: 'Open',
-            onTap: () async {
-              final uri = Uri.parse(entry.link);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
+            onTap: () => unawaited(onOpen()),
           ),
         ],
       ),
-    );
-  }
-
-  Future<void> _shareReel() async {
-    await ShareService.instance.shareReel(
-      title: entry.title,
-      videoUrl: entry.link,
     );
   }
 }

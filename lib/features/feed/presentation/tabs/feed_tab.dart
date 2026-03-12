@@ -27,6 +27,9 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     this.onLoadMore,
     this.onPageChanged,
     this.containsVideos = false,
+    this.isCaughtUp = false,
+    this.caughtUpLabel = 'You are caught up.',
+    this.onCaughtUp,
   });
 
   final AsyncValue<List<T>> feed;
@@ -42,10 +45,20 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   /// in the list (even when [T] is a broader type like [FeedEntry]).
   final bool containsVideos;
 
+  /// Whether the backend has confirmed there is no more content for this tab.
+  final bool isCaughtUp;
+
+  /// Label shown when the user reaches the end of the available feed.
+  final String caughtUpLabel;
+
+  /// Called once per terminal entry when the user reaches a caught-up state.
+  final void Function(T entry)? onCaughtUp;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = usePageController();
     final currentPage = useState(0);
+    final lastCaughtUpEntryId = useRef<int?>(null);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload first videos when data loads
@@ -56,6 +69,32 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       }
       return null;
     }, [feed.hasValue]);
+
+    useEffect(() {
+      final entries = feed.valueOrNull;
+      if (entries == null ||
+          entries.isEmpty ||
+          !isCaughtUp ||
+          onCaughtUp == null) {
+        return null;
+      }
+
+      final index = currentPage.value.clamp(0, entries.length - 1);
+      if (index < entries.length - 1) {
+        return null;
+      }
+
+      final entry = entries[index];
+      if (lastCaughtUpEntryId.value == entry.id) {
+        return null;
+      }
+
+      lastCaughtUpEntryId.value = entry.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onCaughtUp?.call(entry);
+      });
+      return null;
+    }, [feed.valueOrNull, currentPage.value, isCaughtUp]);
 
     return SafeArea(
       bottom: false,
@@ -106,20 +145,34 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
       );
     }
 
-    return PageView.builder(
-      controller: controller,
-      scrollDirection: Axis.vertical,
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      onPageChanged: (index) {
-        currentPage.value = index;
-        _handlePageChange(index, entries, videoManager, hasVideos);
-      },
-      itemCount: entries.length,
-      itemBuilder: (context, index) => SizedBox.expand(
-        child: builder(entries[index], index == currentPage.value),
-      ),
+    final showCaughtUpBanner =
+        isCaughtUp && currentPage.value >= entries.length - 1;
+
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: controller,
+          scrollDirection: Axis.vertical,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          onPageChanged: (index) {
+            currentPage.value = index;
+            _handlePageChange(index, entries, videoManager, hasVideos);
+          },
+          itemCount: entries.length,
+          itemBuilder: (context, index) => SizedBox.expand(
+            child: builder(entries[index], index == currentPage.value),
+          ),
+        ),
+        if (showCaughtUpBanner)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: FeedStateBanner(message: caughtUpLabel),
+          ),
+      ],
     );
   }
 

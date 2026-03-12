@@ -5,6 +5,7 @@ import 'package:blips_mobile/core/error/error_boundary.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
@@ -60,6 +61,9 @@ class FeedShellPage extends HookConsumerWidget {
 
     // Sync page controller with bottom nav
     _usePageControllerSync(pageController, currentIndex.value);
+
+    // Refresh the current surface when the app returns to foreground.
+    _useResumeRefresh(ref, currentIndex.value);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -192,6 +196,31 @@ class FeedShellPage extends HookConsumerWidget {
     }, [currentIndex]);
   }
 
+  void _useResumeRefresh(WidgetRef ref, int currentIndex) {
+    final lastRefreshAt = useRef<DateTime?>(null);
+    useEffect(() {
+      final listener = AppLifecycleListener(
+        onResume: () {
+          final now = DateTime.now();
+          final last = lastRefreshAt.value;
+          if (last != null &&
+              now.difference(last) < const Duration(seconds: 45)) {
+            return;
+          }
+          lastRefreshAt.value = now;
+
+          if (currentIndex == 2) {
+            unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
+            return;
+          }
+
+          unawaited(ref.read(paginatedFeedProvider.notifier).refreshSilently());
+        },
+      );
+      return listener.dispose;
+    }, [currentIndex]);
+  }
+
   void _refreshTabOnRetap(int index, WidgetRef ref) {
     switch (index) {
       case 0:
@@ -278,6 +307,17 @@ class FeedShellPage extends HookConsumerWidget {
         onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
         onPageChanged: (index) =>
             ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
+        isCaughtUp: ref.read(paginatedFeedProvider.notifier).isCaughtUp,
+        caughtUpLabel: 'Caught up on videos for now.',
+        onCaughtUp: (entry) => unawaited(
+          ref.read(feedRepositoryProvider).recordInteraction(
+            contentItemId: entry.id,
+            eventType: FeedInteractionEvent.caughtUp,
+            extraData: const {
+              'surface': 'videos',
+            },
+          ),
+        ),
       ),
       // Reels tab
       OptimizedReelsPage(isVisible: currentIndex.value == 2),

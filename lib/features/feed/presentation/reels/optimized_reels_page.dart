@@ -1,6 +1,8 @@
 import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -29,10 +31,19 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final controller = usePageController();
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final currentIndex = useState(0);
+    final lastCaughtUpEntryId = useRef<int?>(null);
+    final reelsNotifier = ref.read(reelsFeedProvider.notifier);
 
     _useInitialPreload(reelsFeed, videoManager, isVisible);
     _useVisibilityHandler(reelsFeed, videoManager, isVisible, currentIndex);
     _useLifecycleObserver(reelsFeed, videoManager, isVisible, currentIndex);
+    _useCaughtUpTracking(
+      ref: ref,
+      reelsFeed: reelsFeed,
+      currentIndex: currentIndex,
+      isCaughtUp: reelsNotifier.isCaughtUp,
+      lastCaughtUpEntryId: lastCaughtUpEntryId,
+    );
 
     final isMounted = useIsMounted();
 
@@ -45,6 +56,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           videoManager: videoManager,
           currentIndex: currentIndex,
           isMounted: isMounted,
+          isCaughtUp: reelsNotifier.isCaughtUp,
           ref: ref,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -188,12 +200,52 @@ class OptimizedReelsPage extends HookConsumerWidget {
     ); // register once for the lifetime of the page
   }
 
+  void _useCaughtUpTracking({
+    required WidgetRef ref,
+    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required ValueNotifier<int> currentIndex,
+    required bool isCaughtUp,
+    required ObjectRef<int?> lastCaughtUpEntryId,
+  }) {
+    useEffect(() {
+      final entries = reelsFeed.valueOrNull;
+      if (entries == null || entries.isEmpty || !isCaughtUp) {
+        return null;
+      }
+
+      final index = currentIndex.value.clamp(0, entries.length - 1);
+      if (index < entries.length - 1) {
+        return null;
+      }
+
+      final entry = entries[index];
+      if (lastCaughtUpEntryId.value == entry.id) {
+        return null;
+      }
+
+      lastCaughtUpEntryId.value = entry.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(
+          ref.read(feedRepositoryProvider).recordInteraction(
+            contentItemId: entry.id,
+            eventType: FeedInteractionEvent.caughtUp,
+            extraData: const {
+              'surface': 'reels',
+            },
+          ),
+        );
+      });
+      return null;
+    }, [reelsFeed.valueOrNull, currentIndex.value, isCaughtUp]);
+  }
+
   Widget _buildContent({
     required List<ReelFeedEntry> entries,
     required PageController controller,
     required YoutubePlayerManagerBase videoManager,
     required ValueNotifier<int> currentIndex,
     required bool Function() isMounted,
+    required bool isCaughtUp,
     required WidgetRef ref,
   }) {
     if (entries.isEmpty) {
@@ -207,36 +259,54 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
     final urls = entries.map((e) => e.link).toList();
 
-    return PageView.builder(
-      controller: controller,
-      scrollDirection: Axis.vertical,
-      allowImplicitScrolling: true,
-      onPageChanged: (index) {
-        currentIndex.value = index;
+    final showCaughtUpBanner =
+        isCaughtUp && currentIndex.value >= entries.length - 1;
 
-        // Track current view index for seamless cache updates
-        ref.read(reelsFeedProvider.notifier).setCurrentViewIndex(index);
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: controller,
+          scrollDirection: Axis.vertical,
+          allowImplicitScrolling: true,
+          onPageChanged: (index) {
+            currentIndex.value = index;
 
-        videoManager.onPageChanged(
-          currentIndex: index,
-          videoUrls: urls,
-          preloadAhead: MemoryConfig.reelPreloadCount,
-        );
+            // Track current view index for seamless cache updates
+            ref.read(reelsFeedProvider.notifier).setCurrentViewIndex(index);
 
-        // Pagination: Load more when close to end
-        if (index >= entries.length - 3) {
-          Future.microtask(() {
-            if (isMounted()) ref.read(reelsFeedProvider.notifier).loadMore();
-          });
-        }
-      },
-      itemCount: entries.length,
-      itemBuilder: (context, index) => ReelItem(
-        key: ValueKey(entries[index].link),
-        entry: entries[index],
-        isActive: index == currentIndex.value,
-        isVisible: isVisible,
-      ),
+            videoManager.onPageChanged(
+              currentIndex: index,
+              videoUrls: urls,
+              preloadAhead: MemoryConfig.reelPreloadCount,
+            );
+
+            // Pagination: Load more when close to end
+            if (index >= entries.length - 3) {
+              Future.microtask(() {
+                if (isMounted())
+                  ref.read(reelsFeedProvider.notifier).loadMore();
+              });
+            }
+          },
+          itemCount: entries.length,
+          itemBuilder: (context, index) => ReelItem(
+            key: ValueKey(entries[index].link),
+            entry: entries[index],
+            isActive: index == currentIndex.value,
+            isVisible: isVisible,
+          ),
+        ),
+        if (showCaughtUpBanner)
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: FeedStateBanner(
+              message: 'Caught up on reels for now.',
+              dark: true,
+            ),
+          ),
+      ],
     );
   }
 }

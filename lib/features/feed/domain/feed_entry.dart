@@ -123,6 +123,7 @@ class VideoFeedEntry extends FeedEntry {
     required this.category,
     required this.publishedAt,
     required this.readTime,
+    this.durationSeconds,
     this.thumbnailUrl,
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
@@ -173,6 +174,9 @@ class VideoFeedEntry extends FeedEntry {
   /// Approximate duration shown to the user.
   final int readTime;
 
+  /// Exact duration in seconds when provided by the backend.
+  final int? durationSeconds;
+
   /// Optional thumbnail preview.
   final String? thumbnailUrl;
 
@@ -192,6 +196,7 @@ class ReelFeedEntry extends FeedEntry {
     required this.link,
     required this.source,
     required this.publishedAt,
+    this.durationSeconds,
     this.thumbnailUrl,
     this.addedAt,
     this.freshnessTier = FreshnessTier.fresh,
@@ -223,6 +228,9 @@ class ReelFeedEntry extends FeedEntry {
   /// Publish timestamp used for ordering.
   @override
   final DateTime publishedAt;
+
+  /// Exact duration in seconds when provided by the backend.
+  final int? durationSeconds;
 
   /// When the reel was added to our system.
   @override

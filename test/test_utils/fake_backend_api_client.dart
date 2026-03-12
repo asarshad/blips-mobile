@@ -4,8 +4,10 @@ import 'package:blips_mobile/core/network/backend_api_client.dart';
 ///
 /// Responses are keyed by request path.
 typedef FakeResponseResolver = Map<String, dynamic> Function(
+  String method,
   String path,
   Map<String, dynamic>? queryParameters,
+  Object? body,
 );
 
 final class FakeBackendApiClient implements BackendApiClient {
@@ -25,8 +27,13 @@ final class FakeBackendApiClient implements BackendApiClient {
   final Map<String, List<Map<String, dynamic>>> _queuedResponses;
   final FakeResponseResolver? responseResolver;
 
-  final List<({String path, Map<String, dynamic>? queryParameters})> requests =
-      [];
+  final List<
+      ({
+        String method,
+        String path,
+        Map<String, dynamic>? queryParameters,
+        Object? body,
+      })> requests = [];
 
   void setResponse(String path, Map<String, dynamic> response) {
     _responses[path] = response;
@@ -37,9 +44,36 @@ final class FakeBackendApiClient implements BackendApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
-    requests.add((path: path, queryParameters: queryParameters));
+    requests.add((
+      method: 'GET',
+      path: path,
+      queryParameters: queryParameters,
+      body: null,
+    ));
     if (responseResolver != null) {
-      return responseResolver!(path, queryParameters);
+      return responseResolver!('GET', path, queryParameters, null);
+    }
+    final queue = _queuedResponses[path];
+    if (queue != null && queue.isNotEmpty) {
+      return queue.removeAt(0);
+    }
+    return _responses[path] ?? const <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    requests.add((
+      method: 'POST',
+      path: path,
+      queryParameters: queryParameters,
+      body: data,
+    ));
+    if (responseResolver != null) {
+      return responseResolver!('POST', path, queryParameters, data);
     }
     final queue = _queuedResponses[path];
     if (queue != null && queue.isNotEmpty) {
