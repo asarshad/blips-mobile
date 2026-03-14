@@ -71,16 +71,16 @@ flutter_launcher_icons:
   desaturate_tinted_to_grayscale_ios: true
 
 flutter_native_splash:
-  color: "#FFFFFF"
+  color: "#0F172A"
   color_dark: "#0F172A"
-  image: "assets/splash/splash_logo.png"
+  image: "assets/splash/splash_logo_dark.png"
   image_dark: "assets/splash/splash_logo_dark.png"
   ios: true
   android: true
   android_12:
-    color: "#FFFFFF"
+    color: "#0F172A"
     color_dark: "#0F172A"
-    image: "assets/splash/splash_logo_android12.png"
+    image: "assets/splash/splash_logo_android12_dark.png"
     image_dark: "assets/splash/splash_logo_android12_dark.png"
 
 # For information on the generic Dart part of this file, see the
