@@ -3,6 +3,7 @@ library;
 
 import 'package:blips_mobile/core/theme/app_theme.dart';
 import 'package:blips_mobile/features/onboarding/domain/categories.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -43,6 +44,8 @@ class CategoryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAndroidUi =
+        !kIsWeb && Theme.of(context).platform == TargetPlatform.android;
 
     final bgColor = isSelected
         ? colorScheme.primary
@@ -65,7 +68,10 @@ class CategoryChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: isAndroidUi ? 14 : 16,
+            vertical: isAndroidUi ? 10 : 12,
+          ),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(12),
@@ -76,22 +82,24 @@ class CategoryChip extends StatelessWidget {
             children: [
               Text(
                 category.emoji,
-                style: const TextStyle(fontSize: 18),
+                style: TextStyle(fontSize: isAndroidUi ? 17 : 18),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isAndroidUi ? 6 : 8),
               Text(
                 category.label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: labelColor,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w400,
-                    ),
+                style: (isAndroidUi
+                        ? Theme.of(context).textTheme.bodySmall
+                        : Theme.of(context).textTheme.bodyMedium)
+                    ?.copyWith(
+                  color: labelColor,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
               if (isSelected) ...[
-                const SizedBox(width: 8),
+                SizedBox(width: isAndroidUi ? 6 : 8),
                 Icon(
                   Icons.check_circle_rounded,
-                  size: 16,
+                  size: isAndroidUi ? 15 : 16,
                   color: colorScheme.onPrimary,
                 ),
               ],

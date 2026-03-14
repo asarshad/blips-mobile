@@ -28,44 +28,33 @@ void main() {
       );
     }
 
-    testWidgets('renders nothing when ads disabled (default)', (tester) async {
+    testWidgets('renders nothing when ads are disabled', (tester) async {
       await tester.pumpWidget(buildTestWidget(const AdsConfig()));
-      // Wait for the FutureProvider to resolve.
       await tester.pumpAndSettle();
 
-      // The widget tree should contain a SizedBox.shrink (width/height 0)
-      // and NOT the "Ad slot" text.
       expect(find.text('Ad slot'), findsNothing);
     });
 
-    testWidgets('renders nothing when master on but banner off',
+    testWidgets('renders nothing even when feed ads are enabled',
         (tester) async {
       await tester.pumpWidget(
-        buildTestWidget(const AdsConfig(adsEnabled: true)),
+        buildTestWidget(
+          const AdsConfig(
+            enabled: true,
+            eligible: true,
+            surfaces: AdsSurfacesConfig(
+              articles: AdSurfaceConfig(
+                  enabled: true, frequency: 8, firstSlotAfter: 2),
+            ),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Ad slot'), findsNothing);
     });
 
-    testWidgets('renders reserved slot when banner ads enabled',
-        (tester) async {
-      const config = AdsConfig(adsEnabled: true, adsBannerEnabled: true);
-      await tester.pumpWidget(buildTestWidget(config));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Ad slot'), findsOneWidget);
-
-      // The container should have the standard banner height.
-      final container = tester.widget<Container>(find.byType(Container).last);
-      expect(
-        container.constraints?.maxHeight,
-        BannerSlotWidget.bannerHeight,
-      );
-    });
-
-    testWidgets('renders nothing while loading', (tester) async {
-      // Use a Completer-based override that never resolves to test loading state.
+    testWidgets('renders nothing while config is loading', (tester) async {
       final widget = ProviderScope(
         overrides: [
           adsConfigProvider.overrideWith(
@@ -80,11 +69,11 @@ void main() {
       );
 
       await tester.pumpWidget(widget);
-      // Don't pump extra — stays in loading state.
+
       expect(find.text('Ad slot'), findsNothing);
     });
 
-    testWidgets('renders nothing on error', (tester) async {
+    testWidgets('renders nothing when config loading fails', (tester) async {
       final widget = ProviderScope(
         overrides: [
           adsConfigProvider.overrideWith(

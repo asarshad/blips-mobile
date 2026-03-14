@@ -15,6 +15,9 @@ const _privacyUrl = 'https://blips.tech/privacy.html';
 const _termsUrl = 'https://blips.tech/terms.html';
 const _supportUrl = 'https://blips.tech/support.html';
 
+bool _isAndroidUi(BuildContext context) =>
+    !kIsWeb && Theme.of(context).platform == TargetPlatform.android;
+
 /// Settings surface for feature toggles and account controls.
 class SettingsPage extends ConsumerWidget {
   /// Creates the settings page.
@@ -31,6 +34,197 @@ class SettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final themeModeNotifier = ref.read(themeModeProvider.notifier);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final isAndroidUi = _isAndroidUi(context);
+    final listView = ListView(
+      padding: EdgeInsets.fromLTRB(
+        isAndroidUi ? AppSpacing.md : AppSpacing.lg,
+        isAndroidUi ? AppSpacing.md : AppSpacing.lg,
+        isAndroidUi ? AppSpacing.md : AppSpacing.lg,
+        isAndroidUi ? AppSpacing.lg : AppSpacing.xl,
+      ),
+      children: [
+        _SettingsHero(
+          selectedMode: themeMode,
+          platformBrightness: platformBrightness,
+          onModeSelected: themeModeNotifier.setThemeMode,
+        ),
+        SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
+        _SettingsSectionCard(
+          title: 'Storage & privacy',
+          subtitle: 'Control what lives on this device and what gets reset '
+              'on our servers.',
+          child: Column(
+            children: [
+              _SettingsActionTile(
+                title: 'Clear Chat History',
+                subtitle: 'Delete all local conversations',
+                icon: Icons.delete_outline,
+                accentColor: Theme.of(context).colorScheme.error,
+                onTap: () async {
+                  final colorScheme = Theme.of(context).colorScheme;
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Clear History?'),
+                      content: const Text(
+                        'This will permanently delete all your chat '
+                        'conversations from this device.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(
+                            foregroundColor: colorScheme.error,
+                          ),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed ?? false) {
+                    await DatabaseHelper.instance.deleteAllChats();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Chat history cleared')),
+                      );
+                    }
+                  }
+                },
+              ),
+              const _SectionDivider(),
+              _SettingsActionTile(
+                title: 'Delete My Data',
+                subtitle: 'Delete usage quota & preferences from our servers',
+                icon: Icons.delete_forever,
+                accentColor: Theme.of(context).colorScheme.error,
+                onTap: () => _confirmDeleteMyData(context, ref),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
+        _SettingsSectionCard(
+          title: 'Policies & support',
+          subtitle: 'Open the public pages and support routes hosted '
+              'on blips.tech.',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 360 ? 3 : 2;
+              final itemWidth =
+                  (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
+                      columns;
+              return Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.md,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    child: _SettingsShortcutCard(
+                      title: 'Privacy',
+                      subtitle: 'Data handling',
+                      icon: Icons.privacy_tip_outlined,
+                      onTap: () => _launchUrl(_privacyUrl),
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _SettingsShortcutCard(
+                      title: 'Terms',
+                      subtitle: 'Usage rules',
+                      icon: Icons.description_outlined,
+                      onTap: () => _launchUrl(_termsUrl),
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _SettingsShortcutCard(
+                      title: 'Support',
+                      subtitle: 'Get help',
+                      icon: Icons.support_agent_rounded,
+                      onTap: () => _launchUrl(_supportUrl),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        if (kIsDevMode) ...[
+          SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
+          _SettingsSectionCard(
+            title: 'Build info',
+            subtitle: 'Debug-only details for local testing.',
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 360 ? 2 : 1;
+                final itemWidth =
+                    (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
+                        columns;
+                return Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
+                  children: [
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'App Version',
+                        value: '1.0.0 (Dev Build)',
+                        icon: Icons.info_outline,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'Author',
+                        value: 'Asif Arshad',
+                        icon: Icons.person_outline,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'Framework',
+                        value: 'Flutter 3.x',
+                        icon: Icons.flutter_dash,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'State',
+                        value: 'Riverpod + Hooks',
+                        icon: Icons.account_tree_outlined,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'Backend',
+                        value: 'FastAPI + PostgreSQL',
+                        icon: Icons.cloud_outlined,
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: const _InfoCard(
+                        title: 'Video Player',
+                        value: 'youtube iframe',
+                        icon: Icons.play_circle_outline,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -41,196 +235,10 @@ class SettingsPage extends ConsumerWidget {
         ),
         centerTitle: true,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.xl,
-        ),
-        children: [
-          _SettingsHero(
-            selectedMode: themeMode,
-            platformBrightness: platformBrightness,
-            onModeSelected: themeModeNotifier.setThemeMode,
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          _SettingsSectionCard(
-            title: 'Storage & privacy',
-            subtitle: 'Control what lives on this device and what gets reset '
-                'on our servers.',
-            child: Column(
-              children: [
-                _SettingsActionTile(
-                  title: 'Clear Chat History',
-                  subtitle: 'Delete all local conversations',
-                  icon: Icons.delete_outline,
-                  accentColor: Theme.of(context).colorScheme.error,
-                  onTap: () async {
-                    final colorScheme = Theme.of(context).colorScheme;
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Clear History?'),
-                        content: const Text(
-                          'This will permanently delete all your chat '
-                          'conversations from this device.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(
-                              foregroundColor: colorScheme.error,
-                            ),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirmed ?? false) {
-                      await DatabaseHelper.instance.deleteAllChats();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Chat history cleared')),
-                        );
-                      }
-                    }
-                  },
-                ),
-                const _SectionDivider(),
-                _SettingsActionTile(
-                  title: 'Delete My Data',
-                  subtitle: 'Delete usage quota & preferences from our servers',
-                  icon: Icons.delete_forever,
-                  accentColor: Theme.of(context).colorScheme.error,
-                  onTap: () => _confirmDeleteMyData(context, ref),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          _SettingsSectionCard(
-            title: 'Policies & support',
-            subtitle: 'Open the public pages and support routes hosted '
-                'on blips.tech.',
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 360 ? 3 : 2;
-                final itemWidth =
-                    (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
-                        columns;
-                return Wrap(
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.md,
-                  children: [
-                    SizedBox(
-                      width: itemWidth,
-                      child: _SettingsShortcutCard(
-                        title: 'Privacy',
-                        subtitle: 'Data handling',
-                        icon: Icons.privacy_tip_outlined,
-                        onTap: () => _launchUrl(_privacyUrl),
-                      ),
-                    ),
-                    SizedBox(
-                      width: itemWidth,
-                      child: _SettingsShortcutCard(
-                        title: 'Terms',
-                        subtitle: 'Usage rules',
-                        icon: Icons.description_outlined,
-                        onTap: () => _launchUrl(_termsUrl),
-                      ),
-                    ),
-                    SizedBox(
-                      width: itemWidth,
-                      child: _SettingsShortcutCard(
-                        title: 'Support',
-                        subtitle: 'Get help',
-                        icon: Icons.support_agent_rounded,
-                        onTap: () => _launchUrl(_supportUrl),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          if (kIsDevMode) ...[
-            const SizedBox(height: AppSpacing.xl),
-            _SettingsSectionCard(
-              title: 'Build info',
-              subtitle: 'Debug-only details for local testing.',
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = constraints.maxWidth >= 360 ? 2 : 1;
-                  final itemWidth =
-                      (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
-                          columns;
-                  return Wrap(
-                    spacing: AppSpacing.md,
-                    runSpacing: AppSpacing.md,
-                    children: [
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'App Version',
-                          value: '1.0.0 (Dev Build)',
-                          icon: Icons.info_outline,
-                        ),
-                      ),
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'Author',
-                          value: 'Asif Arshad',
-                          icon: Icons.person_outline,
-                        ),
-                      ),
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'Framework',
-                          value: 'Flutter 3.x',
-                          icon: Icons.flutter_dash,
-                        ),
-                      ),
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'State',
-                          value: 'Riverpod + Hooks',
-                          icon: Icons.account_tree_outlined,
-                        ),
-                      ),
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'Backend',
-                          value: 'FastAPI + PostgreSQL',
-                          icon: Icons.cloud_outlined,
-                        ),
-                      ),
-                      SizedBox(
-                        width: itemWidth,
-                        child: const _InfoCard(
-                          title: 'Video Player',
-                          value: 'youtube iframe',
-                          icon: Icons.play_circle_outline,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
-      ),
+      body: isAndroidUi
+          ? MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1, child: listView)
+          : listView,
     );
   }
 
@@ -365,14 +373,16 @@ class _SettingsHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     return Container(
-      padding: AppSpacing.allLg,
+      padding:
+          isAndroidUi ? const EdgeInsets.all(AppSpacing.md) : AppSpacing.allLg,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(isAndroidUi ? 22 : 26),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.45),
         ),
@@ -384,23 +394,25 @@ class _SettingsHero extends StatelessWidget {
             children: [
               Text(
                 'Appearance',
-                style: textTheme.titleLarge?.copyWith(
+                style:
+                    (isAndroidUi ? textTheme.titleMedium : textTheme.titleLarge)
+                        ?.copyWith(
                   color: colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: isAndroidUi ? AppSpacing.sm : AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 280 ? 4 : 2;
+              final tileGap = isAndroidUi ? AppSpacing.xs : AppSpacing.sm;
               final itemWidth =
-                  (constraints.maxWidth - (AppSpacing.sm * (columns - 1))) /
-                      columns;
+                  (constraints.maxWidth - (tileGap * (columns - 1))) / columns;
               return Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
+                spacing: tileGap,
+                runSpacing: tileGap,
                 children: [
                   for (final mode in AppThemeMode.values)
                     SizedBox(
@@ -435,14 +447,16 @@ class _SettingsSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     return Container(
-      padding: AppSpacing.allLg,
+      padding:
+          isAndroidUi ? const EdgeInsets.all(AppSpacing.md) : AppSpacing.allLg,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(isAndroidUi ? 22 : 26),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.45),
         ),
@@ -452,7 +466,8 @@ class _SettingsSectionCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: textTheme.titleLarge?.copyWith(
+            style: (isAndroidUi ? textTheme.titleMedium : textTheme.titleLarge)
+                ?.copyWith(
               color: colorScheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
@@ -460,12 +475,13 @@ class _SettingsSectionCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(
             subtitle,
-            style: textTheme.bodyMedium?.copyWith(
+            style: (isAndroidUi ? textTheme.bodySmall : textTheme.bodyMedium)
+                ?.copyWith(
               color: colorScheme.onSurfaceVariant,
               height: 1.35,
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: isAndroidUi ? AppSpacing.md : AppSpacing.lg),
           child,
         ],
       ),
@@ -506,6 +522,7 @@ class _SettingsActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -517,15 +534,15 @@ class _SettingsActionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical: AppSpacing.md,
+            vertical: isAndroidUi ? AppSpacing.sm : AppSpacing.md,
           ),
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: isAndroidUi ? 40 : 46,
+                height: isAndroidUi ? 40 : 46,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(16),
@@ -543,7 +560,10 @@ class _SettingsActionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: textTheme.titleMedium?.copyWith(
+                      style: (isAndroidUi
+                              ? textTheme.bodyMedium
+                              : textTheme.titleMedium)
+                          ?.copyWith(
                         color: colorScheme.onSurface,
                         fontWeight: FontWeight.w700,
                       ),
@@ -588,6 +608,7 @@ class _SettingsShortcutCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -598,7 +619,7 @@ class _SettingsShortcutCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Ink(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: EdgeInsets.all(isAndroidUi ? AppSpacing.sm : AppSpacing.md),
           decoration: BoxDecoration(
             color: theme.cardColor.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(20),
@@ -610,8 +631,8 @@ class _SettingsShortcutCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: isAndroidUi ? 34 : 38,
+                height: isAndroidUi ? 34 : 38,
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(14),
@@ -622,10 +643,12 @@ class _SettingsShortcutCard extends StatelessWidget {
                   size: AppSizes.iconSm,
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: isAndroidUi ? AppSpacing.sm : AppSpacing.md),
               Text(
                 title,
-                style: textTheme.titleSmall?.copyWith(
+                style:
+                    (isAndroidUi ? textTheme.bodySmall : textTheme.titleSmall)
+                        ?.copyWith(
                   color: colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
@@ -660,6 +683,7 @@ class _ThemeModeChoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -673,20 +697,20 @@ class _ThemeModeChoiceCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(isAndroidUi ? 16 : 18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xs,
-              AppSpacing.xs,
-              AppSpacing.xs,
-              AppSpacing.sm,
+            padding: EdgeInsets.fromLTRB(
+              isAndroidUi ? 6 : AppSpacing.xs,
+              isAndroidUi ? 6 : AppSpacing.xs,
+              isAndroidUi ? 6 : AppSpacing.xs,
+              isAndroidUi ? 6 : AppSpacing.sm,
             ),
             decoration: BoxDecoration(
               color: isSelected
                   ? colorScheme.primary.withValues(alpha: 0.08)
                   : theme.cardColor.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(isAndroidUi ? 16 : 18),
               border: Border.all(
                 color: isSelected
                     ? colorScheme.primary
@@ -698,9 +722,9 @@ class _ThemeModeChoiceCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  height: 54,
+                  height: isAndroidUi ? 44 : 54,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(isAndroidUi ? 10 : 12),
                     child: IgnorePointer(
                       child: _ThemeModeTilePreview(
                         value: value,
@@ -709,11 +733,14 @@ class _ThemeModeChoiceCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: isAndroidUi ? AppSpacing.xs : AppSpacing.sm),
                 Text(
                   meta.title,
                   textAlign: TextAlign.center,
-                  style: textTheme.titleSmall?.copyWith(
+                  style: (isAndroidUi
+                          ? textTheme.labelLarge
+                          : textTheme.titleSmall)
+                      ?.copyWith(
                     color: isSelected
                         ? colorScheme.primary
                         : colorScheme.onSurface,
@@ -1006,11 +1033,12 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAndroidUi = _isAndroidUi(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(isAndroidUi ? AppSpacing.sm : AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.cardColor.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(20),
@@ -1022,8 +1050,8 @@ class _InfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: isAndroidUi ? 32 : 36,
+            height: isAndroidUi ? 32 : 36,
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
@@ -1034,10 +1062,11 @@ class _InfoCard extends StatelessWidget {
               size: AppSizes.iconSm,
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: isAndroidUi ? AppSpacing.sm : AppSpacing.md),
           Text(
             title,
-            style: textTheme.bodySmall?.copyWith(
+            style: (isAndroidUi ? textTheme.labelSmall : textTheme.bodySmall)
+                ?.copyWith(
               color: colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),

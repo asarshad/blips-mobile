@@ -17,6 +17,10 @@ class EventService {
     String? adId,
     required String surface,
     String? sessionId,
+    String? provider,
+    String? adUnitId,
+    int? slotIndex,
+    String? loadStatus,
   }) async {
     _fire('/events/impression', {
       'item_type': itemType,
@@ -25,6 +29,10 @@ class EventService {
       'surface': surface,
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       if (sessionId != null) 'session_id': sessionId,
+      if (provider != null) 'provider': provider,
+      if (adUnitId != null) 'ad_unit_id': adUnitId,
+      if (slotIndex != null) 'slot_index': slotIndex,
+      if (loadStatus != null) 'load_status': loadStatus,
     });
   }
 
@@ -35,6 +43,10 @@ class EventService {
     String? adId,
     required String surface,
     String? sessionId,
+    String? provider,
+    String? adUnitId,
+    int? slotIndex,
+    String? loadStatus,
   }) async {
     _fire('/events/click', {
       'item_type': itemType,
@@ -43,6 +55,10 @@ class EventService {
       'surface': surface,
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       if (sessionId != null) 'session_id': sessionId,
+      if (provider != null) 'provider': provider,
+      if (adUnitId != null) 'ad_unit_id': adUnitId,
+      if (slotIndex != null) 'slot_index': slotIndex,
+      if (loadStatus != null) 'load_status': loadStatus,
     });
   }
 

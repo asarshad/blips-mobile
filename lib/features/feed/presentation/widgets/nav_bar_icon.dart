@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/theme/theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Bottom navigation bar icon with selected/unselected states.
@@ -21,6 +22,11 @@ class NavBarIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).bottomNavigationBarTheme;
+    final isAndroidUi =
+        !kIsWeb && Theme.of(context).platform == TargetPlatform.android;
+    final iconSize = isAndroidUi ? AppSizes.iconMd : AppSizes.iconLg;
+    final verticalPadding = isAndroidUi ? 10.0 : AppSpacing.sm;
+    final horizontalPadding = isAndroidUi ? AppSpacing.md : AppSpacing.lg;
 
     // Clamp text scaling for nav icons to prevent layout overflow
     return MediaQuery.withClampedTextScaling(
@@ -29,13 +35,13 @@ class NavBarIcon extends StatelessWidget {
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.sm,
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: verticalPadding,
           ),
           child: Icon(
             isSelected ? selectedIcon : icon,
-            size: AppSizes.iconLg,
+            size: iconSize,
             color: isSelected
                 ? theme.selectedItemColor
                 : theme.unselectedItemColor,

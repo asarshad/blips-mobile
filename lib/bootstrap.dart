@@ -4,6 +4,7 @@ import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Ensures Flutter bindings are ready before attaching the ProviderScope.
@@ -26,6 +27,8 @@ Future<void> bootstrap() async {
     ]);
 
     logger.info('App starting...', category: LogCategory.lifecycle);
+
+    await _initializeAdMob();
 
     // Clean up very old cache on app start (older than 7 days)
     // Prevents unbounded growth; freshness is handled by background refresh
@@ -76,6 +79,8 @@ Future<void> bootstrapWithOverrides({
     final binding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: binding);
 
+    await _initializeAdMob();
+
     runApp(
       ProviderScope(
         overrides: overrides,
@@ -85,4 +90,18 @@ Future<void> bootstrapWithOverrides({
 
     FlutterNativeSplash.remove();
   });
+}
+
+Future<void> _initializeAdMob() async {
+  try {
+    await MobileAds.instance.initialize();
+    logger.info('AdMob initialized', category: LogCategory.lifecycle);
+  } catch (e, stackTrace) {
+    logger.warning(
+      'AdMob initialization failed',
+      category: LogCategory.app,
+      error: e,
+      stackTrace: stackTrace,
+    );
+  }
 }

@@ -6,78 +6,98 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('AdsConfig', () {
-    test('default constructor has everything disabled', () {
+    test('default constructor is globally disabled', () {
       const config = AdsConfig();
-      expect(config.adsEnabled, isFalse);
-      expect(config.adsFeedCardEnabled, isFalse);
-      expect(config.adsBannerEnabled, isFalse);
-      expect(config.adsFeedFrequency, 0);
-      expect(config.adsCanaryPercent, 0);
+
+      expect(config.enabled, isFalse);
+      expect(config.eligible, isFalse);
+      expect(config.provider, 'admob_native');
+      expect(config.canaryPercent, 0);
+      expect(config.configTtlSeconds, 300);
       expect(config.showFeedAds, isFalse);
       expect(config.showBannerAds, isFalse);
+      expect(config.isSurfaceEnabled(AdSurface.articles), isFalse);
+      expect(config.isSurfaceEnabled(AdSurface.videos), isFalse);
+      expect(config.isSurfaceEnabled(AdSurface.reels), isFalse);
     });
 
-    test('showFeedAds requires both flags true', () {
-      const bothOff = AdsConfig();
-      expect(bothOff.showFeedAds, isFalse);
+    test('showFeedAds requires both enabled and eligible', () {
+      const disabled = AdsConfig();
+      const enabledOnly = AdsConfig(enabled: true);
+      const eligibleOnly = AdsConfig(eligible: true);
+      const enabledAndEligible = AdsConfig(enabled: true, eligible: true);
 
-      const masterOnly = AdsConfig(adsEnabled: true);
-      expect(masterOnly.showFeedAds, isFalse);
-
-      const feedOnly = AdsConfig(adsFeedCardEnabled: true);
-      expect(feedOnly.showFeedAds, isFalse);
-
-      const bothOn = AdsConfig(adsEnabled: true, adsFeedCardEnabled: true);
-      expect(bothOn.showFeedAds, isTrue);
+      expect(disabled.showFeedAds, isFalse);
+      expect(enabledOnly.showFeedAds, isFalse);
+      expect(eligibleOnly.showFeedAds, isFalse);
+      expect(enabledAndEligible.showFeedAds, isTrue);
     });
 
-    test('showBannerAds requires both flags true', () {
-      const bothOff = AdsConfig();
-      expect(bothOff.showBannerAds, isFalse);
+    test('surface enablement respects the global gate', () {
+      const config = AdsConfig(
+        enabled: true,
+        eligible: true,
+        surfaces: AdsSurfacesConfig(
+          articles:
+              AdSurfaceConfig(enabled: true, frequency: 8, firstSlotAfter: 2),
+          videos:
+              AdSurfaceConfig(enabled: false, frequency: 8, firstSlotAfter: 2),
+          reels:
+              AdSurfaceConfig(enabled: true, frequency: 4, firstSlotAfter: 1),
+        ),
+      );
 
-      const masterOnly = AdsConfig(adsEnabled: true);
-      expect(masterOnly.showBannerAds, isFalse);
-
-      const bannerOnly = AdsConfig(adsBannerEnabled: true);
-      expect(bannerOnly.showBannerAds, isFalse);
-
-      const bothOn = AdsConfig(adsEnabled: true, adsBannerEnabled: true);
-      expect(bothOn.showBannerAds, isTrue);
+      expect(config.isSurfaceEnabled(AdSurface.articles), isTrue);
+      expect(config.isSurfaceEnabled(AdSurface.videos), isFalse);
+      expect(config.isSurfaceEnabled(AdSurface.reels), isTrue);
     });
 
     group('fromJson', () {
-      test('parses all fields', () {
+      test('parses the backend control-plane shape', () {
         final config = AdsConfig.fromJson({
-          'ads_enabled': true,
-          'ads_feed_card_enabled': true,
-          'ads_banner_enabled': true,
-          'ads_feed_frequency': 5,
-          'ads_canary_percent': 20,
+          'enabled': true,
+          'provider': 'admob_native',
+          'eligible': true,
+          'canary_percent': 20,
+          'config_ttl_seconds': 120,
+          'surfaces': {
+            'articles': {
+              'enabled': true,
+              'frequency': 5,
+              'first_slot_after': 2,
+            },
+            'videos': {
+              'enabled': true,
+              'frequency': 7,
+              'first_slot_after': 3,
+            },
+            'reels': {
+              'enabled': false,
+              'frequency': 0,
+              'first_slot_after': 0,
+            },
+          },
         });
 
-        expect(config.adsEnabled, isTrue);
-        expect(config.adsFeedCardEnabled, isTrue);
-        expect(config.adsBannerEnabled, isTrue);
-        expect(config.adsFeedFrequency, 5);
-        expect(config.adsCanaryPercent, 20);
+        expect(config.enabled, isTrue);
+        expect(config.provider, 'admob_native');
+        expect(config.eligible, isTrue);
+        expect(config.canaryPercent, 20);
+        expect(config.configTtlSeconds, 120);
+        expect(config.surfaceConfig(AdSurface.articles).frequency, 5);
+        expect(config.surfaceConfig(AdSurface.videos).firstSlotAfter, 3);
+        expect(config.surfaceConfig(AdSurface.reels).enabled, isFalse);
       });
 
-      test('uses defaults for missing keys', () {
+      test('uses safe defaults for missing keys', () {
         final config = AdsConfig.fromJson({});
-        expect(config.adsEnabled, isFalse);
-        expect(config.adsFeedCardEnabled, isFalse);
-        expect(config.adsBannerEnabled, isFalse);
-        expect(config.adsFeedFrequency, 0);
-        expect(config.adsCanaryPercent, 0);
-      });
 
-      test('handles null values gracefully', () {
-        final config = AdsConfig.fromJson({
-          'ads_enabled': null,
-          'ads_feed_card_enabled': null,
-        });
-        expect(config.adsEnabled, isFalse);
-        expect(config.adsFeedCardEnabled, isFalse);
+        expect(config.enabled, isFalse);
+        expect(config.eligible, isFalse);
+        expect(config.provider, 'admob_native');
+        expect(config.configTtlSeconds, 300);
+        expect(config.surfaceConfig(AdSurface.articles).frequency, 0);
+        expect(config.surfaceConfig(AdSurface.videos).enabled, isFalse);
       });
     });
   });

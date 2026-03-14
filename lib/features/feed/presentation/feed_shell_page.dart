@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:blips_mobile/core/error/error.dart';
-import 'package:blips_mobile/core/error/error_boundary.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
-import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
+import 'package:blips_mobile/features/ads/presentation/native_ad_card.dart';
+import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
@@ -209,6 +210,10 @@ class FeedShellPage extends HookConsumerWidget {
           }
           lastRefreshAt.value = now;
 
+          if (ref.read(appConfigRepositoryProvider).isCacheStale) {
+            ref.invalidate(adsConfigProvider);
+          }
+
           if (currentIndex == 2) {
             unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
             return;
@@ -266,22 +271,31 @@ class FeedShellPage extends HookConsumerWidget {
   Widget _buildBody({
     required PageController pageController,
     required ValueNotifier<int> currentIndex,
-    required AsyncValue<List<FeedEntry>> articleFeed,
-    required AsyncValue<List<FeedEntry>> videoFeed,
+    required AsyncValue<List<FeedPageItem>> articleFeed,
+    required AsyncValue<List<FeedPageItem>> videoFeed,
     required WidgetRef ref,
   }) {
     final allTabs = [
-      // Articles tab (may contain interleaved ad entries)
-      FeedTab<FeedEntry>(
+      FeedTab<FeedPageItem>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
         builder: (entry, isCurrentPage) {
           final feedNotifier = ref.read(paginatedFeedProvider.notifier);
-          if (entry is AdFeedEntry) return AdCard(entry: entry);
+          if (entry is NativeAdSlotFeedPageItem) {
+            return NativeAdCard(slot: entry);
+          }
+          if (entry is SponsorCardFeedPageItem) {
+            return AdCard(entry: entry.entry);
+          }
+          final organicEntry = entry.organicEntry;
+          if (organicEntry is! ArticleFeedEntry) {
+            return const SizedBox.shrink();
+          }
           return ArticleCard(
-            entry: entry as ArticleFeedEntry,
+            entry: organicEntry,
             isVisible: currentIndex.value == 0 && isCurrentPage,
-            isNewSinceLastSeen: feedNotifier.isEntryNewSinceLastSeen(entry.id),
+            isNewSinceLastSeen:
+                feedNotifier.isEntryNewSinceLastSeen(organicEntry.id),
           );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
@@ -289,18 +303,27 @@ class FeedShellPage extends HookConsumerWidget {
         onPageChanged: (index) =>
             ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
       ),
-      // Videos tab (may contain interleaved ad entries)
-      FeedTab<FeedEntry>(
+      FeedTab<FeedPageItem>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
         containsVideos: true,
         builder: (entry, isCurrentPage) {
           final feedNotifier = ref.read(paginatedFeedProvider.notifier);
-          if (entry is AdFeedEntry) return AdCard(entry: entry);
+          if (entry is NativeAdSlotFeedPageItem) {
+            return NativeAdCard(slot: entry);
+          }
+          if (entry is SponsorCardFeedPageItem) {
+            return AdCard(entry: entry.entry);
+          }
+          final organicEntry = entry.organicEntry;
+          if (organicEntry is! VideoFeedEntry) {
+            return const SizedBox.shrink();
+          }
           return VideoCard(
-            entry: entry as VideoFeedEntry,
+            entry: organicEntry,
             isVisible: currentIndex.value == 1 && isCurrentPage,
-            isNewSinceLastSeen: feedNotifier.isEntryNewSinceLastSeen(entry.id),
+            isNewSinceLastSeen:
+                feedNotifier.isEntryNewSinceLastSeen(organicEntry.id),
           );
         },
         onRefresh: () => ref.refresh(paginatedFeedProvider),
@@ -382,6 +405,9 @@ class _BottomNavBar extends StatelessWidget {
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     final navColor = Theme.of(context).bottomNavigationBarTheme.backgroundColor;
     final scaffoldColor = Theme.of(context).scaffoldBackgroundColor;
+    final isAndroidUi =
+        !kIsWeb && Theme.of(context).platform == TargetPlatform.android;
+    final navHeight = isAndroidUi ? 56.0 : AppSizes.bottomNavHeight;
 
     // Two-layer nav bar: icon row uses nav color, safe zone below uses
     // scaffold background — this makes the home indicator gap invisible,
@@ -392,7 +418,7 @@ class _BottomNavBar extends StatelessWidget {
         Container(
           color: navColor,
           child: SizedBox(
-            height: AppSizes.bottomNavHeight,
+            height: navHeight,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [

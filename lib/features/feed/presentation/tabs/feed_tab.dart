@@ -1,5 +1,6 @@
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/config/memory_config.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -14,10 +15,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// - Empty states with refresh action
 /// - Error states with retry action
 /// - Loading states
-/// - Video preloading for VideoFeedEntry types
+/// - Video preloading for organic [VideoFeedEntry] pages
 /// - Infinite scroll pagination
 /// - Current view index tracking for seamless cache updates
-class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
+class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   const FeedTab({
     super.key,
     required this.feed,
@@ -41,8 +42,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   /// Called when user swipes to a new page, for tracking current view index.
   final void Function(int index)? onPageChanged;
 
-  /// When true, enables video preloading for [VideoFeedEntry] items
-  /// in the list (even when [T] is a broader type like [FeedEntry]).
+  /// When true, enables video preloading for organic video pages in the list.
   final bool containsVideos;
 
   /// Whether the backend has confirmed there is no more content for this tab.
@@ -52,7 +52,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   final String caughtUpLabel;
 
   /// Called once per terminal entry when the user reaches a caught-up state.
-  final void Function(T entry)? onCaughtUp;
+  final void Function(FeedEntry entry)? onCaughtUp;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,7 +62,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
     // Preload first videos when data loads
-    final hasVideos = containsVideos || T == VideoFeedEntry;
+    final hasVideos = containsVideos;
     useEffect(() {
       if (feed.hasValue && feed.value!.isNotEmpty && hasVideos) {
         _preloadInitialVideos(feed.value!, videoManager);
@@ -84,8 +84,8 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
         return null;
       }
 
-      final entry = entries[index];
-      if (lastCaughtUpEntryId.value == entry.id) {
+      final entry = entries[index].organicEntry;
+      if (entry == null || lastCaughtUpEntryId.value == entry.id) {
         return null;
       }
 
@@ -114,7 +114,10 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
     List<T> entries,
     YoutubePlayerManagerBase videoManager,
   ) {
-    final videos = entries.whereType<VideoFeedEntry>().toList();
+    final videos = entries
+        .map((entry) => entry.videoEntry)
+        .whereType<VideoFeedEntry>()
+        .toList(growable: false);
     if (videos.isEmpty) return;
 
     final preloadUrls = videos
@@ -162,6 +165,7 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
           },
           itemCount: entries.length,
           itemBuilder: (context, index) => SizedBox.expand(
+            key: ValueKey(entries[index].stableId),
             child: builder(entries[index], index == currentPage.value),
           ),
         ),
@@ -203,17 +207,21 @@ class FeedTab<T extends FeedEntry> extends HookConsumerWidget {
   ) {
     // Only process if the current entry is actually a video.
     final currentEntry = entries[index];
-    if (currentEntry is! VideoFeedEntry) return;
+    final currentVideoEntry = currentEntry.videoEntry;
+    if (currentVideoEntry == null) return;
 
     // Build video-only URL list (skip ad entries) while preserving the exact
     // current entry position in that filtered list.
-    final videoEntries = entries.whereType<VideoFeedEntry>().toList();
+    final videoEntries = entries
+        .map((entry) => entry.videoEntry)
+        .whereType<VideoFeedEntry>()
+        .toList(growable: false);
     final videoUrls = <String>[];
     var videoIndex = -1;
     for (final videoEntry in videoEntries) {
       final playbackUrl = _resolvePlaybackUrl(videoEntry, videoManager);
       if (playbackUrl.isEmpty) continue;
-      if (videoEntry.id == currentEntry.id) {
+      if (videoEntry.id == currentVideoEntry.id) {
         videoIndex = videoUrls.length;
       }
       videoUrls.add(playbackUrl);

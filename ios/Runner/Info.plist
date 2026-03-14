@@ -48,6 +48,8 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>GADApplicationIdentifier</key>
+		<string>$(BLIPS_ADMOB_APP_ID)</string>
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
 	</dict>

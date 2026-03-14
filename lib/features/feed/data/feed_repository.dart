@@ -18,6 +18,7 @@ class FeedPageResult<T extends FeedEntry> {
     required this.inventoryState,
     this.nextCursor,
     this.servedAt,
+    this.sessionId,
   });
 
   final List<T> items;
@@ -25,6 +26,7 @@ class FeedPageResult<T extends FeedEntry> {
   final FeedInventoryState inventoryState;
   final String? nextCursor;
   final DateTime? servedAt;
+  final String? sessionId;
 
   bool get isCaughtUp => inventoryState == FeedInventoryState.caughtUp;
 }
@@ -58,6 +60,10 @@ class FeedRepository {
   String? _videoSessionId;
   int? _videoCursor;
   String? _reelsCursor;
+
+  String? get articleSessionId => _articleSessionId;
+
+  String? get videoSessionId => _videoSessionId;
 
   /// Fetches both recent articles and videos, merging them into one list.
   Future<List<FeedEntry>> fetchFeed({
@@ -94,18 +100,10 @@ class FeedRepository {
         size: videoLimit,
       );
 
-      // Separate organic from ads for proper sorting.
-      final organic = <FeedEntry>[
+      final merged = <FeedEntry>[
         ...articleResult.items.whereType<ArticleFeedEntry>(),
         ...videoResult.items.whereType<VideoFeedEntry>(),
       ]..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-
-      final ads = <AdFeedEntry>[
-        ...articleResult.items.whereType<AdFeedEntry>(),
-        ...videoResult.items.whereType<AdFeedEntry>(),
-      ];
-
-      final merged = ads.isEmpty ? organic : _interleaveAds(organic, ads);
       final hasMore = articleResult.hasMore || videoResult.hasMore;
 
       return FeedPageResult(
@@ -160,6 +158,7 @@ class FeedRepository {
           hasMore: hasMore,
           itemCount: parsed.length,
         ),
+        sessionId: response['session_id'] as String?,
       );
     }
 
@@ -208,8 +207,6 @@ class FeedRepository {
       } else if (itemType == 'VIDEO') {
         final dto = _playlistVideoToDto(item);
         parsed.add(dto.toDomain());
-      } else if (itemType == 'AD' && item['item_type'] == 'AD') {
-        parsed.add(AdFeedEntry.fromJson(item));
       }
     }
     return parsed;
@@ -403,23 +400,6 @@ class FeedRepository {
         stackTrace: stack,
       );
     }
-  }
-
-  List<FeedEntry> _interleaveAds(
-    List<FeedEntry> organic,
-    List<AdFeedEntry> ads,
-  ) {
-    if (organic.isEmpty) {
-      return List<FeedEntry>.from(ads, growable: false);
-    }
-
-    final mixed = <FeedEntry>[...organic];
-    for (var i = 0; i < ads.length; i++) {
-      final pos = ((i + 1) * (organic.length ~/ (ads.length + 1)))
-          .clamp(1, mixed.length);
-      mixed.insert(pos + i, ads[i]);
-    }
-    return mixed;
   }
 
   /// Parses a mixed JSON list that may contain both organic items and

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
-import 'package:blips_mobile/features/ads/domain/ad_entry.dart';
+import 'package:blips_mobile/features/ads/domain/ads_config.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
+import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
@@ -359,35 +361,44 @@ final filteredVideoFeedProvider =
   );
 });
 
-/// Articles + injected ads for the article tab.
-///
-/// Preserves the backend's interleaving order. When ads are disabled
-/// (the default) this is identical to [filteredArticleFeedProvider].
+/// Articles feed with device-local native ad slots.
 final articleFeedWithAdsProvider =
-    Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
-  final feedState = ref.watch(paginatedFeedProvider);
+    Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
+  final feedState = ref.watch(filteredArticleFeedProvider);
+  final adsConfig =
+      ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
+  final repository = ref.watch(feedRepositoryProvider);
 
   return feedState.when(
     data: (items) => AsyncValue.data(
-      items
-          .where((e) => e is ArticleFeedEntry || e is AdFeedEntry)
-          .toList(growable: false),
+      buildFeedPageItems(
+        entries: items,
+        adsConfig: adsConfig,
+        surface: AdSurface.articles,
+        sessionId: repository.articleSessionId,
+      ),
     ),
     error: (err, stack) => AsyncValue.error(err, stack),
     loading: () => const AsyncValue.loading(),
   );
 });
 
-/// Videos + injected ads for the video tab.
+/// Videos feed with device-local native ad slots.
 final videoFeedWithAdsProvider =
-    Provider.autoDispose<AsyncValue<List<FeedEntry>>>((ref) {
-  final feedState = ref.watch(paginatedFeedProvider);
+    Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
+  final feedState = ref.watch(filteredVideoFeedProvider);
+  final adsConfig =
+      ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
+  final repository = ref.watch(feedRepositoryProvider);
 
   return feedState.when(
     data: (items) => AsyncValue.data(
-      items
-          .where((e) => e is VideoFeedEntry || e is AdFeedEntry)
-          .toList(growable: false),
+      buildFeedPageItems(
+        entries: items,
+        adsConfig: adsConfig,
+        surface: AdSurface.videos,
+        sessionId: repository.videoSessionId,
+      ),
     ),
     error: (err, stack) => AsyncValue.error(err, stack),
     loading: () => const AsyncValue.loading(),
