@@ -35,39 +35,40 @@
     </clipPath>
   </defs>
 
-  <g filter="url(#tileShadow)">
-    <rect x="24" y="24" width="976" height="976" rx="220" fill="#FFFFFF"/>
-  </g>
-  <g clip-path="url(#tileClip)">
-    <rect x="29" y="29" width="966" height="966" rx="215" fill="none" stroke="url(#edgeLight)" stroke-width="10"/>
-    <rect x="31" y="31" width="962" height="962" rx="213" fill="none" stroke="url(#edgeShade)" stroke-width="10"/>
-  </g>
-
-  <g filter="url(#logoEmboss)">
-    <g transform="translate(512 390)">
-      <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#D65AC5"/>
-      <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#F06A5F"/>
-      <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#CFDB2C"/>
-      <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#6A8CF0"/>
-      <rect x="56" y="-222" width="44" height="444" rx="22" fill="#F2A32C"/>
-      <rect x="134" y="-132" width="44" height="264" rx="22" fill="#E8A12A"/>
-      <rect x="212" y="-56" width="44" height="112" rx="22" fill="#E95A79"/>
-
-      <g clip-path="url(#barsClip)">
-        <g clip-path="url(#lowerWaveClip)">
-          <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#9147C7"/>
-          <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#764EE0"/>
-          <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#764EE0"/>
-          <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#54C2D9"/>
-          <rect x="56" y="-222" width="44" height="444" rx="22" fill="#54C2D9"/>
-          <rect x="134" y="-132" width="44" height="264" rx="22" fill="#F0DE35"/>
-          <rect x="212" y="-56" width="44" height="112" rx="22" fill="#F2A04A"/>
-        </g>
-        <path d="M -380 2 C -342 -58 -286 -64 -228 -4 C -178 46 -126 48 -64 -2 C -4 -48 56 -52 114 -2 C 170 46 226 50 280 6 C 314 -16 330 -16 340 -8" fill="none" stroke="#000000" stroke-width="9" stroke-linecap="round" opacity="0.11"/>
-        <path d="M -380 2 C -342 -58 -286 -64 -228 -4 C -178 46 -126 48 -64 -2 C -4 -48 56 -52 114 -2 C 170 46 226 50 280 6 C 314 -16 330 -16 340 -8" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.12"/>
-      </g>
+  <g transform="translate(512 512) scale(0.82) translate(-512 -512)">
+    <g filter="url(#tileShadow)">
+      <rect x="24" y="24" width="976" height="976" rx="220" fill="#FFFFFF"/>
+    </g>
+    <g clip-path="url(#tileClip)">
+      <rect x="29" y="29" width="966" height="966" rx="215" fill="none" stroke="url(#edgeLight)" stroke-width="10"/>
+      <rect x="31" y="31" width="962" height="962" rx="213" fill="none" stroke="url(#edgeShade)" stroke-width="10"/>
     </g>
 
-    <text x="512" y="796" text-anchor="middle" fill="#1D1D22" font-family="Avenir Next, Avenir, Helvetica, Arial, sans-serif" font-size="208" font-weight="700">blips</text>
+    <g filter="url(#logoEmboss)">
+      <g transform="translate(512 390)">
+        <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#D65AC5"/>
+        <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#F06A5F"/>
+        <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#CFDB2C"/>
+        <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#6A8CF0"/>
+        <rect x="56" y="-222" width="44" height="444" rx="22" fill="#F2A32C"/>
+        <rect x="134" y="-132" width="44" height="264" rx="22" fill="#E8A12A"/>
+        <rect x="212" y="-56" width="44" height="112" rx="22" fill="#E95A79"/>
+
+        <g clip-path="url(#barsClip)">
+          <g clip-path="url(#lowerWaveClip)">
+            <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#9147C7"/>
+            <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#764EE0"/>
+            <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#764EE0"/>
+            <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#54C2D9"/>
+            <rect x="56" y="-222" width="44" height="444" rx="22" fill="#54C2D9"/>
+            <rect x="134" y="-132" width="44" height="264" rx="22" fill="#F0DE35"/>
+            <rect x="212" y="-56" width="44" height="112" rx="22" fill="#F2A04A"/>
+          </g>
+          <path d="M -380 2 C -342 -58 -286 -64 -228 -4 C -178 46 -126 48 -64 -2 C -4 -48 56 -52 114 -2 C 170 46 226 50 280 6 C 314 -16 330 -16 340 -8" fill="none" stroke="#000000" stroke-width="9" stroke-linecap="round" opacity="0.11"/>
+          <path d="M -380 2 C -342 -58 -286 -64 -228 -4 C -178 46 -126 48 -64 -2 C -4 -48 56 -52 114 -2 C 170 46 226 50 280 6 C 314 -16 330 -16 340 -8" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.12"/>
+        </g>
+      </g>
+      <text x="512" y="796" text-anchor="middle" fill="#1D1D22" font-family="Avenir Next, Avenir, Helvetica, Arial, sans-serif" font-size="208" font-weight="700">blips</text>
+    </g>
   </g>
 </svg>
