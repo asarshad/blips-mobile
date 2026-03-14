@@ -303,8 +303,12 @@ class _Header extends StatelessWidget {
           ),
         ),
         if (showActions) ...[
-          _ActionIcon(Icons.open_in_new, onOpenLink, colorScheme),
-          _ActionIcon(Icons.share_outlined, onShare, colorScheme),
+          const SizedBox(width: AppSpacing.sm),
+          _HeaderActions(
+            colorScheme: colorScheme,
+            onOpenLink: onOpenLink,
+            onShare: onShare,
+          ),
         ],
       ],
     );
@@ -466,7 +470,7 @@ class _ChatButton extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           child: Icon(
-            Icons.bolt,
+            Icons.auto_awesome_rounded,
             color: colorScheme.onPrimary,
             size: AppSizes.iconSm,
           ),
@@ -508,6 +512,40 @@ class _CategoryBadge extends StatelessWidget {
   }
 }
 
+class _HeaderActions extends StatelessWidget {
+  const _HeaderActions({
+    required this.colorScheme,
+    this.onOpenLink,
+    this.onShare,
+  });
+
+  final ColorScheme colorScheme;
+  final VoidCallback? onOpenLink;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xxs),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ActionIcon(Icons.open_in_new, onOpenLink, colorScheme),
+          const SizedBox(width: AppSpacing.xs),
+          _ActionIcon(Icons.share_outlined, onShare, colorScheme),
+        ],
+      ),
+    );
+  }
+}
+
 class _ActionIcon extends StatelessWidget {
   const _ActionIcon(this.icon, this.onTap, this.colorScheme);
 
@@ -517,15 +555,24 @@ class _ActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Padding(
-        padding: AppSpacing.allXs,
-        child: Icon(
-          icon,
-          color: colorScheme.onSurfaceVariant,
-          size: AppSizes.iconSm,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: colorScheme.surface.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            color: colorScheme.onSurfaceVariant,
+            size: AppSizes.iconSm,
+          ),
         ),
       ),
     );

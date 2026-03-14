@@ -265,11 +265,8 @@ class ReelItem extends HookConsumerWidget {
 
         // Action Buttons
         _ActionButtons(
-          entry: entry,
-          onSave: () => _saveReel(context, repository),
           onShare: () => _shareReel(repository),
           onOpen: () => _openReel(repository),
-          onLessFromCreator: () => _lessFromCreator(context, repository),
         ),
 
         // Info Layer (not tappable for play/pause, but text is tappable for expand/collapse)
@@ -358,21 +355,6 @@ class ReelItem extends HookConsumerWidget {
     }
   }
 
-  Future<void> _saveReel(
-    BuildContext context,
-    FeedRepository repository,
-  ) async {
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.videoSave,
-      extraData: {
-        'surface': 'reels',
-        'source': entry.source,
-      },
-    );
-    _showFeedback(context, 'Saved for future ranking.');
-  }
-
   Future<void> _shareReel(FeedRepository repository) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
@@ -395,21 +377,6 @@ class ReelItem extends HookConsumerWidget {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
-  }
-
-  Future<void> _lessFromCreator(
-    BuildContext context,
-    FeedRepository repository,
-  ) async {
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.lessFromCreator,
-      extraData: {
-        'surface': 'reels',
-        'source': entry.source,
-      },
-    );
-    _showFeedback(context, 'We will show less from ${entry.source}.');
   }
 
   Future<bool> _recordEarlySkipIfNeeded({
@@ -453,19 +420,6 @@ class ReelItem extends HookConsumerWidget {
       return explicitDurationSeconds * 1000;
     }
     return 30 * 1000;
-  }
-
-  void _showFeedback(BuildContext context, String message) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(milliseconds: 1400),
-        ),
-      );
   }
 }
 
@@ -565,18 +519,12 @@ class _PlayIndicator extends StatelessWidget {
 
 class _ActionButtons extends StatelessWidget {
   const _ActionButtons({
-    required this.entry,
-    required this.onSave,
     required this.onShare,
     required this.onOpen,
-    required this.onLessFromCreator,
   });
 
-  final ReelFeedEntry entry;
-  final Future<void> Function() onSave;
   final Future<void> Function() onShare;
   final Future<void> Function() onOpen;
-  final Future<void> Function() onLessFromCreator;
 
   @override
   Widget build(BuildContext context) {
@@ -587,21 +535,9 @@ class _ActionButtons extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ReelActionButton(
-            icon: Icons.bookmark_add_outlined,
-            label: 'Save',
-            onTap: () => unawaited(onSave()),
-          ),
-          const SizedBox(height: 12),
-          ReelActionButton(
             icon: Icons.share,
             label: 'Share',
             onTap: () => unawaited(onShare()),
-          ),
-          const SizedBox(height: 12),
-          ReelActionButton(
-            icon: Icons.visibility_off_outlined,
-            label: 'Less',
-            onTap: () => unawaited(onLessFromCreator()),
           ),
           const SizedBox(height: 12),
           ReelActionButton(

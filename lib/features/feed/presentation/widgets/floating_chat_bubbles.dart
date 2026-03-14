@@ -237,7 +237,7 @@ class _AskCustomBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.edit_outlined,
+                  Icons.auto_awesome_rounded,
                   size: 16,
                   color: primary.withValues(alpha: 0.9),
                 ),

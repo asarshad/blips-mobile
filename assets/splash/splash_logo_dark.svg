@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(512 368)">
+    <defs>
+      <clipPath id="bars-clip-dark">
+        <rect x="-256" y="-50" width="44" height="100" rx="22"/>
+        <rect x="-178" y="-118" width="44" height="236" rx="22"/>
+        <rect x="-100" y="-186" width="44" height="372" rx="22"/>
+        <rect x="-22" y="-170" width="44" height="340" rx="22"/>
+        <rect x="56" y="-222" width="44" height="444" rx="22"/>
+        <rect x="134" y="-132" width="44" height="264" rx="22"/>
+        <rect x="212" y="-56" width="44" height="112" rx="22"/>
+      </clipPath>
+    </defs>
+    <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#C962BA"/>
+    <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#E8786D"/>
+    <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#C7D445"/>
+    <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#7595EE"/>
+    <rect x="56" y="-222" width="44" height="444" rx="22" fill="#E9A64A"/>
+    <rect x="134" y="-132" width="44" height="264" rx="22" fill="#DDA04E"/>
+    <rect x="212" y="-56" width="44" height="112" rx="22" fill="#DB6D88"/>
+    <g clip-path="url(#bars-clip-dark)">
+      <path d="M-354 72C-252 26 -132 2 2 -2C136 -6 254 8 360 46" fill="none" stroke="#D3B2EC" stroke-width="38" stroke-linecap="round" opacity="0.06"/>
+      <path d="M-334 80C-236 38 -120 16 8 14C134 12 248 24 350 56" fill="none" stroke="#A8C0FF" stroke-width="26" stroke-linecap="round" opacity="0.10"/>
+      <path d="M-310 86C-216 50 -106 30 16 28C136 26 244 36 334 66" fill="none" stroke="#84DFF7" stroke-width="16" stroke-linecap="round" opacity="0.10"/>
+    </g>
+  </g>
+  <text x="512" y="774" text-anchor="middle" fill="#F5F7FA" font-family="Avenir Next, Avenir, Helvetica, Arial, sans-serif" font-size="208" font-weight="700">blips</text>
+</svg>

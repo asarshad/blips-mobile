@@ -167,22 +167,25 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final article in articles) {
-      batch.insert('articles', {
-        'id': article.id,
-        'title': article.title,
-        'summary': article.summary,
-        'source': article.source,
-        'published_at': article.publishedAt.toIso8601String(),
-        'url': article.url,
-        'image_url': article.imageUrl,
-        'category': article.category,
-        'read_time': article.readTime,
-        'tags': jsonEncode(article.tags),
-        'conversation_starters': article.conversationStarters.isNotEmpty
-            ? jsonEncode(article.conversationStarters)
-            : null,
-        'cached_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+          'articles',
+          {
+            'id': article.id,
+            'title': article.title,
+            'summary': article.summary,
+            'source': article.source,
+            'published_at': article.publishedAt.toIso8601String(),
+            'url': article.url,
+            'image_url': article.imageUrl,
+            'category': article.category,
+            'read_time': article.readTime,
+            'tags': jsonEncode(article.tags),
+            'conversation_starters': article.conversationStarters.isNotEmpty
+                ? jsonEncode(article.conversationStarters)
+                : null,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -227,22 +230,25 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final video in videos) {
-      batch.insert('videos', {
-        'id': video.id,
-        'title': video.title,
-        'summary': video.summary,
-        'video_url': video.videoUrl,
-        'link': video.link,
-        'source': video.source,
-        'category': video.category,
-        'published_at': video.publishedAt.toIso8601String(),
-        'read_time': video.readTime,
-        'thumbnail_url': video.thumbnailUrl,
-        'conversation_starters': video.conversationStarters.isNotEmpty
-            ? jsonEncode(video.conversationStarters)
-            : null,
-        'cached_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+          'videos',
+          {
+            'id': video.id,
+            'title': video.title,
+            'summary': video.summary,
+            'video_url': video.videoUrl,
+            'link': video.link,
+            'source': video.source,
+            'category': video.category,
+            'published_at': video.publishedAt.toIso8601String(),
+            'read_time': video.readTime,
+            'thumbnail_url': video.thumbnailUrl,
+            'conversation_starters': video.conversationStarters.isNotEmpty
+                ? jsonEncode(video.conversationStarters)
+                : null,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -285,20 +291,23 @@ class FeedCache implements FeedCacheInterface {
     final now = DateTime.now().toIso8601String();
 
     for (final reel in reels) {
-      batch.insert('reels', {
-        'id': reel.id,
-        'title': reel.title,
-        'summary': reel.summary,
-        'video_url': reel.videoUrl,
-        'link': reel.link,
-        'source': reel.source,
-        'published_at': reel.publishedAt.toIso8601String(),
-        'thumbnail_url': reel.thumbnailUrl,
-        'conversation_starters': reel.conversationStarters.isNotEmpty
-            ? jsonEncode(reel.conversationStarters)
-            : null,
-        'cached_at': now,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+          'reels',
+          {
+            'id': reel.id,
+            'title': reel.title,
+            'summary': reel.summary,
+            'video_url': reel.videoUrl,
+            'link': reel.link,
+            'source': reel.source,
+            'published_at': reel.publishedAt.toIso8601String(),
+            'thumbnail_url': reel.thumbnailUrl,
+            'conversation_starters': reel.conversationStarters.isNotEmpty
+                ? jsonEncode(reel.conversationStarters)
+                : null,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     await batch.commit(noResult: true);
@@ -378,10 +387,13 @@ class FeedCache implements FeedCacheInterface {
   @override
   Future<void> setFeedLastSeenAt(DateTime lastSeenAt) async {
     final db = await database;
-    await db.insert('cache_meta', {
-      'key': _feedLastSeenAtKey,
-      'value': lastSeenAt.toUtc().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'cache_meta',
+        {
+          'key': _feedLastSeenAtKey,
+          'value': lastSeenAt.toUtc().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

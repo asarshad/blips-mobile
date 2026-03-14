@@ -1,34 +1,29 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background with rounded corners for iOS -->
-  <rect width="1024" height="1024" rx="224" fill="#0F172A"/>
-  
-  <!-- Gradient definition -->
-  <defs>
-    <linearGradient id="blipGradient" x1="200" y1="200" x2="824" y2="824" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#06B6D4"/>
-      <stop offset="100%" stop-color="#0E7490"/>
-    </linearGradient>
-  </defs>
-  
-  <!-- Stylized "B" made of news/feed cards stacked -->
-  <!-- Top card -->
-  <rect x="280" y="220" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
-  <rect x="320" y="260" width="200" height="16" rx="8" fill="white" opacity="0.9"/>
-  <rect x="320" y="292" width="140" height="12" rx="6" fill="white" opacity="0.5"/>
-  <rect x="320" y="316" width="180" height="12" rx="6" fill="white" opacity="0.5"/>
-  
-  <!-- Middle card (slightly offset) -->
-  <rect x="280" y="420" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
-  <rect x="320" y="460" width="180" height="16" rx="8" fill="white" opacity="0.9"/>
-  <rect x="320" y="492" width="160" height="12" rx="6" fill="white" opacity="0.5"/>
-  <rect x="320" y="516" width="200" height="12" rx="6" fill="white" opacity="0.5"/>
-  
-  <!-- Bottom card -->
-  <rect x="280" y="620" width="464" height="160" rx="24" fill="url(#blipGradient)"/>
-  <rect x="320" y="660" width="220" height="16" rx="8" fill="white" opacity="0.9"/>
-  <rect x="320" y="692" width="120" height="12" rx="6" fill="white" opacity="0.5"/>
-  <rect x="320" y="716" width="170" height="12" rx="6" fill="white" opacity="0.5"/>
-  
-  <!-- Notification dot / "blip" indicator -->
-  <circle cx="700" cy="280" r="40" fill="#F97316"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <g transform="translate(512 368)">
+    <defs>
+      <clipPath id="bars-clip">
+        <rect x="-256" y="-50" width="44" height="100" rx="22"/>
+        <rect x="-178" y="-118" width="44" height="236" rx="22"/>
+        <rect x="-100" y="-186" width="44" height="372" rx="22"/>
+        <rect x="-22" y="-170" width="44" height="340" rx="22"/>
+        <rect x="56" y="-222" width="44" height="444" rx="22"/>
+        <rect x="134" y="-132" width="44" height="264" rx="22"/>
+        <rect x="212" y="-56" width="44" height="112" rx="22"/>
+      </clipPath>
+    </defs>
+    <rect x="-256" y="-50" width="44" height="100" rx="22" fill="#D65AC5"/>
+    <rect x="-178" y="-118" width="44" height="236" rx="22" fill="#F06A5F"/>
+    <rect x="-100" y="-186" width="44" height="372" rx="22" fill="#CFDB2C"/>
+    <rect x="-22" y="-170" width="44" height="340" rx="22" fill="#6A8CF0"/>
+    <rect x="56" y="-222" width="44" height="444" rx="22" fill="#F2A32C"/>
+    <rect x="134" y="-132" width="44" height="264" rx="22" fill="#E8A12A"/>
+    <rect x="212" y="-56" width="44" height="112" rx="22" fill="#E95A79"/>
+    <g clip-path="url(#bars-clip)">
+      <path d="M-354 72C-252 26 -132 2 2 -2C136 -6 254 8 360 46" fill="none" stroke="#B774D6" stroke-width="42" stroke-linecap="round" opacity="0.08"/>
+      <path d="M-334 80C-236 38 -120 16 8 14C134 12 248 24 350 56" fill="none" stroke="#5B8AF8" stroke-width="30" stroke-linecap="round" opacity="0.14"/>
+      <path d="M-310 86C-216 50 -106 30 16 28C136 26 244 36 334 66" fill="none" stroke="#27BAE8" stroke-width="18" stroke-linecap="round" opacity="0.14"/>
+    </g>
+  </g>
+  <text x="512" y="774" text-anchor="middle" fill="#1D1D22" font-family="Avenir Next, Avenir, Helvetica, Arial, sans-serif" font-size="208" font-weight="700">blips</text>
 </svg>

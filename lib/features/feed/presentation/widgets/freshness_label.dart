@@ -40,9 +40,8 @@ class FreshnessLabel extends StatelessWidget {
 
     final now = DateTime.now();
     final publishedAge = _formatAge(now.difference(publishedAt));
-    final addedAge = addedAt != null
-        ? _formatAge(now.difference(addedAt!))
-        : null;
+    final addedAge =
+        addedAt != null ? _formatAge(now.difference(addedAt!)) : null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,

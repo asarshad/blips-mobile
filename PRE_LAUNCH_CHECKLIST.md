@@ -53,8 +53,8 @@ Complete all items before submitting to app stores.
 - [ ] App icon 1024×1024 uploaded
 
 ### Privacy & Legal
-- [ ] Privacy policy URL: https://husniconsulting.ca/privacy
-- [ ] Support URL: https://husniconsulting.ca/support
+- [ ] Privacy policy URL: https://blips.tech/privacy.html
+- [ ] Support URL: https://blips.tech/support.html
 - [ ] Data collection declarations completed
 - [ ] No user accounts → declare accordingly
 - [ ] App Tracking Transparency: Not used → declare
@@ -99,7 +99,7 @@ Complete all items before submitting to app stores.
 - [ ] Rating received (expected: Everyone)
 
 ### Privacy & Legal
-- [ ] Privacy policy URL: https://husniconsulting.ca/privacy
+- [ ] Privacy policy URL: https://blips.tech/privacy.html
 - [ ] Data safety section completed
 - [ ] No user data collected → declare accordingly
 
@@ -127,7 +127,7 @@ Complete all items before submitting to app stores.
 ### Feedback
 - [ ] Feedback form created (Google Forms / Typeform)
 - [ ] Link added to app settings or about screen
-- [ ] Support email configured: info@husniconsulting.ca
+- [ ] Support email configured: support@blips.tech
 
 ### Monitoring (7-day checkpoint)
 - [ ] Crash-free rate >99% (both platforms)

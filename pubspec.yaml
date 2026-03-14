@@ -64,16 +64,24 @@ dev_dependencies:
 flutter_launcher_icons:
   ios: true
   android: true
-  image_path: "icons/flattened/blips-iOS-Default-1024x1024@1x.png"
-  remove_alpha_ios: true
-  ios_dark: "icons/flattened/blips-iOS-Dark-1024x1024@1x.png"
-  ios_tinted: "icons/flattened/blips-iOS-TintedLight-1024x1024@1x.png"
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: false
+  image_path_ios_dark_transparent: "assets/icon/app_icon_ios_dark.png"
+  image_path_ios_tinted_grayscale: "assets/icon/app_icon_ios_tinted.png"
+  desaturate_tinted_to_grayscale_ios: true
 
 flutter_native_splash:
   color: "#FFFFFF"
+  color_dark: "#0F172A"
   image: "assets/splash/splash_logo.png"
+  image_dark: "assets/splash/splash_logo_dark.png"
   ios: true
   android: true
+  android_12:
+    color: "#FFFFFF"
+    color_dark: "#0F172A"
+    image: "assets/splash/splash_logo_android12.png"
+    image_dark: "assets/splash/splash_logo_android12_dark.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
