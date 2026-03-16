@@ -18,7 +18,7 @@ class ShareService {
 
   /// Shared singleton instance.
   static final ShareService instance = ShareService._();
-  static const _shareAttribution = 'Shared via Blips Mobile';
+  static const _shareAttribution = 'Shared via Blips News';
 
   bool _isSharing = false;
 
@@ -157,7 +157,7 @@ class ShareService {
     try {
       debugPrint('ShareService: Sharing reel "$title"');
       await _shareTextOnly(
-        text: _composeShareText(url: videoUrl),
+        text: _composeShareText(url: videoUrl, title: title),
         subject: title,
       );
     } finally {
@@ -528,7 +528,8 @@ class ShareService {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(filePath)],
-          text: _composeShareText(url: url),
+          text: _composeShareText(url: url, title: subject),
+          title: subject,
           subject: subject,
         ),
       );
@@ -541,7 +542,10 @@ class ShareService {
       });
     } catch (e) {
       debugPrint('ShareService: Error sharing with image: $e');
-      await _shareTextOnly(text: url, subject: subject);
+      await _shareTextOnly(
+        text: _composeShareText(url: url, title: subject),
+        subject: subject,
+      );
     }
   }
 
