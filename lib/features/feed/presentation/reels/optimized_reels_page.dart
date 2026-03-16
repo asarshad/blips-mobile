@@ -22,15 +22,24 @@ class OptimizedReelsPage extends HookConsumerWidget {
   const OptimizedReelsPage({
     super.key,
     this.isVisible = true,
+    this.controller,
+    this.onManualRefresh,
   });
 
   /// Whether this page is currently visible.
   final bool isVisible;
 
+  /// External page controller owned by the shell.
+  final PageController? controller;
+
+  /// Called when the user taps a visible refresh/retry button.
+  final VoidCallback? onManualRefresh;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reelsFeed = ref.watch(reelsFeedProvider);
-    final controller = usePageController();
+    final fallbackController = usePageController();
+    final effectiveController = controller ?? fallbackController;
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final currentIndex = useState(0);
     final lastCaughtUpEntryId = useRef<int?>(null);
@@ -54,7 +63,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
       body: reelsFeed.when(
         data: (entries) => _buildContent(
           entries: entries,
-          controller: controller,
+          controller: effectiveController,
           videoManager: videoManager,
           currentIndex: currentIndex,
           isMounted: isMounted,
@@ -66,7 +75,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           data: ThemeData.dark(),
           child: ErrorView(
             error: error,
-            onRetry: () => ref.invalidate(reelsFeedProvider),
+            onRetry: onManualRefresh ?? () => ref.invalidate(reelsFeedProvider),
           ),
         ),
       ),
@@ -251,10 +260,12 @@ class OptimizedReelsPage extends HookConsumerWidget {
     required WidgetRef ref,
   }) {
     if (entries.isEmpty) {
-      return const Center(
-        child: Text(
-          'No reels available right now.',
-          style: TextStyle(color: Colors.white),
+      return Theme(
+        data: ThemeData.dark(),
+        child: FeedMessageState(
+          message: 'No reels available right now.',
+          actionLabel: 'Refresh',
+          onAction: onManualRefresh ?? () => ref.invalidate(reelsFeedProvider),
         ),
       );
     }

@@ -25,6 +25,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     required this.builder,
     required this.emptyLabel,
     required this.onRefresh,
+    this.controller,
     this.onLoadMore,
     this.onPageChanged,
     this.containsVideos = false,
@@ -37,6 +38,11 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
   final VoidCallback onRefresh;
+
+  /// External page controller owned by the shell. Falls back to an internal
+  /// controller when not provided.
+  final PageController? controller;
+
   final VoidCallback? onLoadMore;
 
   /// Called when user swipes to a new page, for tracking current view index.
@@ -56,7 +62,8 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final controller = usePageController();
+    final fallbackController = usePageController();
+    final effectiveController = controller ?? fallbackController;
     final currentPage = useState(0);
     final lastCaughtUpEntryId = useRef<int?>(null);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
@@ -100,7 +107,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       bottom: false,
       child: feed.when(
         data: (entries) => _buildFeedContent(
-            entries, controller, videoManager, hasVideos, currentPage),
+            entries, effectiveController, videoManager, hasVideos, currentPage),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => ErrorView(
           error: error,

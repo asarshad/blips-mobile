@@ -43,6 +43,7 @@ final class FakeBackendApiClient implements BackendApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     requests.add((
       method: 'GET',
@@ -65,6 +66,7 @@ final class FakeBackendApiClient implements BackendApiClient {
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     requests.add((
       method: 'POST',

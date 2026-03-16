@@ -25,66 +25,67 @@ final feedCacheProvider = Provider<FeedCacheInterface>((ref) {
   return FeedCache.instance;
 });
 
-/// Manages the paginated state of the main feed (articles + videos).
+// ---------------------------------------------------------------------------
+// Shared feed-seen state
+// ---------------------------------------------------------------------------
+
+/// Shared "last seen" cutoff across articles and videos.
+final _feedLastSeenAtProvider = StateProvider<DateTime?>((ref) => null);
+
+// ---------------------------------------------------------------------------
+// ArticlesNotifier
+// ---------------------------------------------------------------------------
+
+/// Manages the paginated state of the articles feed.
 ///
 /// Implements stale-while-revalidate:
 /// 1. Show cached data immediately if available
 /// 2. Fetch fresh data in background
 /// 3. Seamlessly merge new data, preserving user's current position
-class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
-  FeedNotifier(this._repository, this._cache)
+class ArticlesNotifier
+    extends StateNotifier<AsyncValue<List<ArticleFeedEntry>>> {
+  ArticlesNotifier(this._repository, this._cache, this._ref)
       : super(const AsyncValue.loading()) {
-    loadInitial();
+    _loadInitial();
     _startPolling();
   }
 
   final FeedRepository _repository;
   final FeedCacheInterface _cache;
+  final Ref _ref;
   int _page = 1;
   bool _hasMore = true;
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
   Timer? _pollTimer;
-  static const int _articleLimit = 15;
-  static const int _videoLimit = 10;
+  static const int _limit = 15;
   static const Duration _pollInterval = Duration(seconds: 90);
-  DateTime? _lastSeenCutoff;
   Set<int> _newSinceLastSeenIds = <int>{};
 
-  /// Index of the item currently being viewed by the user.
-  /// Used to preserve position during seamless updates.
   int _currentViewIndex = 0;
 
-  /// Updates the current view index when user swipes.
   void setCurrentViewIndex(int index) {
     _currentViewIndex = index;
   }
 
-  /// Returns true when the entry should be marked "new since last seen".
   bool isEntryNewSinceLastSeen(int entryId) {
     return _newSinceLastSeenIds.contains(entryId);
   }
 
   bool get hasMore => _hasMore;
-
   FeedInventoryState get inventoryState => _inventoryState;
-
   bool get isCaughtUp => _inventoryState == FeedInventoryState.caughtUp;
 
-  Future<void> loadInitial() async {
+  // -- lifecycle -----------------------------------------------------------
+
+  Future<void> _loadInitial() async {
     if (!mounted) return;
     await _loadLastSeenCutoff();
 
-    // Try to show cached data first (stale-while-revalidate)
     try {
-      final cached = await _cache.getCachedFeed(
-        articleLimit: _articleLimit,
-        videoLimit: _videoLimit,
-      );
-
+      final cached = await _cache.getCachedArticles(limit: _limit);
       if (cached.isNotEmpty && mounted) {
-        // Show cached data immediately (even if stale)
         state = AsyncValue.data(cached);
         _updateNewSinceLastSeen(cached);
         _page = 1;
@@ -92,96 +93,66 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
         _inventoryState = FeedInventoryState.healthy;
 
         logger.info(
-          'Feed cache HIT: ${cached.length} items served from cache',
+          'Articles cache HIT: ${cached.length} items',
           category: LogCategory.app,
         );
 
-        // Then fetch fresh data in background
         _markFeedSeenNowInBackground();
         _refreshInBackground();
         return;
       }
     } catch (e) {
-      // Cache read failed, continue to network fetch
-      logger.warning(
-        'Failed to read feed cache',
-        category: LogCategory.app,
-        error: e,
-      );
+      logger.warning('Failed to read articles cache',
+          category: LogCategory.app, error: e);
     }
 
-    logger.info(
-      'Feed cache MISS: fetching from network',
-      category: LogCategory.app,
-    );
-
-    // No cache, fetch from network
+    logger.info('Articles cache MISS: fetching from network',
+        category: LogCategory.app);
     await _fetchFromNetwork();
     _markFeedSeenNowInBackground();
   }
 
-  /// Fetches fresh data from network and updates state.
   Future<void> _fetchFromNetwork() async {
     try {
       if (!mounted) return;
       state = const AsyncValue.loading();
 
-      final page = await _repository.fetchFeedPage(
-        page: 1,
-        articleLimit: _articleLimit,
-        videoLimit: _videoLimit,
-      );
-
+      final page = await _repository.fetchArticlesPage(page: 1, size: _limit);
       if (!mounted) return;
       _page = 1;
       _hasMore = page.hasMore;
       _inventoryState = page.inventoryState;
-      state = AsyncValue.data(page.items);
-      _updateNewSinceLastSeen(page.items);
-
-      // Cache the fresh data
-      _cacheInBackground(page.items);
+      final articles =
+          page.items.whereType<ArticleFeedEntry>().toList(growable: false);
+      state = AsyncValue.data(articles);
+      _updateNewSinceLastSeen(articles);
+      _cacheInBackground(articles);
     } catch (e, st) {
       if (!mounted) return;
-      logger.warning(
-        'Failed to load feed',
-        category: LogCategory.network,
-        error: e,
-        stackTrace: st,
-      );
+      logger.warning('Failed to load articles',
+          category: LogCategory.network, error: e, stackTrace: st);
       state = AsyncValue.error(e, st);
     }
   }
 
-  /// Refreshes data in background without disrupting current view.
   Future<void> _refreshInBackground() async {
     if (_isRefreshing) return;
     _isRefreshing = true;
 
     try {
-      final freshPage = await _repository.fetchFeedPage(
-        page: 1,
-        articleLimit: _articleLimit,
-        videoLimit: _videoLimit,
-      );
-      final freshItems = freshPage.items;
+      final freshPage =
+          await _repository.fetchArticlesPage(page: 1, size: _limit);
+      final freshItems =
+          freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
       _hasMore = freshPage.hasMore;
       _inventoryState = freshPage.inventoryState;
-      if (!mounted) return;
-      if (freshItems.isEmpty) {
-        return;
-      }
+      if (!mounted || freshItems.isEmpty) return;
 
-      // Cache the fresh data
       _cacheInBackground(freshItems);
 
-      // Seamlessly merge: keep current item stable, update the rest
       final currentList = state.valueOrNull;
       if (currentList == null || currentList.isEmpty) {
-        // No existing data, just replace
         _page = 1;
-        _hasMore = freshPage.hasMore;
-        _inventoryState = freshPage.inventoryState;
         state = AsyncValue.data(freshItems);
         _updateNewSinceLastSeen(freshItems);
         return;
@@ -190,98 +161,89 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
       final merged = mergeFeedWithStableOrdering(
         currentItems: currentList,
         freshItems: freshItems,
-        // Avoid prepending while user is deep in the feed to prevent index jumps.
         prependNewItems: _currentViewIndex <= 1,
-      );
-      logger.debug(
-        'Feed refresh merged with stable ordering (current_index=$_currentViewIndex)',
-        category: LogCategory.app,
-      );
+      ).whereType<ArticleFeedEntry>().toList(growable: false);
 
       state = AsyncValue.data(merged);
       _updateNewSinceLastSeen(merged);
     } catch (e, st) {
-      // Background refresh failed - keep showing cached data
-      logger.warning(
-        'Background feed refresh failed',
-        category: LogCategory.network,
-        error: e,
-        stackTrace: st,
-      );
+      logger.warning('Background articles refresh failed',
+          category: LogCategory.network, error: e, stackTrace: st);
     } finally {
       _isRefreshing = false;
     }
   }
 
-  /// Caches items in background without blocking.
-  void _cacheInBackground(List<FeedEntry> items) {
-    Future.microtask(() async {
-      try {
-        await _cache.cacheFeed(items);
-      } catch (e) {
-        logger.warning(
-          'Failed to cache feed',
-          category: LogCategory.app,
-          error: e,
-        );
-      }
-    });
-  }
+  // -- public API ----------------------------------------------------------
 
   Future<void> loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
-
     final currentList = state.valueOrNull;
     if (currentList == null) return;
 
     _isLoadingMore = true;
     try {
-      final nextPage = await _repository.fetchFeedPage(
-        page: _page + 1,
-        articleLimit: _articleLimit,
-        videoLimit: _videoLimit,
-      );
-      final nextItems = nextPage.items;
+      final nextPage =
+          await _repository.fetchArticlesPage(page: _page + 1, size: _limit);
+      final nextItems =
+          nextPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
 
       if (mounted) {
         _page++;
         _hasMore = nextPage.hasMore;
         _inventoryState = nextPage.inventoryState;
         final latestList = state.valueOrNull ?? currentList;
-        final seenIds = latestList.map((entry) => entry.id).toSet();
-        final uniqueNextItems = nextItems
-            .where((entry) => !seenIds.contains(entry.id))
-            .toList(growable: false);
-        final merged = [...latestList, ...uniqueNextItems];
+        final seenIds = latestList.map((e) => e.id).toSet();
+        final unique = nextItems.where((e) => !seenIds.contains(e.id)).toList();
+        final merged = [...latestList, ...unique];
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
-
-        // Cache the additional items
         _cacheInBackground(nextItems);
       }
     } catch (e, st) {
-      logger.warning(
-        'Failed to load more feed items',
-        category: LogCategory.network,
-        error: e,
-        stackTrace: st,
-      );
-      // Don't update state on loadMore failure - keep existing data
+      logger.warning('Failed to load more articles',
+          category: LogCategory.network, error: e, stackTrace: st);
     } finally {
       _isLoadingMore = false;
     }
   }
 
-  /// Force refresh from network, showing loading state.
-  Future<void> forceRefresh() async {
-    _currentViewIndex = 0;
-    await _fetchFromNetwork();
+  /// Manual refresh: keeps current content visible, replaces on success,
+  /// returns false on failure or timeout (no state mutation).
+  Future<bool> manualRefresh() async {
+    try {
+      final page = await _repository
+          .fetchArticlesPage(
+            page: 1,
+            size: _limit,
+            requestMode: RequestMode.manualRefresh,
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (!mounted) return false;
+      final articles =
+          page.items.whereType<ArticleFeedEntry>().toList(growable: false);
+      _page = 1;
+      _hasMore = page.hasMore;
+      _inventoryState = page.inventoryState;
+      _currentViewIndex = 0;
+      state = AsyncValue.data(articles);
+      _updateNewSinceLastSeen(articles);
+      _cacheInBackground(articles);
+      return true;
+    } catch (e, st) {
+      logger.warning('Manual articles refresh failed',
+          category: LogCategory.network, error: e, stackTrace: st);
+      return false;
+    }
   }
 
-  /// Background refresh without loading spinners or index reset.
+  /// Background refresh without spinners or index reset.
   Future<void> refreshSilently() async {
     await _refreshInBackground();
   }
+
+  // -- polling -------------------------------------------------------------
 
   void _startPolling() {
     _pollTimer?.cancel();
@@ -291,29 +253,44 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
     });
   }
 
-  Future<void> _loadLastSeenCutoff() async {
-    if (_lastSeenCutoff != null) return;
-    try {
-      _lastSeenCutoff = await _cache.getFeedLastSeenAt();
-    } catch (_) {
-      _lastSeenCutoff = null;
-    }
+  // -- helpers -------------------------------------------------------------
+
+  void _cacheInBackground(List<ArticleFeedEntry> items) {
+    Future.microtask(() async {
+      try {
+        await _cache.cacheArticles(items);
+      } catch (e) {
+        logger.warning('Failed to cache articles',
+            category: LogCategory.app, error: e);
+      }
+    });
   }
 
-  void _updateNewSinceLastSeen(List<FeedEntry> entries) {
+  Future<void> _loadLastSeenCutoff() async {
+    final existing = _ref.read(_feedLastSeenAtProvider);
+    if (existing != null) return;
+    try {
+      final stored = await _cache.getFeedLastSeenAt();
+      if (stored != null) {
+        _ref.read(_feedLastSeenAtProvider.notifier).state = stored;
+      }
+    } catch (_) {}
+  }
+
+  void _updateNewSinceLastSeen(List<ArticleFeedEntry> entries) {
     _newSinceLastSeenIds = computeNewSinceLastSeenIds(
       entries: entries,
-      lastSeenAt: _lastSeenCutoff,
+      lastSeenAt: _ref.read(_feedLastSeenAtProvider),
     );
   }
 
   void _markFeedSeenNowInBackground() {
+    final now = DateTime.now().toUtc();
+    _ref.read(_feedLastSeenAtProvider.notifier).state = now;
     Future.microtask(() async {
       try {
-        await _cache.setFeedLastSeenAt(DateTime.now().toUtc());
-      } catch (_) {
-        // Best-effort only.
-      }
+        await _cache.setFeedLastSeenAt(now);
+      } catch (_) {}
     });
   }
 
@@ -324,47 +301,293 @@ class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
   }
 }
 
-/// Loads the merged article/video feed for the home experience.
-final paginatedFeedProvider = StateNotifierProvider.autoDispose<FeedNotifier,
-    AsyncValue<List<FeedEntry>>>(
-  (ref) => FeedNotifier(
+// ---------------------------------------------------------------------------
+// VideosNotifier
+// ---------------------------------------------------------------------------
+
+/// Manages the paginated state of the videos feed.
+class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
+  VideosNotifier(this._repository, this._cache, this._ref)
+      : super(const AsyncValue.loading()) {
+    _loadInitial();
+    // Stagger: videos start polling after a 45-second initial delay.
+    _startPollingWithDelay(const Duration(seconds: 45));
+  }
+
+  final FeedRepository _repository;
+  final FeedCacheInterface _cache;
+  final Ref _ref;
+  int _page = 1;
+  bool _hasMore = true;
+  FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
+  bool _isLoadingMore = false;
+  bool _isRefreshing = false;
+  Timer? _pollTimer;
+  Timer? _initialDelayTimer;
+  static const int _limit = 10;
+  static const Duration _pollInterval = Duration(seconds: 90);
+  Set<int> _newSinceLastSeenIds = <int>{};
+
+  int _currentViewIndex = 0;
+
+  void setCurrentViewIndex(int index) {
+    _currentViewIndex = index;
+  }
+
+  bool isEntryNewSinceLastSeen(int entryId) {
+    return _newSinceLastSeenIds.contains(entryId);
+  }
+
+  bool get hasMore => _hasMore;
+  FeedInventoryState get inventoryState => _inventoryState;
+  bool get isCaughtUp => _inventoryState == FeedInventoryState.caughtUp;
+
+  // -- lifecycle -----------------------------------------------------------
+
+  Future<void> _loadInitial() async {
+    if (!mounted) return;
+    await _loadLastSeenCutoff();
+
+    try {
+      final cached = await _cache.getCachedVideos(limit: _limit);
+      if (cached.isNotEmpty && mounted) {
+        state = AsyncValue.data(cached);
+        _updateNewSinceLastSeen(cached);
+        _page = 1;
+        _hasMore = true;
+        _inventoryState = FeedInventoryState.healthy;
+
+        logger.info(
+          'Videos cache HIT: ${cached.length} items',
+          category: LogCategory.app,
+        );
+
+        _refreshInBackground();
+        return;
+      }
+    } catch (e) {
+      logger.warning('Failed to read videos cache',
+          category: LogCategory.app, error: e);
+    }
+
+    logger.info('Videos cache MISS: fetching from network',
+        category: LogCategory.app);
+    await _fetchFromNetwork();
+  }
+
+  Future<void> _fetchFromNetwork() async {
+    try {
+      if (!mounted) return;
+      state = const AsyncValue.loading();
+
+      final page = await _repository.fetchVideosPage(page: 1, size: _limit);
+      if (!mounted) return;
+      _page = 1;
+      _hasMore = page.hasMore;
+      _inventoryState = page.inventoryState;
+      final videos =
+          page.items.whereType<VideoFeedEntry>().toList(growable: false);
+      state = AsyncValue.data(videos);
+      _updateNewSinceLastSeen(videos);
+      _cacheInBackground(videos);
+    } catch (e, st) {
+      if (!mounted) return;
+      logger.warning('Failed to load videos',
+          category: LogCategory.network, error: e, stackTrace: st);
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> _refreshInBackground() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
+    try {
+      final freshPage =
+          await _repository.fetchVideosPage(page: 1, size: _limit);
+      final freshItems =
+          freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
+      _hasMore = freshPage.hasMore;
+      _inventoryState = freshPage.inventoryState;
+      if (!mounted || freshItems.isEmpty) return;
+
+      _cacheInBackground(freshItems);
+
+      final currentList = state.valueOrNull;
+      if (currentList == null || currentList.isEmpty) {
+        _page = 1;
+        state = AsyncValue.data(freshItems);
+        _updateNewSinceLastSeen(freshItems);
+        return;
+      }
+
+      final merged = mergeFeedWithStableOrdering(
+        currentItems: currentList,
+        freshItems: freshItems,
+        prependNewItems: _currentViewIndex <= 1,
+      ).whereType<VideoFeedEntry>().toList(growable: false);
+
+      state = AsyncValue.data(merged);
+      _updateNewSinceLastSeen(merged);
+    } catch (e, st) {
+      logger.warning('Background videos refresh failed',
+          category: LogCategory.network, error: e, stackTrace: st);
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  // -- public API ----------------------------------------------------------
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    final currentList = state.valueOrNull;
+    if (currentList == null) return;
+
+    _isLoadingMore = true;
+    try {
+      final nextPage =
+          await _repository.fetchVideosPage(page: _page + 1, size: _limit);
+      final nextItems =
+          nextPage.items.whereType<VideoFeedEntry>().toList(growable: false);
+
+      if (mounted) {
+        _page++;
+        _hasMore = nextPage.hasMore;
+        _inventoryState = nextPage.inventoryState;
+        final latestList = state.valueOrNull ?? currentList;
+        final seenIds = latestList.map((e) => e.id).toSet();
+        final unique = nextItems.where((e) => !seenIds.contains(e.id)).toList();
+        final merged = [...latestList, ...unique];
+        state = AsyncValue.data(merged);
+        _updateNewSinceLastSeen(merged);
+        _cacheInBackground(nextItems);
+      }
+    } catch (e, st) {
+      logger.warning('Failed to load more videos',
+          category: LogCategory.network, error: e, stackTrace: st);
+    } finally {
+      _isLoadingMore = false;
+    }
+  }
+
+  /// Manual refresh: keeps current content visible, replaces on success,
+  /// returns false on failure or timeout (no state mutation).
+  Future<bool> manualRefresh() async {
+    try {
+      final page = await _repository
+          .fetchVideosPage(
+            page: 1,
+            size: _limit,
+            requestMode: RequestMode.manualRefresh,
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (!mounted) return false;
+      final videos =
+          page.items.whereType<VideoFeedEntry>().toList(growable: false);
+      _page = 1;
+      _hasMore = page.hasMore;
+      _inventoryState = page.inventoryState;
+      _currentViewIndex = 0;
+      state = AsyncValue.data(videos);
+      _updateNewSinceLastSeen(videos);
+      _cacheInBackground(videos);
+      return true;
+    } catch (e, st) {
+      logger.warning('Manual videos refresh failed',
+          category: LogCategory.network, error: e, stackTrace: st);
+      return false;
+    }
+  }
+
+  /// Background refresh without spinners or index reset.
+  Future<void> refreshSilently() async {
+    await _refreshInBackground();
+  }
+
+  // -- polling -------------------------------------------------------------
+
+  void _startPollingWithDelay(Duration initialDelay) {
+    _initialDelayTimer?.cancel();
+    _initialDelayTimer = Timer(initialDelay, () {
+      if (!mounted) return;
+      _refreshInBackground();
+      _pollTimer?.cancel();
+      _pollTimer = Timer.periodic(_pollInterval, (_) {
+        if (!mounted) return;
+        _refreshInBackground();
+      });
+    });
+  }
+
+  // -- helpers -------------------------------------------------------------
+
+  void _cacheInBackground(List<VideoFeedEntry> items) {
+    Future.microtask(() async {
+      try {
+        await _cache.cacheVideos(items);
+      } catch (e) {
+        logger.warning('Failed to cache videos',
+            category: LogCategory.app, error: e);
+      }
+    });
+  }
+
+  Future<void> _loadLastSeenCutoff() async {
+    final existing = _ref.read(_feedLastSeenAtProvider);
+    if (existing != null) return;
+    try {
+      final stored = await _cache.getFeedLastSeenAt();
+      if (stored != null) {
+        _ref.read(_feedLastSeenAtProvider.notifier).state = stored;
+      }
+    } catch (_) {}
+  }
+
+  void _updateNewSinceLastSeen(List<VideoFeedEntry> entries) {
+    _newSinceLastSeenIds = computeNewSinceLastSeenIds(
+      entries: entries,
+      lastSeenAt: _ref.read(_feedLastSeenAtProvider),
+    );
+  }
+
+  @override
+  void dispose() {
+    _initialDelayTimer?.cancel();
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider definitions (articles + videos)
+// ---------------------------------------------------------------------------
+
+/// Loads the articles feed.
+final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
+    AsyncValue<List<ArticleFeedEntry>>>(
+  (ref) => ArticlesNotifier(
     ref.watch(feedRepositoryProvider),
     ref.watch(feedCacheProvider),
+    ref,
   ),
 );
 
-/// Filters only article entries from the merged feed.
-final filteredArticleFeedProvider =
-    Provider.autoDispose<AsyncValue<List<ArticleFeedEntry>>>((ref) {
-  final feedState = ref.watch(paginatedFeedProvider);
-
-  return feedState.when(
-    data: (items) => AsyncValue.data(
-      items.whereType<ArticleFeedEntry>().toList(growable: false),
-    ),
-    error: (err, stack) => AsyncValue.error(err, stack),
-    loading: () => const AsyncValue.loading(),
-  );
-});
-
-/// Filters only video entries from the merged feed.
-final filteredVideoFeedProvider =
-    Provider.autoDispose<AsyncValue<List<VideoFeedEntry>>>((ref) {
-  final feedState = ref.watch(paginatedFeedProvider);
-
-  return feedState.when(
-    data: (items) => AsyncValue.data(
-      items.whereType<VideoFeedEntry>().toList(growable: false),
-    ),
-    error: (err, stack) => AsyncValue.error(err, stack),
-    loading: () => const AsyncValue.loading(),
-  );
-});
+/// Loads the videos feed.
+final videosFeedProvider = StateNotifierProvider.autoDispose<VideosNotifier,
+    AsyncValue<List<VideoFeedEntry>>>(
+  (ref) => VideosNotifier(
+    ref.watch(feedRepositoryProvider),
+    ref.watch(feedCacheProvider),
+    ref,
+  ),
+);
 
 /// Articles feed with device-local native ad slots.
 final articleFeedWithAdsProvider =
     Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
-  final feedState = ref.watch(filteredArticleFeedProvider);
+  final feedState = ref.watch(articlesFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
   final repository = ref.watch(feedRepositoryProvider);
@@ -386,7 +609,7 @@ final articleFeedWithAdsProvider =
 /// Videos feed with device-local native ad slots.
 final videoFeedWithAdsProvider =
     Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
-  final feedState = ref.watch(filteredVideoFeedProvider);
+  final feedState = ref.watch(videosFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
   final repository = ref.watch(feedRepositoryProvider);
@@ -404,6 +627,10 @@ final videoFeedWithAdsProvider =
     loading: () => const AsyncValue.loading(),
   );
 });
+
+// ---------------------------------------------------------------------------
+// ReelsNotifier (kept, manualRefresh added)
+// ---------------------------------------------------------------------------
 
 /// Manages the paginated state of the reels feed.
 ///
@@ -611,9 +838,30 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     }
   }
 
-  Future<void> forceRefresh() async {
-    _currentViewIndex = 0;
-    await _fetchFromNetwork();
+  /// Manual refresh: keeps current content visible, replaces on success,
+  /// returns false on failure or timeout.
+  Future<bool> manualRefresh() async {
+    try {
+      final page = await _repository
+          .fetchReelsPage(
+            limit: _limit,
+            requestMode: RequestMode.manualRefresh,
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (!mounted) return false;
+      _hasMore = page.hasMore;
+      _nextCursor = page.nextCursor;
+      _inventoryState = page.inventoryState;
+      _currentViewIndex = 0;
+      state = AsyncValue.data(page.items);
+      _cacheInBackground(page.items);
+      return true;
+    } catch (e, st) {
+      logger.warning('Manual reels refresh failed',
+          category: LogCategory.network, error: e, stackTrace: st);
+      return false;
+    }
   }
 
   /// Background refresh without disrupting current playback.

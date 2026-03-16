@@ -161,6 +161,7 @@ class FeedCache implements FeedCacheInterface {
   // Articles
   // ─────────────────────────────────────────────────────────────────────────
 
+  @override
   Future<void> cacheArticles(List<ArticleFeedEntry> articles) async {
     final db = await database;
     final batch = db.batch();
@@ -191,6 +192,7 @@ class FeedCache implements FeedCacheInterface {
     await batch.commit(noResult: true);
   }
 
+  @override
   Future<List<ArticleFeedEntry>> getCachedArticles({int limit = 50}) async {
     final db = await database;
     final results = await db.query(
@@ -224,6 +226,7 @@ class FeedCache implements FeedCacheInterface {
   // Videos
   // ─────────────────────────────────────────────────────────────────────────
 
+  @override
   Future<void> cacheVideos(List<VideoFeedEntry> videos) async {
     final db = await database;
     final batch = db.batch();
@@ -254,6 +257,7 @@ class FeedCache implements FeedCacheInterface {
     await batch.commit(noResult: true);
   }
 
+  @override
   Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30}) async {
     final db = await database;
     final results = await db.query(
@@ -285,6 +289,7 @@ class FeedCache implements FeedCacheInterface {
   // Reels
   // ─────────────────────────────────────────────────────────────────────────
 
+  @override
   Future<void> cacheReels(List<ReelFeedEntry> reels) async {
     final db = await database;
     final batch = db.batch();

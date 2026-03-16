@@ -1,5 +1,14 @@
 import 'package:dio/dio.dart';
 
+/// Controls timeout and retry behavior per request.
+enum RequestMode {
+  /// Default behavior: standard timeouts, retries enabled.
+  normal,
+
+  /// Manual refresh: short timeouts, no retries.
+  manualRefresh,
+}
+
 /// Minimal API client abstraction used by repositories.
 ///
 /// This keeps HTTP concerns (Dio) out of business logic and makes unit tests
@@ -8,12 +17,14 @@ abstract interface class BackendApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode,
   });
 
   Future<Map<String, dynamic>> post(
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode,
   });
 }
 
@@ -27,10 +38,12 @@ final class DioBackendApiClient implements BackendApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
       path,
       queryParameters: queryParameters,
+      options: _optionsFor(requestMode),
     );
     return response.data ?? const <String, dynamic>{};
   }
@@ -40,12 +53,23 @@ final class DioBackendApiClient implements BackendApiClient {
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       path,
       data: data,
       queryParameters: queryParameters,
+      options: _optionsFor(requestMode),
     );
     return response.data ?? const <String, dynamic>{};
+  }
+
+  Options? _optionsFor(RequestMode mode) {
+    if (mode == RequestMode.normal) return null;
+    return Options(
+      sendTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 8),
+      extra: {'requestMode': 'manualRefresh'},
+    );
   }
 }

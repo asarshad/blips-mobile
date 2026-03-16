@@ -20,8 +20,33 @@ final class FakeFeedCache implements FeedCacheInterface {
     int articleLimit = 15,
     int videoLimit = 10,
   }) async {
-    // Keep semantics simple for tests: return what we have.
     return List<FeedEntry>.from(_feed);
+  }
+
+  @override
+  Future<List<ArticleFeedEntry>> getCachedArticles({int limit = 50}) async {
+    return _feed.whereType<ArticleFeedEntry>().take(limit).toList();
+  }
+
+  @override
+  Future<void> cacheArticles(List<ArticleFeedEntry> articles) async {
+    _feed = [
+      ...articles,
+      ..._feed.whereType<VideoFeedEntry>(),
+    ];
+  }
+
+  @override
+  Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30}) async {
+    return _feed.whereType<VideoFeedEntry>().take(limit).toList();
+  }
+
+  @override
+  Future<void> cacheVideos(List<VideoFeedEntry> videos) async {
+    _feed = [
+      ..._feed.whereType<ArticleFeedEntry>(),
+      ...videos,
+    ];
   }
 
   @override

@@ -33,7 +33,7 @@ final dioProvider = Provider<Dio>((ref) {
   }, fireImmediately: true);
 
   // Add retry interceptor for resilience
-  dio.interceptors.add(RetryInterceptor());
+  dio.interceptors.add(RetryInterceptor(dio: dio));
 
   // Add logging in debug mode
   if (kDebugMode) {

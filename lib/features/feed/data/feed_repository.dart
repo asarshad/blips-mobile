@@ -65,7 +65,56 @@ class FeedRepository {
 
   String? get videoSessionId => _videoSessionId;
 
+  /// Fetches only article items for a given page.
+  Future<FeedPageResult<FeedEntry>> fetchArticlesPage({
+    int size = 15,
+    int page = 1,
+    RequestMode requestMode = RequestMode.normal,
+  }) async {
+    try {
+      if (page <= 1) {
+        _articleSessionId = null;
+        _articleCursor = null;
+      }
+      return await _fetchSessionPlaylist(
+        type: 'ARTICLE',
+        page: page,
+        size: size,
+        requestMode: requestMode,
+      );
+    } on DioException catch (e, stack) {
+      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
+    } catch (e, stack) {
+      throw DataException.fromParseError(e, stack);
+    }
+  }
+
+  /// Fetches only video items for a given page.
+  Future<FeedPageResult<FeedEntry>> fetchVideosPage({
+    int size = 10,
+    int page = 1,
+    RequestMode requestMode = RequestMode.normal,
+  }) async {
+    try {
+      if (page <= 1) {
+        _videoSessionId = null;
+        _videoCursor = null;
+      }
+      return await _fetchSessionPlaylist(
+        type: 'VIDEO',
+        page: page,
+        size: size,
+        requestMode: requestMode,
+      );
+    } on DioException catch (e, stack) {
+      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
+    } catch (e, stack) {
+      throw DataException.fromParseError(e, stack);
+    }
+  }
+
   /// Fetches both recent articles and videos, merging them into one list.
+  @Deprecated('Use fetchArticlesPage / fetchVideosPage instead')
   Future<List<FeedEntry>> fetchFeed({
     int articleLimit = 15,
     int videoLimit = 10,
@@ -79,6 +128,7 @@ class FeedRepository {
     return result.items;
   }
 
+  @Deprecated('Use fetchArticlesPage / fetchVideosPage instead')
   Future<FeedPageResult<FeedEntry>> fetchFeedPage({
     int articleLimit = 15,
     int videoLimit = 10,
@@ -127,6 +177,7 @@ class FeedRepository {
     required String type,
     required int page,
     required int size,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     final query = <String, dynamic>{
       'type': type,
@@ -137,6 +188,7 @@ class FeedRepository {
     final response = await _api.get(
       _sessionPlaylistPath,
       queryParameters: query,
+      requestMode: requestMode,
     );
     final items = (response['items'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
@@ -325,6 +377,7 @@ class FeedRepository {
   Future<FeedPageResult<ReelFeedEntry>> fetchReelsPage({
     String? cursor,
     int limit = 20,
+    RequestMode requestMode = RequestMode.normal,
   }) async {
     try {
       if (cursor == null) {
@@ -337,6 +390,7 @@ class FeedRepository {
           if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
           'limit': limit,
         },
+        requestMode: requestMode,
       );
       final videosJson = (response['items'] as List<dynamic>? ??
               response['videos'] as List<dynamic>? ??

@@ -9,6 +9,14 @@ abstract interface class FeedCacheInterface {
 
   Future<void> cacheFeed(List<FeedEntry> entries);
 
+  Future<List<ArticleFeedEntry>> getCachedArticles({int limit = 50});
+
+  Future<void> cacheArticles(List<ArticleFeedEntry> articles);
+
+  Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30});
+
+  Future<void> cacheVideos(List<VideoFeedEntry> videos);
+
   /// Last timestamp when the user viewed the main feed.
   Future<DateTime?> getFeedLastSeenAt();
 

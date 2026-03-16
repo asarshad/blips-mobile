@@ -46,6 +46,11 @@ class FeedShellPage extends HookConsumerWidget {
     final currentIndex = useState(0);
     final pageController = usePageController();
 
+    // Vertical page controllers for each feed surface
+    final articleFeedController = usePageController();
+    final videoFeedController = usePageController();
+    final reelsFeedController = usePageController();
+
     // Watch providers for current view
     final articleFeed = ref.watch(articleFeedWithAdsProvider);
     final videoFeed = ref.watch(videoFeedWithAdsProvider);
@@ -79,7 +84,11 @@ class FeedShellPage extends HookConsumerWidget {
                   currentIndex: currentIndex,
                   articleFeed: articleFeed,
                   videoFeed: videoFeed,
+                  articleFeedController: articleFeedController,
+                  videoFeedController: videoFeedController,
+                  reelsFeedController: reelsFeedController,
                   ref: ref,
+                  context: context,
                 ),
                 // Debug overlay for development builds
                 if (kDebugMode) const DeviceDebugOverlay(),
@@ -93,8 +102,14 @@ class FeedShellPage extends HookConsumerWidget {
         onIndexChanged: (index) {
           final isRetap = currentIndex.value == index;
           if (isRetap) {
-            _showRetapRefreshFeedback(context, index);
-            _refreshTabOnRetap(index, ref);
+            _refreshTabOnRetap(
+              index,
+              ref,
+              context,
+              articleFeedController,
+              videoFeedController,
+              reelsFeedController,
+            );
             return;
           }
           currentIndex.value = index;
@@ -214,36 +229,123 @@ class FeedShellPage extends HookConsumerWidget {
             ref.invalidate(adsConfigProvider);
           }
 
-          if (currentIndex == 2) {
-            unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
-            return;
+          switch (currentIndex) {
+            case 0:
+              unawaited(
+                  ref.read(articlesFeedProvider.notifier).refreshSilently());
+              break;
+            case 1:
+              unawaited(
+                  ref.read(videosFeedProvider.notifier).refreshSilently());
+              break;
+            case 2:
+              unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
+              break;
           }
-
-          unawaited(ref.read(paginatedFeedProvider.notifier).refreshSilently());
         },
       );
       return listener.dispose;
     }, [currentIndex]);
   }
 
-  void _refreshTabOnRetap(int index, WidgetRef ref) {
+  void _refreshTabOnRetap(
+    int index,
+    WidgetRef ref,
+    BuildContext context,
+    PageController articleFeedController,
+    PageController videoFeedController,
+    PageController reelsFeedController,
+  ) {
     switch (index) {
       case 0:
+        _showRetapRefreshFeedback(context, index);
+        _refreshArticlesManually(ref, context, articleFeedController);
+        break;
       case 1:
-        unawaited(ref.read(paginatedFeedProvider.notifier).forceRefresh());
+        _showRetapRefreshFeedback(context, index);
+        _refreshVideosManually(ref, context, videoFeedController);
         break;
       case 2:
-        // Keep current page/controller mounted to avoid a brief paused state
-        // after hard refresh; this still fetches fresh data immediately.
-        unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
+        _showRetapRefreshFeedback(context, index);
+        _refreshReelsManually(ref, context, reelsFeedController);
         break;
       case 3:
+        _showRetapRefreshFeedback(context, index);
         ref.invalidate(chatListProvider);
         break;
       case 4:
         // No-op for settings.
         break;
     }
+  }
+
+  void _refreshArticlesManually(
+    WidgetRef ref,
+    BuildContext context,
+    PageController controller,
+  ) {
+    unawaited(
+      ref.read(articlesFeedProvider.notifier).manualRefresh().then((ok) {
+        if (ok && controller.hasClients) {
+          controller.jumpToPage(0);
+        } else if (!ok) {
+          _showRetrySnackbar(context, 'Articles refresh failed.', () {
+            _refreshArticlesManually(ref, context, controller);
+          });
+        }
+      }),
+    );
+  }
+
+  void _refreshVideosManually(
+    WidgetRef ref,
+    BuildContext context,
+    PageController controller,
+  ) {
+    unawaited(
+      ref.read(videosFeedProvider.notifier).manualRefresh().then((ok) {
+        if (ok && controller.hasClients) {
+          controller.jumpToPage(0);
+        } else if (!ok) {
+          _showRetrySnackbar(context, 'Videos refresh failed.', () {
+            _refreshVideosManually(ref, context, controller);
+          });
+        }
+      }),
+    );
+  }
+
+  void _refreshReelsManually(
+    WidgetRef ref,
+    BuildContext context,
+    PageController controller,
+  ) {
+    unawaited(
+      ref.read(reelsFeedProvider.notifier).manualRefresh().then((ok) {
+        if (ok && controller.hasClients) {
+          controller.jumpToPage(0);
+        } else if (!ok) {
+          _showRetrySnackbar(context, 'Reels refresh failed.', () {
+            _refreshReelsManually(ref, context, controller);
+          });
+        }
+      }),
+    );
+  }
+
+  void _showRetrySnackbar(
+      BuildContext context, String message, VoidCallback onRetry) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(label: 'Retry', onPressed: onRetry),
+          duration: const Duration(seconds: 4),
+        ),
+      );
   }
 
   void _showRetapRefreshFeedback(BuildContext context, int index) {
@@ -273,14 +375,19 @@ class FeedShellPage extends HookConsumerWidget {
     required ValueNotifier<int> currentIndex,
     required AsyncValue<List<FeedPageItem>> articleFeed,
     required AsyncValue<List<FeedPageItem>> videoFeed,
+    required PageController articleFeedController,
+    required PageController videoFeedController,
+    required PageController reelsFeedController,
     required WidgetRef ref,
+    required BuildContext context,
   }) {
     final allTabs = [
       FeedTab<FeedPageItem>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
+        controller: articleFeedController,
         builder: (entry, isCurrentPage) {
-          final feedNotifier = ref.read(paginatedFeedProvider.notifier);
+          final notifier = ref.read(articlesFeedProvider.notifier);
           if (entry is NativeAdSlotFeedPageItem) {
             return NativeAdCard(slot: entry);
           }
@@ -295,20 +402,22 @@ class FeedShellPage extends HookConsumerWidget {
             entry: organicEntry,
             isVisible: currentIndex.value == 0 && isCurrentPage,
             isNewSinceLastSeen:
-                feedNotifier.isEntryNewSinceLastSeen(organicEntry.id),
+                notifier.isEntryNewSinceLastSeen(organicEntry.id),
           );
         },
-        onRefresh: () => ref.refresh(paginatedFeedProvider),
-        onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
+        onRefresh: () =>
+            _refreshArticlesManually(ref, context, articleFeedController),
+        onLoadMore: () => ref.read(articlesFeedProvider.notifier).loadMore(),
         onPageChanged: (index) =>
-            ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
+            ref.read(articlesFeedProvider.notifier).setCurrentViewIndex(index),
       ),
       FeedTab<FeedPageItem>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
         containsVideos: true,
+        controller: videoFeedController,
         builder: (entry, isCurrentPage) {
-          final feedNotifier = ref.read(paginatedFeedProvider.notifier);
+          final notifier = ref.read(videosFeedProvider.notifier);
           if (entry is NativeAdSlotFeedPageItem) {
             return NativeAdCard(slot: entry);
           }
@@ -323,14 +432,15 @@ class FeedShellPage extends HookConsumerWidget {
             entry: organicEntry,
             isVisible: currentIndex.value == 1 && isCurrentPage,
             isNewSinceLastSeen:
-                feedNotifier.isEntryNewSinceLastSeen(organicEntry.id),
+                notifier.isEntryNewSinceLastSeen(organicEntry.id),
           );
         },
-        onRefresh: () => ref.refresh(paginatedFeedProvider),
-        onLoadMore: () => ref.read(paginatedFeedProvider.notifier).loadMore(),
+        onRefresh: () =>
+            _refreshVideosManually(ref, context, videoFeedController),
+        onLoadMore: () => ref.read(videosFeedProvider.notifier).loadMore(),
         onPageChanged: (index) =>
-            ref.read(paginatedFeedProvider.notifier).setCurrentViewIndex(index),
-        isCaughtUp: ref.read(paginatedFeedProvider.notifier).isCaughtUp,
+            ref.read(videosFeedProvider.notifier).setCurrentViewIndex(index),
+        isCaughtUp: ref.read(videosFeedProvider.notifier).isCaughtUp,
         caughtUpLabel: 'Caught up on videos for now.',
         onCaughtUp: (entry) => unawaited(
           ref.read(feedRepositoryProvider).recordInteraction(
@@ -343,7 +453,12 @@ class FeedShellPage extends HookConsumerWidget {
         ),
       ),
       // Reels tab
-      OptimizedReelsPage(isVisible: currentIndex.value == 2),
+      OptimizedReelsPage(
+        isVisible: currentIndex.value == 2,
+        controller: reelsFeedController,
+        onManualRefresh: () =>
+            _refreshReelsManually(ref, context, reelsFeedController),
+      ),
       // Chat tab
       const ChatPage(),
       // Settings tab

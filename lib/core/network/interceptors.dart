@@ -16,10 +16,13 @@ import 'package:dio/dio.dart';
 /// - Request cancellations
 class RetryInterceptor extends Interceptor {
   RetryInterceptor({
+    required Dio dio,
     this.maxRetries = 3,
     this.baseDelay = const Duration(milliseconds: 500),
     this.maxDelay = const Duration(seconds: 10),
-  });
+  }) : _dio = dio;
+
+  final Dio _dio;
 
   /// Maximum number of retry attempts.
   final int maxRetries;
@@ -35,6 +38,12 @@ class RetryInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
+    // Never retry manual-refresh requests.
+    final mode = err.requestOptions.extra['requestMode'] as String?;
+    if (mode == 'manualRefresh') {
+      return handler.next(err);
+    }
+
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (_shouldRetry(err) && retryCount < maxRetries) {
@@ -52,10 +61,8 @@ class RetryInterceptor extends Interceptor {
         final options = err.requestOptions;
         options.extra['retryCount'] = retryCount + 1;
 
-        // Build the full URI so the retry doesn't need the original Dio's
-        // baseUrl. requestOptions.uri already combines base + path.
-        final response = await Dio().request<dynamic>(
-          options.uri.toString(),
+        final response = await _dio.request<dynamic>(
+          options.path,
           data: options.data,
           queryParameters: options.queryParameters,
           options: Options(
@@ -63,6 +70,8 @@ class RetryInterceptor extends Interceptor {
             headers: options.headers,
             responseType: options.responseType,
             contentType: options.contentType,
+            sendTimeout: options.sendTimeout,
+            receiveTimeout: options.receiveTimeout,
             extra: options.extra,
           ),
         );
