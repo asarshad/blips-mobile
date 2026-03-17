@@ -212,13 +212,11 @@ class ArticlesNotifier
   /// returns false on failure or timeout (no state mutation).
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository
-          .fetchArticlesPage(
-            page: 1,
-            size: _limit,
-            requestMode: RequestMode.manualRefresh,
-          )
-          .timeout(const Duration(seconds: 8));
+      final page = await _repository.fetchArticlesPage(
+        page: 1,
+        size: _limit,
+        requestMode: RequestMode.manualRefresh,
+      );
 
       if (!mounted) return false;
       final articles =
@@ -389,7 +387,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           page.items.whereType<VideoFeedEntry>().toList(growable: false);
       state = AsyncValue.data(videos);
       _updateNewSinceLastSeen(videos);
-      _cacheInBackground(videos);
+      _replaceCacheSnapshotInBackground(videos);
     } catch (e, st) {
       if (!mounted) return;
       logger.warning('Failed to load videos',
@@ -409,12 +407,28 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
       _hasMore = freshPage.hasMore;
       _inventoryState = freshPage.inventoryState;
-      if (!mounted || freshItems.isEmpty) return;
+      if (!mounted) return;
 
-      _cacheInBackground(freshItems);
+      _replaceCacheSnapshotInBackground(freshItems);
 
       final currentList = state.valueOrNull;
+      final hasOnlyPageOne =
+          currentList == null || currentList.length <= _limit;
+      if (freshItems.isEmpty) {
+        if (hasOnlyPageOne) {
+          _page = 1;
+          state = const AsyncValue.data(<VideoFeedEntry>[]);
+          _updateNewSinceLastSeen(const <VideoFeedEntry>[]);
+        }
+        return;
+      }
       if (currentList == null || currentList.isEmpty) {
+        _page = 1;
+        state = AsyncValue.data(freshItems);
+        _updateNewSinceLastSeen(freshItems);
+        return;
+      }
+      if (hasOnlyPageOne) {
         _page = 1;
         state = AsyncValue.data(freshItems);
         _updateNewSinceLastSeen(freshItems);
@@ -475,13 +489,11 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   /// returns false on failure or timeout (no state mutation).
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository
-          .fetchVideosPage(
-            page: 1,
-            size: _limit,
-            requestMode: RequestMode.manualRefresh,
-          )
-          .timeout(const Duration(seconds: 8));
+      final page = await _repository.fetchVideosPage(
+        page: 1,
+        size: _limit,
+        requestMode: RequestMode.manualRefresh,
+      );
 
       if (!mounted) return false;
       final videos =
@@ -492,7 +504,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       _currentViewIndex = 0;
       state = AsyncValue.data(videos);
       _updateNewSinceLastSeen(videos);
-      _cacheInBackground(videos);
+      _replaceCacheSnapshotInBackground(videos);
       return true;
     } catch (e, st) {
       logger.warning('Manual videos refresh failed',
@@ -529,6 +541,17 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         await _cache.cacheVideos(items);
       } catch (e) {
         logger.warning('Failed to cache videos',
+            category: LogCategory.app, error: e);
+      }
+    });
+  }
+
+  void _replaceCacheSnapshotInBackground(List<VideoFeedEntry> items) {
+    Future.microtask(() async {
+      try {
+        await _cache.replaceVideosSnapshot(items);
+      } catch (e) {
+        logger.warning('Failed to replace videos cache snapshot',
             category: LogCategory.app, error: e);
       }
     });
@@ -653,14 +676,6 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   static const int _limit = 20;
   static const Duration _pollInterval = Duration(seconds: 60);
 
-  /// Index of the item currently being viewed by the user.
-  int _currentViewIndex = 0;
-
-  /// Updates the current view index when user swipes.
-  void setCurrentViewIndex(int index) {
-    _currentViewIndex = index;
-  }
-
   bool get hasMore => _hasMore;
 
   FeedInventoryState get inventoryState => _inventoryState;
@@ -715,7 +730,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       _inventoryState = page.inventoryState;
       state = AsyncValue.data(page.items);
 
-      _cacheInBackground(page.items);
+      _replaceCacheSnapshotInBackground(page.items);
     } catch (e, st) {
       if (!mounted) return;
       logger.warning(
@@ -735,44 +750,36 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     try {
       final freshPage = await _repository.fetchReelsPage(limit: _limit);
       final freshReels = freshPage.items;
-      _hasMore = freshPage.hasMore;
-      _nextCursor = freshPage.nextCursor;
       _inventoryState = freshPage.inventoryState;
       if (!mounted) return;
+      _replaceCacheSnapshotInBackground(freshReels);
       if (freshReels.isEmpty) {
         return;
       }
 
-      _cacheInBackground(freshReels);
-
       final currentList = state.valueOrNull;
+      final preservePagination =
+          currentList != null && currentList.length > _limit;
+      if (!preservePagination) {
+        _hasMore = freshPage.hasMore;
+        _nextCursor = freshPage.nextCursor;
+      }
       if (currentList == null || currentList.isEmpty) {
         state = AsyncValue.data(freshReels);
         return;
       }
 
-      final currentItem = _currentViewIndex < currentList.length
-          ? currentList[_currentViewIndex]
-          : null;
+      final merged = mergeFeedWithStableOrdering(
+        currentItems: currentList,
+        freshItems: freshReels,
+        // Reels is a full-screen, position-sensitive surface.
+        // Silent refresh must never prepend page-1 newcomers into a live
+        // session because that can shift the visible reel away from the
+        // numeric page index the player manager is using.
+        prependNewItems: false,
+      ).whereType<ReelFeedEntry>().toList(growable: false);
 
-      if (currentItem == null) {
-        state = AsyncValue.data(freshReels);
-        return;
-      }
-
-      final freshIndex = freshReels.indexWhere((r) => r.id == currentItem.id);
-
-      if (freshIndex >= 0) {
-        state = AsyncValue.data(freshReels);
-      } else {
-        final itemsFromCurrent = currentList.sublist(_currentViewIndex);
-        final currentIds = itemsFromCurrent.map((e) => e.id).toSet();
-        final uniqueFresh =
-            freshReels.where((item) => !currentIds.contains(item.id)).toList();
-
-        final merged = [...uniqueFresh, ...itemsFromCurrent];
-        state = AsyncValue.data(merged);
-      }
+      state = AsyncValue.data(merged);
     } catch (e, st) {
       logger.warning(
         'Background reels refresh failed',
@@ -792,6 +799,20 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       } catch (e) {
         logger.warning(
           'Failed to cache reels',
+          category: LogCategory.app,
+          error: e,
+        );
+      }
+    });
+  }
+
+  void _replaceCacheSnapshotInBackground(List<ReelFeedEntry> reels) {
+    Future.microtask(() async {
+      try {
+        await _cache.replaceReelsSnapshot(reels);
+      } catch (e) {
+        logger.warning(
+          'Failed to replace reels cache snapshot',
           category: LogCategory.app,
           error: e,
         );
@@ -842,20 +863,17 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   /// returns false on failure or timeout.
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository
-          .fetchReelsPage(
-            limit: _limit,
-            requestMode: RequestMode.manualRefresh,
-          )
-          .timeout(const Duration(seconds: 8));
+      final page = await _repository.fetchReelsPage(
+        limit: _limit,
+        requestMode: RequestMode.manualRefresh,
+      );
 
       if (!mounted) return false;
       _hasMore = page.hasMore;
       _nextCursor = page.nextCursor;
       _inventoryState = page.inventoryState;
-      _currentViewIndex = 0;
       state = AsyncValue.data(page.items);
-      _cacheInBackground(page.items);
+      _replaceCacheSnapshotInBackground(page.items);
       return true;
     } catch (e, st) {
       logger.warning('Manual reels refresh failed',

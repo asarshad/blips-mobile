@@ -38,19 +38,15 @@ class RetryInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    // Never retry manual-refresh requests.
     final mode = err.requestOptions.extra['requestMode'] as String?;
-    if (mode == 'manualRefresh') {
-      return handler.next(err);
-    }
-
+    final effectiveMaxRetries = mode == 'manualRefresh' ? 1 : maxRetries;
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
-    if (_shouldRetry(err) && retryCount < maxRetries) {
+    if (_shouldRetry(err) && retryCount < effectiveMaxRetries) {
       final delay = _calculateDelay(retryCount);
 
       logger.debug(
-        'Retrying request (${retryCount + 1}/$maxRetries) '
+        'Retrying request (${retryCount + 1}/$effectiveMaxRetries) '
         'after ${delay.inMilliseconds}ms: ${err.requestOptions.path}',
         category: LogCategory.network,
       );

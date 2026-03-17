@@ -137,9 +137,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
   ) {
     useEffect(
       () {
-        if (!reelsFeed.hasValue || reelsFeed.value!.isEmpty) return null;
+        final entries = reelsFeed.valueOrNull;
+        if (entries == null || entries.isEmpty) return null;
 
-        final entries = reelsFeed.value!;
         if (isVisible) {
           // Route through onPageChanged so visible-entry playback uses the
           // same proven path as manual swipes (pause others + preload next).
@@ -163,7 +163,10 @@ class OptimizedReelsPage extends HookConsumerWidget {
         }
         return null;
       },
-      [isVisible, reelsFeed.valueOrNull],
+      [
+        isVisible,
+        reelsFeed.valueOrNull,
+      ],
     );
   }
 
@@ -271,6 +274,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
     }
 
     final urls = entries.map((e) => e.link).toList();
+    final indexByEntryId = <int, int>{
+      for (var i = 0; i < entries.length; i++) entries[i].id: i,
+    };
 
     final showCaughtUpBanner =
         isCaughtUp && currentIndex.value >= entries.length - 1;
@@ -280,12 +286,14 @@ class OptimizedReelsPage extends HookConsumerWidget {
         PageView.builder(
           controller: controller,
           scrollDirection: Axis.vertical,
-          allowImplicitScrolling: true,
+          findChildIndexCallback: (key) {
+            if (key is ValueKey<int>) {
+              return indexByEntryId[key.value];
+            }
+            return null;
+          },
           onPageChanged: (index) {
             currentIndex.value = index;
-
-            // Track current view index for seamless cache updates
-            ref.read(reelsFeedProvider.notifier).setCurrentViewIndex(index);
 
             videoManager.onPageChanged(
               currentIndex: index,
@@ -303,7 +311,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           },
           itemCount: entries.length,
           itemBuilder: (context, index) => ReelItem(
-            key: ValueKey(entries[index].link),
+            key: ValueKey(entries[index].id),
             entry: entries[index],
             isActive: index == currentIndex.value,
             isVisible: isVisible,

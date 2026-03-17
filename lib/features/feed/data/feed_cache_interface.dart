@@ -17,6 +17,9 @@ abstract interface class FeedCacheInterface {
 
   Future<void> cacheVideos(List<VideoFeedEntry> videos);
 
+  /// Replaces the persisted page-1 videos snapshot.
+  Future<void> replaceVideosSnapshot(List<VideoFeedEntry> videos);
+
   /// Last timestamp when the user viewed the main feed.
   Future<DateTime?> getFeedLastSeenAt();
 
@@ -26,4 +29,7 @@ abstract interface class FeedCacheInterface {
   Future<List<ReelFeedEntry>> getCachedReels({int limit = 50});
 
   Future<void> cacheReels(List<ReelFeedEntry> reels);
+
+  /// Replaces the persisted page-1 reels snapshot.
+  Future<void> replaceReelsSnapshot(List<ReelFeedEntry> reels);
 }

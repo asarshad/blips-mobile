@@ -232,29 +232,21 @@ class FeedCache implements FeedCacheInterface {
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
 
-    for (final video in videos) {
-      batch.insert(
-          'videos',
-          {
-            'id': video.id,
-            'title': video.title,
-            'summary': video.summary,
-            'video_url': video.videoUrl,
-            'link': video.link,
-            'source': video.source,
-            'category': video.category,
-            'published_at': video.publishedAt.toIso8601String(),
-            'read_time': video.readTime,
-            'thumbnail_url': video.thumbnailUrl,
-            'conversation_starters': video.conversationStarters.isNotEmpty
-                ? jsonEncode(video.conversationStarters)
-                : null,
-            'cached_at': now,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
-    }
+    _queueVideoInserts(batch, videos, now);
 
     await batch.commit(noResult: true);
+  }
+
+  @override
+  Future<void> replaceVideosSnapshot(List<VideoFeedEntry> videos) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.delete('videos');
+      final batch = txn.batch();
+      _queueVideoInserts(batch, videos, now);
+      await batch.commit(noResult: true);
+    });
   }
 
   @override
@@ -295,27 +287,21 @@ class FeedCache implements FeedCacheInterface {
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
 
-    for (final reel in reels) {
-      batch.insert(
-          'reels',
-          {
-            'id': reel.id,
-            'title': reel.title,
-            'summary': reel.summary,
-            'video_url': reel.videoUrl,
-            'link': reel.link,
-            'source': reel.source,
-            'published_at': reel.publishedAt.toIso8601String(),
-            'thumbnail_url': reel.thumbnailUrl,
-            'conversation_starters': reel.conversationStarters.isNotEmpty
-                ? jsonEncode(reel.conversationStarters)
-                : null,
-            'cached_at': now,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
-    }
+    _queueReelInserts(batch, reels, now);
 
     await batch.commit(noResult: true);
+  }
+
+  @override
+  Future<void> replaceReelsSnapshot(List<ReelFeedEntry> reels) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.delete('reels');
+      final batch = txn.batch();
+      _queueReelInserts(batch, reels, now);
+      await batch.commit(noResult: true);
+    });
   }
 
   @override
@@ -342,6 +328,53 @@ class FeedCache implements FeedCacheInterface {
       thumbnailUrl: row['thumbnail_url'] as String?,
       conversationStarters: _decodeStarters(row['conversation_starters']),
     );
+  }
+
+  void _queueVideoInserts(
+      Batch batch, List<VideoFeedEntry> videos, String now) {
+    for (final video in videos) {
+      batch.insert(
+          'videos',
+          {
+            'id': video.id,
+            'title': video.title,
+            'summary': video.summary,
+            'video_url': video.videoUrl,
+            'link': video.link,
+            'source': video.source,
+            'category': video.category,
+            'published_at': video.publishedAt.toIso8601String(),
+            'read_time': video.readTime,
+            'thumbnail_url': video.thumbnailUrl,
+            'conversation_starters': video.conversationStarters.isNotEmpty
+                ? jsonEncode(video.conversationStarters)
+                : null,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  void _queueReelInserts(Batch batch, List<ReelFeedEntry> reels, String now) {
+    for (final reel in reels) {
+      batch.insert(
+          'reels',
+          {
+            'id': reel.id,
+            'title': reel.title,
+            'summary': reel.summary,
+            'video_url': reel.videoUrl,
+            'link': reel.link,
+            'source': reel.source,
+            'published_at': reel.publishedAt.toIso8601String(),
+            'thumbnail_url': reel.thumbnailUrl,
+            'conversation_starters': reel.conversationStarters.isNotEmpty
+                ? jsonEncode(reel.conversationStarters)
+                : null,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────

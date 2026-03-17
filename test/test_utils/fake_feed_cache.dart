@@ -50,7 +50,20 @@ final class FakeFeedCache implements FeedCacheInterface {
   }
 
   @override
+  Future<void> replaceVideosSnapshot(List<VideoFeedEntry> videos) async {
+    _feed = [
+      ..._feed.whereType<ArticleFeedEntry>(),
+      ...videos,
+    ];
+  }
+
+  @override
   Future<void> cacheReels(List<ReelFeedEntry> reels) async {
+    _reels = List<ReelFeedEntry>.from(reels);
+  }
+
+  @override
+  Future<void> replaceReelsSnapshot(List<ReelFeedEntry> reels) async {
     _reels = List<ReelFeedEntry>.from(reels);
   }
 
