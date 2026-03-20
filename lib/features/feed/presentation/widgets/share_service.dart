@@ -3,22 +3,59 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+typedef ShareCardCaptureOverride = Future<Uint8List?> Function({
+  required BuildContext context,
+  required String title,
+  required String summary,
+  required String source,
+  required String category,
+  required String date,
+  required String readTime,
+  required String imageUrl,
+  required bool isVideo,
+});
+
 /// Service for capturing and sharing feed content.
 ///
 /// Uses Flutter's native rendering (RepaintBoundary + overlay) to capture
 /// widgets as images. The captured image is shared along with the content URL.
 class ShareService {
-  ShareService._();
+  ShareService._({
+    SharePlus? sharePlus,
+    ShareCardCaptureOverride? captureOverride,
+  })  : _sharePlus = sharePlus ?? SharePlus.instance,
+        _captureOverride = captureOverride;
 
   /// Shared singleton instance.
-  static final ShareService instance = ShareService._();
+  static final ShareService _defaultInstance = ShareService._();
+
+  @visibleForTesting
+  static ShareService? debugOverride;
+
+  static ShareService get instance => debugOverride ?? _defaultInstance;
+
+  @visibleForTesting
+  factory ShareService.test({
+    SharePlus? sharePlus,
+    ShareCardCaptureOverride? captureOverride,
+  }) {
+    return ShareService._(
+      sharePlus: sharePlus,
+      captureOverride: captureOverride,
+    );
+  }
+
   static const _shareAttribution = 'Shared via Blips News';
+
+  final SharePlus _sharePlus;
+  final ShareCardCaptureOverride? _captureOverride;
 
   bool _isSharing = false;
 
@@ -40,7 +77,7 @@ class ShareService {
     try {
       debugPrint('ShareService: Starting article share for "$title"');
 
-      final imageBytes = await _captureShareCard(
+      final imageBytes = await (_captureOverride ?? _captureShareCard)(
         context: context,
         title: title,
         summary: summary,
@@ -102,7 +139,7 @@ class ShareService {
     try {
       debugPrint('ShareService: Starting video share for "$title"');
 
-      final imageBytes = await _captureShareCard(
+      final imageBytes = await (_captureOverride ?? _captureShareCard)(
         context: context,
         title: title,
         summary: summary,
@@ -525,7 +562,7 @@ class ShareService {
         '(${imageBytes.length} bytes)',
       );
 
-      await SharePlus.instance.share(
+      await _sharePlus.share(
         ShareParams(
           files: [XFile(filePath)],
           text: _composeShareText(url: url, title: subject),
@@ -555,7 +592,7 @@ class ShareService {
     required String subject,
   }) async {
     try {
-      await SharePlus.instance.share(
+      await _sharePlus.share(
         ShareParams(
           text: text,
           subject: subject,

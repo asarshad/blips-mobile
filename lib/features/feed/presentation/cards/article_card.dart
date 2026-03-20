@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -44,6 +47,7 @@ class ArticleCard extends HookConsumerWidget {
           ),
           category: entry.category,
           title: entry.title,
+          titleMaxLines: 2,
           summary: entry.summary,
           source: entry.source,
           freshnessInfo: FreshnessInfo(
@@ -82,15 +86,18 @@ class ArticleCard extends HookConsumerWidget {
       return;
     }
 
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.openSource,
-      extraData: const {'surface': 'articles'},
-    );
-    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
+    unawaited(_recordOpenSourceIntent(repository, sessionStore));
     final uri = Uri.parse(entry.url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched) {
+      logger.warning(
+        'Failed to launch article URL from card tap',
+        category: LogCategory.app,
+        error: entry.url,
+      );
     }
   }
 
@@ -99,15 +106,36 @@ class ArticleCard extends HookConsumerWidget {
     FeedRepository repository,
     FeedSessionStore sessionStore,
   ) async {
+    unawaited(_recordOpenSourceIntent(repository, sessionStore));
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      logger.warning(
+        'Failed to launch article URL from action button',
+        category: LogCategory.app,
+        error: url,
+      );
+    }
+  }
+
+  Future<void> _recordOpenSourceIntent(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.openSource,
       extraData: const {'surface': 'articles'},
     );
-    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await sessionStore.markConsumed(FeedSurface.articles, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist article consumed state',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -116,12 +144,7 @@ class ArticleCard extends HookConsumerWidget {
     FeedRepository repository,
     FeedSessionStore sessionStore,
   ) async {
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.share,
-      extraData: const {'surface': 'articles'},
-    );
-    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
+    unawaited(_recordShareIntent(repository, sessionStore));
     await ShareService.instance.shareArticle(
       context: context,
       title: entry.title,
@@ -133,6 +156,27 @@ class ArticleCard extends HookConsumerWidget {
       imageUrl: entry.imageUrl,
       articleUrl: entry.url,
     );
+  }
+
+  Future<void> _recordShareIntent(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.share,
+      extraData: const {'surface': 'articles'},
+    );
+    try {
+      await sessionStore.markConsumed(FeedSurface.articles, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist article consumed state after share',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   String _formatDate(DateTime date) {

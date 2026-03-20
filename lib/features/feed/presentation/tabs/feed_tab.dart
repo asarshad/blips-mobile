@@ -195,6 +195,21 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       return timer.cancel;
     }, [feed.valueOrNull, currentPage.value, isActive]);
 
+    useEffect(() {
+      final entries = feed.valueOrNull;
+      if (entries == null || entries.isEmpty || onLoadMore == null) {
+        return null;
+      }
+      if (currentPage.value < entries.length - 3) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onLoadMore?.call();
+      });
+      return null;
+    }, [feed.valueOrNull, currentPage.value]);
+
     return SafeArea(
       bottom: false,
       child: feed.when(

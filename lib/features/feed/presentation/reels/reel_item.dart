@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -362,19 +363,51 @@ class ReelItem extends HookConsumerWidget {
     FeedRepository repository,
     FeedSessionStore sessionStore,
   ) async {
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.videoShare,
-      extraData: const {'surface': 'reels'},
-    );
-    await sessionStore.markConsumed(FeedSurface.reels, entry.id);
+    unawaited(_recordShareIntent(repository, sessionStore));
     await ShareService.instance.shareReel(
       title: entry.title,
       videoUrl: entry.link,
     );
   }
 
+  Future<void> _recordShareIntent(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoShare,
+      extraData: const {'surface': 'reels'},
+    );
+    try {
+      await sessionStore.markConsumed(FeedSurface.reels, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist reel consumed state after share',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   Future<void> _openReel(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    unawaited(_recordOpenIntent(repository, sessionStore));
+    final uri = Uri.parse(entry.link);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      logger.warning(
+        'Failed to launch reel URL',
+        category: LogCategory.app,
+        error: entry.link,
+      );
+    }
+  }
+
+  Future<void> _recordOpenIntent(
     FeedRepository repository,
     FeedSessionStore sessionStore,
   ) async {
@@ -383,10 +416,15 @@ class ReelItem extends HookConsumerWidget {
       eventType: FeedInteractionEvent.openSource,
       extraData: const {'surface': 'reels'},
     );
-    await sessionStore.markConsumed(FeedSurface.reels, entry.id);
-    final uri = Uri.parse(entry.link);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await sessionStore.markConsumed(FeedSurface.reels, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist reel consumed state after open',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

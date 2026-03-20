@@ -33,6 +33,7 @@ class FeedCardFrame extends StatelessWidget {
     required this.media,
     required this.category,
     required this.title,
+    this.titleMaxLines,
     required this.summary,
     required this.source,
     this.date,
@@ -55,6 +56,7 @@ class FeedCardFrame extends StatelessWidget {
   final double? mediaAspectRatio;
   final String category;
   final String title;
+  final int? titleMaxLines;
   final String summary;
   final String source;
 
@@ -119,6 +121,7 @@ class FeedCardFrame extends StatelessWidget {
       child: _ContentSection(
         category: category,
         title: title,
+        titleMaxLines: titleMaxLines,
         summary: summary,
         source: source,
         date: date,
@@ -189,6 +192,7 @@ class _ContentSection extends StatelessWidget {
   const _ContentSection({
     required this.category,
     required this.title,
+    this.titleMaxLines,
     required this.summary,
     required this.source,
     this.date,
@@ -204,6 +208,7 @@ class _ContentSection extends StatelessWidget {
 
   final String category;
   final String title;
+  final int? titleMaxLines;
   final String summary;
   final String source;
   final String? date;
@@ -238,7 +243,12 @@ class _ContentSection extends StatelessWidget {
             textTheme: textTheme,
           ),
           const SizedBox(height: AppSpacing.sm),
-          _Title(title: title, colorScheme: colorScheme, textTheme: textTheme),
+          _Title(
+            title: title,
+            titleMaxLines: titleMaxLines,
+            colorScheme: colorScheme,
+            textTheme: textTheme,
+          ),
           const SizedBox(height: AppSpacing.xs),
           Expanded(
             child: _Summary(
@@ -318,11 +328,13 @@ class _Header extends StatelessWidget {
 class _Title extends StatelessWidget {
   const _Title({
     required this.title,
+    this.titleMaxLines,
     required this.colorScheme,
     required this.textTheme,
   });
 
   final String title;
+  final int? titleMaxLines;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
 
@@ -330,7 +342,8 @@ class _Title extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      // No maxLines — title always wraps fully, never truncated
+      maxLines: titleMaxLines,
+      overflow: titleMaxLines == null ? null : TextOverflow.ellipsis,
       style: textTheme.titleLarge?.copyWith(
         color: colorScheme.onSurface,
         fontWeight: FontWeight.bold,

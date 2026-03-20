@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -320,15 +321,36 @@ class VideoCard extends HookConsumerWidget {
     required FeedRepository repository,
     required FeedSessionStore sessionStore,
   }) async {
+    unawaited(_recordOpenIntent(repository, sessionStore));
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      logger.warning(
+        'Failed to launch video URL',
+        category: LogCategory.app,
+        error: url,
+      );
+    }
+  }
+
+  Future<void> _recordOpenIntent(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.openSource,
       extraData: const {'surface': 'videos'},
     );
-    await sessionStore.markConsumed(FeedSurface.videos, entry.id);
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await sessionStore.markConsumed(FeedSurface.videos, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist video consumed state after open',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -337,12 +359,7 @@ class VideoCard extends HookConsumerWidget {
     FeedRepository repository,
     FeedSessionStore sessionStore,
   ) async {
-    await repository.recordInteraction(
-      contentItemId: entry.id,
-      eventType: FeedInteractionEvent.videoShare,
-      extraData: const {'surface': 'videos'},
-    );
-    await sessionStore.markConsumed(FeedSurface.videos, entry.id);
+    unawaited(_recordShareIntent(repository, sessionStore));
     final dateLabel = DateFormat(
       'MMM d, yyyy',
     ).format(entry.publishedAt.toLocal());
@@ -359,6 +376,27 @@ class VideoCard extends HookConsumerWidget {
       thumbnailUrl: preview,
       videoUrl: entry.link,
     );
+  }
+
+  Future<void> _recordShareIntent(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.videoShare,
+      extraData: const {'surface': 'videos'},
+    );
+    try {
+      await sessionStore.markConsumed(FeedSurface.videos, entry.id);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist video consumed state after share',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<void> _showActionsSheet(

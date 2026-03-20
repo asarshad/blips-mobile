@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
@@ -160,12 +163,12 @@ class _ChatBubble extends StatelessWidget {
   }
 
   Future<void> _navigateToChat(BuildContext context) async {
-    onClose();
-    await _recordChatStart(ref, entry);
-
+    final navigator = Navigator.of(context);
     final articleEntry = _convertToArticleEntry(entry);
+    onClose();
+    unawaited(_recordChatStart(ref, entry));
 
-    await Navigator.of(context).push(
+    await navigator.push(
       MaterialPageRoute<void>(
         builder: (context) => ChatDetailPage(
           article: articleEntry,
@@ -276,12 +279,12 @@ class _AskCustomBubble extends StatelessWidget {
   }
 
   Future<void> _navigateToChat(BuildContext context) async {
-    onClose();
-    await _recordChatStart(ref, entry);
-
+    final navigator = Navigator.of(context);
     final articleEntry = _convertToArticleEntry(entry);
+    onClose();
+    unawaited(_recordChatStart(ref, entry));
 
-    await Navigator.of(context).push(
+    await navigator.push(
       MaterialPageRoute<void>(
         builder: (context) => ChatDetailPage(
           article: articleEntry,
@@ -329,5 +332,14 @@ Future<void> _recordChatStart(WidgetRef ref, FeedEntry entry) async {
     eventType: FeedInteractionEvent.chatStart,
     extraData: {'surface': surfaceName},
   );
-  await sessionStore.markConsumed(surface, entry.id);
+  try {
+    await sessionStore.markConsumed(surface, entry.id);
+  } catch (error, stackTrace) {
+    logger.warning(
+      'Failed to persist consumed state for chat start',
+      category: LogCategory.app,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 }
