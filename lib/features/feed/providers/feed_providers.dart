@@ -115,6 +115,7 @@ class ArticlesNotifier
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
+  Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
   static const int _limit = 15;
   static const Duration _pollInterval = Duration(seconds: 90);
@@ -253,7 +254,7 @@ class ArticlesNotifier
   }
 
   Future<void> _refreshInBackground() async {
-    if (_isRefreshing) return;
+    if (_isRefreshing || _manualRefreshFuture != null) return;
     _isRefreshing = true;
 
     try {
@@ -323,7 +324,21 @@ class ArticlesNotifier
 
   /// Manual refresh: keeps current content visible, replaces on success,
   /// returns false on failure or timeout (no state mutation).
-  Future<bool> manualRefresh() async {
+  Future<bool> manualRefresh() {
+    final inFlight = _manualRefreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final future = _runManualRefresh();
+    _manualRefreshFuture = future;
+    future.whenComplete(() {
+      if (identical(_manualRefreshFuture, future)) {
+        _manualRefreshFuture = null;
+      }
+    });
+    return future;
+  }
+
+  Future<bool> _runManualRefresh() async {
     try {
       _currentItemId = null;
       _setUiState(
@@ -552,6 +567,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
+  Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
   Timer? _initialDelayTimer;
   static const int _limit = 10;
@@ -688,7 +704,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   }
 
   Future<void> _refreshInBackground() async {
-    if (_isRefreshing) return;
+    if (_isRefreshing || _manualRefreshFuture != null) return;
     _isRefreshing = true;
 
     try {
@@ -759,7 +775,21 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   /// Manual refresh: keeps current content visible, replaces on success,
   /// returns false on failure or timeout (no state mutation).
-  Future<bool> manualRefresh() async {
+  Future<bool> manualRefresh() {
+    final inFlight = _manualRefreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final future = _runManualRefresh();
+    _manualRefreshFuture = future;
+    future.whenComplete(() {
+      if (identical(_manualRefreshFuture, future)) {
+        _manualRefreshFuture = null;
+      }
+    });
+    return future;
+  }
+
+  Future<bool> _runManualRefresh() async {
     try {
       _currentItemId = null;
       _setUiState(
@@ -1066,6 +1096,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
   bool _isLoadingMore = false;
   bool _isRefreshing = false;
+  Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
   static const int _limit = 20;
   static const Duration _pollInterval = Duration(seconds: 60);
@@ -1201,7 +1232,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   }
 
   Future<void> _refreshInBackground() async {
-    if (_isRefreshing) return;
+    if (_isRefreshing || _manualRefreshFuture != null) return;
     _isRefreshing = true;
 
     try {
@@ -1305,7 +1336,21 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   /// Manual refresh: keeps current content visible, replaces on success,
   /// returns false on failure or timeout.
-  Future<bool> manualRefresh() async {
+  Future<bool> manualRefresh() {
+    final inFlight = _manualRefreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final future = _runManualRefresh();
+    _manualRefreshFuture = future;
+    future.whenComplete(() {
+      if (identical(_manualRefreshFuture, future)) {
+        _manualRefreshFuture = null;
+      }
+    });
+    return future;
+  }
+
+  Future<bool> _runManualRefresh() async {
     try {
       _currentItemId = null;
       _setUiState(

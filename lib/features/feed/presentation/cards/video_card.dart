@@ -62,6 +62,10 @@ class VideoCard extends HookConsumerWidget {
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
     final isError = playerState == YTPlayerState.error;
+    final watchLabel = _buildWatchLabel(
+      controller: controller,
+      explicitDurationSeconds: entry.durationSeconds,
+    );
 
     // Resume video when app returns to foreground (Videos tab lifecycle fix).
     // The manager's WidgetsBindingObserver handles pause-on-background but
@@ -242,7 +246,7 @@ class VideoCard extends HookConsumerWidget {
             tier: entry.freshnessTier,
             isNewSinceLastSeen: isNewSinceLastSeen,
           ),
-          readTime: '${entry.readTime} min watch',
+          readTime: watchLabel,
           onTap: () => _handleTap(
             showBubbles: showBubbles,
             controller: controller,
@@ -372,7 +376,10 @@ class VideoCard extends HookConsumerWidget {
       channelName: entry.source,
       category: entry.category,
       date: dateLabel,
-      duration: '${entry.readTime} min watch',
+      duration: _buildWatchLabel(
+        controller: null,
+        explicitDurationSeconds: entry.durationSeconds,
+      ),
       thumbnailUrl: preview,
       videoUrl: entry.link,
     );
@@ -502,6 +509,23 @@ class VideoCard extends HookConsumerWidget {
       return explicitDurationSeconds * 1000;
     }
     return fallbackMinutes > 0 ? fallbackMinutes * 60 * 1000 : 0;
+  }
+
+  String _buildWatchLabel({
+    required YoutubePlayerController? controller,
+    required int? explicitDurationSeconds,
+  }) {
+    final controllerDurationSeconds =
+        controller == null ? 0 : controller.value.metaData.duration.inSeconds;
+    if (controllerDurationSeconds > 0) {
+      final minutes = (controllerDurationSeconds / 60).ceil();
+      return '$minutes min watch';
+    }
+    if (explicitDurationSeconds != null && explicitDurationSeconds > 0) {
+      final minutes = (explicitDurationSeconds / 60).ceil();
+      return '$minutes min watch';
+    }
+    return 'Watch video';
   }
 
   void _showFeedback(BuildContext context, String message) {

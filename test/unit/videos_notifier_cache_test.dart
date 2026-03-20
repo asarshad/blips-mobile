@@ -252,4 +252,104 @@ void main() {
       );
     },
   );
+
+  test(
+    'manualRefresh failure preserves current items and returns false',
+    () async {
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+          playlistCallCount += 1;
+          if (playlistCallCount == 1) {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          throw Exception('refresh failed');
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final refreshResult =
+          await container.read(videosFeedProvider.notifier).manualRefresh();
+      await _settle();
+
+      expect(refreshResult, isFalse);
+      final state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(
+        state.value!.map((entry) => entry.id),
+        orderedEquals(List<int>.generate(10, (index) => index + 1)),
+      );
+    },
+  );
+
+  test(
+    'manualRefresh coalesces overlapping refresh calls',
+    () async {
+      final delayedResponse = Completer<Map<String, dynamic>>();
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+          playlistCallCount += 1;
+          if (playlistCallCount == 1) {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          return delayedResponse.future;
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final notifier = container.read(videosFeedProvider.notifier);
+      final first = notifier.manualRefresh();
+      final second = notifier.manualRefresh();
+
+      expect(identical(first, second), isTrue);
+
+      delayedResponse.complete(
+        _videosResponse(List<int>.generate(10, (index) => index + 21)),
+      );
+      expect(await first, isTrue);
+      await _settle();
+
+      expect(
+        api.requests
+            .where(
+              (request) =>
+                  request.method == 'GET' &&
+                  request.path == '/session/playlist',
+            )
+            .length,
+        2,
+      );
+    },
+  );
 }

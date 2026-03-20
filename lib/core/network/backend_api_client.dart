@@ -5,7 +5,8 @@ enum RequestMode {
   /// Default behavior: standard timeouts, retries enabled.
   normal,
 
-  /// User-initiated refresh: moderately shorter timeouts with limited retries.
+  /// User-initiated refresh: same timeout budget as normal traffic, but tagged
+  /// so interceptors can recognize it.
   manualRefresh,
 }
 
@@ -67,8 +68,6 @@ final class DioBackendApiClient implements BackendApiClient {
   Options? _optionsFor(RequestMode mode) {
     if (mode == RequestMode.normal) return null;
     return Options(
-      sendTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 12),
       extra: {'requestMode': 'manualRefresh'},
     );
   }

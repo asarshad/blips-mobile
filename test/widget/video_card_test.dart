@@ -211,5 +211,52 @@ void main() {
             'Source link should be used when videoUrl is not YouTube-playable',
       );
     });
+
+    testWidgets('shows explicit watch duration when durationSeconds is known',
+        (tester) async {
+      final durationEntry = VideoFeedEntry(
+        id: 12,
+        title: 'Duration label test',
+        summary: 'Summary',
+        videoUrl: 'https://www.youtube.com/watch?v=jcxgwl9NYFE',
+        link: 'https://www.youtube.com/watch?v=jcxgwl9NYFE',
+        source: 'YouTube',
+        category: 'Technology',
+        publishedAt: DateTime(2025, 2, 12),
+        readTime: 1,
+        durationSeconds: 185,
+        thumbnailUrl: '',
+      );
+
+      await tester.pumpWidget(
+        buildTestWidget(entry: durationEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('4 min watch'), findsOneWidget);
+    });
+
+    testWidgets('shows neutral label when duration is unknown', (tester) async {
+      final unknownDurationEntry = VideoFeedEntry(
+        id: 13,
+        title: 'Unknown duration label test',
+        summary: 'Short summary',
+        videoUrl: 'https://www.youtube.com/watch?v=unknown12345',
+        link: 'https://www.youtube.com/watch?v=unknown12345',
+        source: 'YouTube',
+        category: 'Technology',
+        publishedAt: DateTime(2025, 2, 13),
+        readTime: 1,
+        thumbnailUrl: '',
+      );
+
+      await tester.pumpWidget(
+        buildTestWidget(entry: unknownDurationEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Watch video'), findsOneWidget);
+      expect(find.text('1 min watch'), findsNothing);
+    });
   });
 }

@@ -31,20 +31,26 @@ class NavBarIcon extends StatelessWidget {
     // Clamp text scaling for nav icons to prevent layout overflow
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.2,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
-            vertical: verticalPadding,
-          ),
-          child: Icon(
-            isSelected ? selectedIcon : icon,
-            size: iconSize,
-            color: isSelected
-                ? theme.selectedItemColor
-                : theme.unselectedItemColor,
+      child: Semantics(
+        key: ValueKey('nav-$label'),
+        button: true,
+        label: label,
+        selected: isSelected,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
+            child: Icon(
+              isSelected ? selectedIcon : icon,
+              size: iconSize,
+              color: isSelected
+                  ? theme.selectedItemColor
+                  : theme.unselectedItemColor,
+            ),
           ),
         ),
       ),
