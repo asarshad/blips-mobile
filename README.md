@@ -7,36 +7,32 @@ A Flutter mobile app for consuming tech news and video content in a modern, enga
 - 📰 **Article Feed** - Swipeable card-based news feed with AI summaries
 - 🎬 **Video Reels** - TikTok-style vertical video player for tech content
 - 💬 **AI Chat** - Ask questions about articles using GPT
-- 🔖 **Bookmarks** - Save articles and videos for later
+- 🎯 **Onboarding** - Interest selection and device-scoped personalization
 - 🎨 **Dark/Light Theme** - System-aware theming
-- 📱 **iOS Native** - Built with Capacitor for native iOS deployment
-- 📢 **Ads-Ready** - Server-controlled ad scaffold (disabled by default, no SDK bundled). See [Ads Architecture](docs/ADS_ARCHITECTURE.md)
+- 📱 **Native Mobile** - Flutter client for iOS and Android
+- 📢 **Ads-Ready** - Google Mobile Ads with server-controlled placements. See [Ads Architecture](docs/ADS_ARCHITECTURE.md)
 
 ## Tech Stack
 
-- **Framework**: Flutter 3.16+
+- **Framework**: Flutter
 - **State Management**: Riverpod
-- **Video Playback**: video_player + youtube_explode_dart
+- **Video Playback**: youtube_player_flutter with pooled controller management
 - **HTTP Client**: Dio with interceptors
-- **Local Storage**: SharedPreferences
+- **Local Storage**: SQLite + SharedPreferences
 - **Architecture**: Feature-first with clean architecture layers
 
 ## Project Structure
 
 ```
 lib/
-├── core/                    # Shared utilities, theme, constants
+├── core/                    # Config, database, network, services, theme
 ├── features/
-│   ├── ads/                 # Ads scaffold (off by default, no SDK)
-│   ├── feed/                # Article feed (cards, pagination)
-│   ├── reels/               # Video player (pooling, preload)
+│   ├── ads/                 # Ad placements and presentation
 │   ├── chat/                # AI conversation
-│   ├── bookmarks/           # Saved content
+│   ├── feed/                # Articles, videos, reels, caching, playback
+│   ├── onboarding/          # Interest selection and local persistence
 │   └── settings/            # App preferences
-├── shared/
-│   ├── models/              # Domain models
-│   ├── repositories/        # Data access layer
-│   └── widgets/             # Reusable UI components
+├── routes/                  # App routing
 └── main.dart
 ```
 
@@ -44,7 +40,7 @@ lib/
 
 ### Prerequisites
 
-- Flutter 3.16+ (`flutter --version`)
+- Flutter (`flutter --version`)
 - Xcode 15+ (for iOS)
 - CocoaPods (`pod --version`)
 
@@ -67,15 +63,13 @@ flutter run
 
 ### Configuration
 
-Create `lib/config/env.dart`:
+Runtime configuration is provided via `--dart-define`.
 
-```dart
-class Env {
-  static const String apiBaseUrl = 'http://localhost:8000/api/v1';
-}
+```bash
+flutter run --dart-define=BLIPS_BACKEND_URL=http://localhost:8000/api/v1
 ```
 
-For production, update to your deployed backend URL.
+Optional defines include `SENTRY_DSN` and the AdMob unit IDs described in [Ads Architecture](docs/ADS_ARCHITECTURE.md).
 
 ## Development
 
@@ -107,7 +101,7 @@ flutter test
 flutter test --coverage
 
 # Run specific test
-flutter test test/features/feed/feed_repository_test.dart
+flutter test test/unit/feed_repository_test.dart
 ```
 
 ### Linting
@@ -130,17 +124,17 @@ Feature Module
 
 ### Key Components
 
-- **VideoPlayerManager**: Pool of 5 recycled video players for smooth scrolling
-- **YouTubeUrlResolver**: Resolves YouTube URLs to direct streams with caching
+- **YoutubePlayerManager**: Pooled iframe-based YouTube controller manager for feed and reels playback
 - **FeedRepository**: Handles article/video fetching with pagination
-- **EngagementTracker**: Tracks user interactions for ranking
+- **FeedCache**: Persists feed responses in SQLite for fast local reads
+- **DioBackendApiClient**: Typed backend client with interceptors and device-aware requests
 
 ## Documentation
 
 - [Mobile Structure](docs/MOBILE_STRUCTURE.md) - Detailed architecture guide
 - [Ads Architecture](docs/ADS_ARCHITECTURE.md) - Ads scaffold design & integration guide
 - [Architecture](../blips-ai-news-backend/docs/ARCHITECTURE.md) - System overview
-- [Development Guide](../blips-ai-news-backend/docs/DEVELOPMENT_GUIDE.md) - Full setup instructions
+- [Development Guide](../blips-ai-news-backend/docs/DEVELOPMENT.md) - Full setup instructions
 
 ## Related Projects
 

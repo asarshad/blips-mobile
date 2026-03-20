@@ -24,7 +24,7 @@ Complete all items before submitting to app stores.
 ### Monitoring
 - [ ] `/health` returns 200
 - [ ] `/metrics` returns valid JSON (with admin key)
-- [ ] `/metrics/sources` shows active feeds
+- [ ] `/api/v1/metrics/sources` shows active feeds
 - [ ] Ingestion health check running (30min interval)
 - [ ] Alerting tested (trigger a test alert)
 

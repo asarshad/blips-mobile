@@ -223,13 +223,13 @@ The video playback system is optimized for TikTok-style scrolling. Here's how it
                              │ Uses
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    YoutubeUrlResolver                           │
-│   (Resolves YouTube URLs to direct stream URLs)                 │
+│                    YoutubePlayerManager                         │
+│   (Manages iframe-based YouTube controllers)                    │
 │                                                                 │
 │   Input:  https://youtube.com/shorts/abc123                     │
-│   Output: https://r4.googlevideo.com/videoplayback?...          │
+│   Output: ready-to-play YoutubePlayerController                 │
 │                                                                 │
-│   Uses: youtube_explode_dart package                            │
+│   Uses: youtube_player_flutter package                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -255,9 +255,9 @@ The video playback system is optimized for TikTok-style scrolling. Here's how it
         ▼
 5. assignAndPreparePlayer():
    a. Find available player (or recycle oldest)
-   b. Call YoutubeUrlResolver.resolve(url)
-   c. Create VideoPlayerController with stream URL
-   d. Initialize controller
+   b. Extract YouTube video ID from the URL
+   c. Create or reuse a YoutubePlayerController
+   d. Initialize the controller state
    e. If isVisible && currentActiveUrl → play()
 ```
 

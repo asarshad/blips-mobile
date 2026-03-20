@@ -123,8 +123,8 @@ docker-compose -f docker-compose.test.yml logs
 
 ### Content Not Loading
 
-1. Verify backend is healthy: `curl http://localhost:8001/api/v1/health`
-2. Check for seeded content: `curl http://localhost:8001/api/v1/feed`
+1. Verify backend is healthy: `curl http://localhost:8001/health`
+2. Check for seeded content: `curl http://localhost:8001/api/v1/articles/recent`
 3. Verify the `--dart-define` is correct
 
 ### FakeLLM Not Working
