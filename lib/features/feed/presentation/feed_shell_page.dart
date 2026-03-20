@@ -7,6 +7,7 @@ import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/ads/presentation/native_ad_card.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
@@ -45,6 +46,7 @@ class FeedShellPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentIndex = useState(0);
     final pageController = usePageController();
+    final sessionStore = ref.watch(feedSessionStoreProvider);
 
     // Vertical page controllers for each feed surface
     final articleFeedController = usePageController();
@@ -55,6 +57,10 @@ class FeedShellPage extends HookConsumerWidget {
     final articleFeed = ref.watch(articleFeedWithAdsProvider);
     final videoFeed = ref.watch(videoFeedWithAdsProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
+    final articleUiState =
+        ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
+    final videoUiState =
+        ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
     // Warm reels data in background (controller warm-up is owned by Reels page).
     _useBackgroundReelsWarmup(ref);
@@ -70,6 +76,24 @@ class FeedShellPage extends HookConsumerWidget {
 
     // Refresh the current surface when the app returns to foreground.
     _useResumeRefresh(ref, currentIndex.value);
+
+    useEffect(() {
+      Future.microtask(() async {
+        final lastSurface = await sessionStore.getLastSurface();
+        if (lastSurface != null && currentIndex.value != lastSurface.tabIndex) {
+          currentIndex.value = lastSurface.tabIndex;
+        }
+      });
+      return null;
+    }, const []);
+
+    useEffect(() {
+      if (currentIndex.value >= 0 && currentIndex.value <= 2) {
+        final surface = FeedSurface.values[currentIndex.value];
+        Future.microtask(() => sessionStore.setLastSurface(surface));
+      }
+      return null;
+    }, [currentIndex.value]);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -87,6 +111,8 @@ class FeedShellPage extends HookConsumerWidget {
                   articleFeedController: articleFeedController,
                   videoFeedController: videoFeedController,
                   reelsFeedController: reelsFeedController,
+                  articleUiState: articleUiState,
+                  videoUiState: videoUiState,
                   ref: ref,
                   context: context,
                 ),
@@ -378,6 +404,8 @@ class FeedShellPage extends HookConsumerWidget {
     required PageController articleFeedController,
     required PageController videoFeedController,
     required PageController reelsFeedController,
+    required FeedSurfaceUiState articleUiState,
+    required FeedSurfaceUiState videoUiState,
     required WidgetRef ref,
     required BuildContext context,
   }) {
@@ -385,6 +413,8 @@ class FeedShellPage extends HookConsumerWidget {
       FeedTab<FeedPageItem>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
+        overlayLabel: 'ART',
+        overlayHasMore: ref.read(articlesFeedProvider.notifier).hasMore,
         controller: articleFeedController,
         builder: (entry, isCurrentPage) {
           final notifier = ref.read(articlesFeedProvider.notifier);
@@ -408,12 +438,33 @@ class FeedShellPage extends HookConsumerWidget {
         onRefresh: () =>
             _refreshArticlesManually(ref, context, articleFeedController),
         onLoadMore: () => ref.read(articlesFeedProvider.notifier).loadMore(),
-        onPageChanged: (index) =>
-            ref.read(articlesFeedProvider.notifier).setCurrentViewIndex(index),
+        onPageChanged: (index, entry) => ref
+            .read(articlesFeedProvider.notifier)
+            .setCurrentViewPosition(index, entry as ArticleFeedEntry?),
+        onPrimaryVisibleEntrySettled: (entry) => unawaited(
+          ref.read(articlesFeedProvider.notifier).markExposed(entry.id),
+        ),
+        isActive: currentIndex.value == 0,
+        restoreEntryId: articleUiState.restoreItemId,
+        restoreApproximateIndex: articleUiState.restoreApproximateIndex,
+        onRestoreApplied:
+            ref.read(articlesFeedProvider.notifier).consumeRestoreTarget,
+        topActionLabel: articleUiState.hasPendingNewItems
+            ? '${articleUiState.pendingNewCount} new item${articleUiState.pendingNewCount == 1 ? '' : 's'}'
+            : null,
+        onTopAction: articleUiState.hasPendingNewItems
+            ? () => _refreshArticlesManually(
+                  ref,
+                  context,
+                  articleFeedController,
+                )
+            : null,
       ),
       FeedTab<FeedPageItem>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
+        overlayLabel: 'VID',
+        overlayHasMore: ref.read(videosFeedProvider.notifier).hasMore,
         containsVideos: true,
         controller: videoFeedController,
         builder: (entry, isCurrentPage) {
@@ -438,8 +489,27 @@ class FeedShellPage extends HookConsumerWidget {
         onRefresh: () =>
             _refreshVideosManually(ref, context, videoFeedController),
         onLoadMore: () => ref.read(videosFeedProvider.notifier).loadMore(),
-        onPageChanged: (index) =>
-            ref.read(videosFeedProvider.notifier).setCurrentViewIndex(index),
+        onPageChanged: (index, entry) => ref
+            .read(videosFeedProvider.notifier)
+            .setCurrentViewPosition(index, entry as VideoFeedEntry?),
+        onPrimaryVisibleEntrySettled: (entry) => unawaited(
+          ref.read(videosFeedProvider.notifier).markExposed(entry.id),
+        ),
+        isActive: currentIndex.value == 1,
+        restoreEntryId: videoUiState.restoreItemId,
+        restoreApproximateIndex: videoUiState.restoreApproximateIndex,
+        onRestoreApplied:
+            ref.read(videosFeedProvider.notifier).consumeRestoreTarget,
+        topActionLabel: videoUiState.hasPendingNewItems
+            ? '${videoUiState.pendingNewCount} new item${videoUiState.pendingNewCount == 1 ? '' : 's'}'
+            : null,
+        onTopAction: videoUiState.hasPendingNewItems
+            ? () => _refreshVideosManually(
+                  ref,
+                  context,
+                  videoFeedController,
+                )
+            : null,
         isCaughtUp: ref.read(videosFeedProvider.notifier).isCaughtUp,
         caughtUpLabel: 'Caught up on videos for now.',
         onCaughtUp: (entry) => unawaited(

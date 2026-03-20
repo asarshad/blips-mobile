@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 
 /// Deterministic fake for [BackendApiClient] used in unit/widget tests.
 ///
 /// Responses are keyed by request path.
-typedef FakeResponseResolver = Map<String, dynamic> Function(
+typedef FakeResponseResolver = FutureOr<Map<String, dynamic>> Function(
   String method,
   String path,
   Map<String, dynamic>? queryParameters,
@@ -52,7 +54,7 @@ final class FakeBackendApiClient implements BackendApiClient {
       body: null,
     ));
     if (responseResolver != null) {
-      return responseResolver!('GET', path, queryParameters, null);
+      return await responseResolver!('GET', path, queryParameters, null);
     }
     final queue = _queuedResponses[path];
     if (queue != null && queue.isNotEmpty) {
@@ -75,7 +77,7 @@ final class FakeBackendApiClient implements BackendApiClient {
       body: data,
     ));
     if (responseResolver != null) {
-      return responseResolver!('POST', path, queryParameters, data);
+      return await responseResolver!('POST', path, queryParameters, data);
     }
     final queue = _queuedResponses[path];
     if (queue != null && queue.isNotEmpty) {

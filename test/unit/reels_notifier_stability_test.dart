@@ -5,6 +5,7 @@ import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
 import '../test_utils/fake_feed_cache.dart';
@@ -45,14 +46,14 @@ Future<void> _settle() async {
   }
 }
 
-List<ReelFeedEntry> _entries(ReelsNotifier notifier) {
-  final entries = notifier.state.value;
+List<ReelFeedEntry> _entries(ProviderContainer container) {
+  final entries = container.read(reelsFeedProvider).value;
   expect(entries, isNotNull);
   return entries!;
 }
 
-List<int> _ids(ReelsNotifier notifier) {
-  return _entries(notifier).map((entry) => entry.id).toList(growable: false);
+List<int> _ids(ProviderContainer container) {
+  return _entries(container).map((entry) => entry.id).toList(growable: false);
 }
 
 void main() {
@@ -104,34 +105,38 @@ void main() {
           },
         );
 
-        final notifier = ReelsNotifier(
-          FeedRepository(api),
-          FakeFeedCache(),
+        final container = ProviderContainer(
+          overrides: [
+            feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+            feedCacheProvider.overrideWithValue(FakeFeedCache()),
+          ],
         );
-        addTearDown(notifier.dispose);
+        addTearDown(container.dispose);
+        final sub = container.listen(reelsFeedProvider, (_, __) {});
+        addTearDown(sub.close);
 
         await _settle();
-        expect(notifier.state.hasValue, isTrue);
+        expect(container.read(reelsFeedProvider).hasValue, isTrue);
         expect(
-          _ids(notifier),
+          _ids(container),
           List<int>.generate(20, (index) => index + 1),
         );
 
-        await notifier.loadMore();
+        await container.read(reelsFeedProvider.notifier).loadMore();
         await _settle();
-        final afterLoadMore = _entries(notifier);
+        final afterLoadMore = _entries(container);
         expect(afterLoadMore.length, 40);
         expect(afterLoadMore[25].id, 26);
 
-        await notifier.refreshSilently();
+        await container.read(reelsFeedProvider.notifier).refreshSilently();
         await _settle();
 
-        final afterRefreshIds = _ids(notifier);
+        final afterRefreshIds = _ids(container);
         expect(afterRefreshIds.length, 40);
         expect(afterRefreshIds[25], 26);
         expect(afterRefreshIds, isNot(contains(101)));
 
-        await notifier.loadMore();
+        await container.read(reelsFeedProvider.notifier).loadMore();
         await _settle();
 
         final requestCursors = api.requests
@@ -140,7 +145,7 @@ void main() {
             .toList(growable: false);
         expect(requestCursors.last, '40');
         expect(
-          _ids(notifier),
+          _ids(container),
           List<int>.generate(60, (index) => index + 1),
         );
       },
@@ -177,18 +182,22 @@ void main() {
           },
         );
 
-        final notifier = ReelsNotifier(
-          FeedRepository(api),
-          FakeFeedCache(),
+        final container = ProviderContainer(
+          overrides: [
+            feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+            feedCacheProvider.overrideWithValue(FakeFeedCache()),
+          ],
         );
-        addTearDown(notifier.dispose);
+        addTearDown(container.dispose);
+        final sub = container.listen(reelsFeedProvider, (_, __) {});
+        addTearDown(sub.close);
 
         await _settle();
-        await notifier.refreshSilently();
+        await container.read(reelsFeedProvider.notifier).refreshSilently();
         await _settle();
 
         expect(
-          _ids(notifier),
+          _ids(container),
           List<int>.generate(20, (index) => index + 1),
         );
       },

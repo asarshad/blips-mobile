@@ -33,6 +33,10 @@ class FeedPageResult<T extends FeedEntry> {
 
 abstract final class FeedInteractionEvent {
   static const openSource = 'OPEN_SOURCE';
+  static const share = 'SHARE';
+  static const save = 'SAVE';
+  static const chatStart = 'CHAT_START';
+  static const chatMessage = 'CHAT_MESSAGE';
   static const videoImpression = 'VIDEO_IMPRESSION';
   static const videoStart = 'VIDEO_START';
   static const video3s = 'VIDEO_3S';
@@ -64,6 +68,26 @@ class FeedRepository {
   String? get articleSessionId => _articleSessionId;
 
   String? get videoSessionId => _videoSessionId;
+
+  int? get articleCursor => _articleCursor;
+
+  int? get videoCursor => _videoCursor;
+
+  String? get reelsCursor => _reelsCursor;
+
+  void restoreArticleSession({String? sessionId, int? cursor}) {
+    _articleSessionId = sessionId;
+    _articleCursor = cursor;
+  }
+
+  void restoreVideoSession({String? sessionId, int? cursor}) {
+    _videoSessionId = sessionId;
+    _videoCursor = cursor;
+  }
+
+  void restoreReelsCursor(String? cursor) {
+    _reelsCursor = cursor;
+  }
 
   /// Fetches only article items for a given page.
   Future<FeedPageResult<FeedEntry>> fetchArticlesPage({
@@ -216,6 +240,52 @@ class FeedRepository {
 
     // Backward-compatible fallback for environments without /session/playlist support.
     return _fetchLegacyFeedPage(type: type, page: page, size: size);
+  }
+
+  Future<FeedPageResult<FeedEntry>> previewArticlesHead({
+    int size = 15,
+    RequestMode requestMode = RequestMode.normal,
+  }) {
+    return _previewSessionPlaylist(
+      type: 'ARTICLE',
+      size: size,
+      requestMode: requestMode,
+    );
+  }
+
+  Future<FeedPageResult<FeedEntry>> previewVideosHead({
+    int size = 10,
+    RequestMode requestMode = RequestMode.normal,
+  }) {
+    return _previewSessionPlaylist(
+      type: 'VIDEO',
+      size: size,
+      requestMode: requestMode,
+    );
+  }
+
+  Future<FeedPageResult<FeedEntry>> _previewSessionPlaylist({
+    required String type,
+    required int size,
+    required RequestMode requestMode,
+  }) async {
+    final savedArticleSessionId = _articleSessionId;
+    final savedArticleCursor = _articleCursor;
+    final savedVideoSessionId = _videoSessionId;
+    final savedVideoCursor = _videoCursor;
+    try {
+      return await _fetchSessionPlaylist(
+        type: type,
+        page: 1,
+        size: size,
+        requestMode: requestMode,
+      );
+    } finally {
+      _articleSessionId = savedArticleSessionId;
+      _articleCursor = savedArticleCursor;
+      _videoSessionId = savedVideoSessionId;
+      _videoCursor = savedVideoCursor;
+    }
   }
 
   Map<String, dynamic> _sessionContinuationQuery(String type) {
@@ -421,6 +491,22 @@ class FeedRepository {
       throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
     } catch (e, stack) {
       throw DataException.fromParseError(e, stack);
+    }
+  }
+
+  Future<FeedPageResult<ReelFeedEntry>> previewReelsHead({
+    int limit = 20,
+    RequestMode requestMode = RequestMode.normal,
+  }) async {
+    final savedCursor = _reelsCursor;
+    try {
+      return await fetchReelsPage(
+        cursor: null,
+        limit: limit,
+        requestMode: requestMode,
+      );
+    } finally {
+      _reelsCursor = savedCursor;
     }
   }
 

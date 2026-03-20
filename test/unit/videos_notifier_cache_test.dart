@@ -1,6 +1,8 @@
 @Tags(['unit'])
 library videos_notifier_cache_test;
 
+import 'dart:async';
+
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
@@ -44,6 +46,68 @@ Future<void> _settle() async {
 }
 
 void main() {
+  test(
+    'VideosNotifier keeps cached items visible while fresh session loads',
+    () async {
+      final cache = FakeFeedCache();
+      await cache.replaceVideosSnapshot(
+        [
+          VideoFeedEntry(
+            id: 1,
+            title: 'Cached Video 1',
+            summary: 'Cached summary 1',
+            videoUrl: 'https://youtube.com/watch?v=cache1',
+            link: 'https://youtube.com/watch?v=cache1',
+            source: 'YouTube',
+            category: 'Technology',
+            publishedAt: DateTime.parse('2026-03-20T00:00:00Z'),
+            readTime: 2,
+            thumbnailUrl: 'https://img.youtube.com/vi/cache1/0.jpg',
+            durationSeconds: 120,
+          ),
+        ],
+      );
+
+      final delayedResponse = Completer<Map<String, dynamic>>();
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return delayedResponse.future;
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(cache),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      var state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value!.map((entry) => entry.id), orderedEquals([1]));
+
+      delayedResponse.complete(
+        _videosResponse(List<int>.generate(10, (index) => index + 11)),
+      );
+      await _settle();
+
+      state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(
+        state.value!.map((entry) => entry.id),
+        orderedEquals(List<int>.generate(10, (index) => index + 11)),
+      );
+    },
+  );
+
   test(
     'VideosNotifier replaces stale cached page-1 items during silent refresh',
     () async {
@@ -122,6 +186,70 @@ void main() {
         orderedEquals(List<int>.generate(10, (i) => i + 1)),
       );
       expect(cached.any((entry) => entry.id == 17171), isFalse);
+    },
+  );
+
+  test(
+    'manualRefresh keeps current items visible until replacement arrives',
+    () async {
+      final delayedResponse = Completer<Map<String, dynamic>>();
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+          playlistCallCount += 1;
+          if (playlistCallCount == 1) {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          return delayedResponse.future;
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      var state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(
+        state.value!.map((entry) => entry.id),
+        orderedEquals(List<int>.generate(10, (index) => index + 1)),
+      );
+
+      final refreshFuture =
+          container.read(videosFeedProvider.notifier).manualRefresh();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(
+        state.value!.map((entry) => entry.id),
+        orderedEquals(List<int>.generate(10, (index) => index + 1)),
+      );
+
+      delayedResponse.complete(
+        _videosResponse(List<int>.generate(10, (index) => index + 21)),
+      );
+      expect(await refreshFuture, isTrue);
+      await _settle();
+
+      state = container.read(videosFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(
+        state.value!.map((entry) => entry.id),
+        orderedEquals(List<int>.generate(10, (index) => index + 21)),
+      );
     },
   );
 }

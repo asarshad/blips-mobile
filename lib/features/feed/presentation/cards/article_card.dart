@@ -1,12 +1,16 @@
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Card widget for displaying article feed entries.
 /// Includes media preview, metadata, and action buttons.
-class ArticleCard extends HookWidget {
+class ArticleCard extends HookConsumerWidget {
   const ArticleCard({
     super.key,
     required this.entry,
@@ -19,8 +23,10 @@ class ArticleCard extends HookWidget {
   final bool isNewSinceLastSeen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final showBubbles = useState(false);
+    final repository = ref.read(feedRepositoryProvider);
+    final sessionStore = ref.read(feedSessionStoreProvider);
 
     // Collapse bubbles when card scrolls out of view or outer tab changes
     useEffect(() {
@@ -47,10 +53,10 @@ class ArticleCard extends HookWidget {
             isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: '${entry.readTime} min read',
-          onTap: () => _handleTap(showBubbles),
-          onOpenLink: () => _openInBrowser(entry.url),
+          onTap: () => _handleTap(showBubbles, repository, sessionStore),
+          onOpenLink: () => _openInBrowser(entry.url, repository, sessionStore),
           onChat: () => showBubbles.value = !showBubbles.value,
-          onShare: () => _shareArticle(context),
+          onShare: () => _shareArticle(context, repository, sessionStore),
         ),
         if (showBubbles.value)
           Positioned(
@@ -66,26 +72,56 @@ class ArticleCard extends HookWidget {
     );
   }
 
-  Future<void> _handleTap(ValueNotifier<bool> showBubbles) async {
+  Future<void> _handleTap(
+    ValueNotifier<bool> showBubbles,
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
     if (showBubbles.value) {
       showBubbles.value = false;
       return;
     }
 
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.openSource,
+      extraData: const {'surface': 'articles'},
+    );
+    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
     final uri = Uri.parse(entry.url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
   }
 
-  Future<void> _openInBrowser(String url) async {
+  Future<void> _openInBrowser(
+    String url,
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.openSource,
+      extraData: const {'surface': 'articles'},
+    );
+    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
-  Future<void> _shareArticle(BuildContext context) async {
+  Future<void> _shareArticle(
+    BuildContext context,
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.share,
+      extraData: const {'surface': 'articles'},
+    );
+    await sessionStore.markConsumed(FeedSurface.articles, entry.id);
     await ShareService.instance.shareArticle(
       context: context,
       title: entry.title,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
@@ -25,19 +27,31 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     required this.builder,
     required this.emptyLabel,
     required this.onRefresh,
+    required this.overlayLabel,
     this.controller,
     this.onLoadMore,
     this.onPageChanged,
+    this.onPrimaryVisibleEntrySettled,
     this.containsVideos = false,
     this.isCaughtUp = false,
     this.caughtUpLabel = 'You are caught up.',
     this.onCaughtUp,
+    this.restoreEntryId,
+    this.restoreApproximateIndex,
+    this.onRestoreApplied,
+    this.topActionLabel,
+    this.onTopAction,
+    this.isActive = true,
+    this.topActionDark = false,
+    this.overlayDark = false,
+    this.overlayHasMore = false,
   });
 
   final AsyncValue<List<T>> feed;
   final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
   final VoidCallback onRefresh;
+  final String overlayLabel;
 
   /// External page controller owned by the shell. Falls back to an internal
   /// controller when not provided.
@@ -46,7 +60,10 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   final VoidCallback? onLoadMore;
 
   /// Called when user swipes to a new page, for tracking current view index.
-  final void Function(int index)? onPageChanged;
+  final void Function(int index, FeedEntry? visibleEntry)? onPageChanged;
+
+  /// Called when an organic page remains primary and visible for ~1 second.
+  final ValueChanged<FeedEntry>? onPrimaryVisibleEntrySettled;
 
   /// When true, enables video preloading for organic video pages in the list.
   final bool containsVideos;
@@ -59,6 +76,33 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
   /// Called once per terminal entry when the user reaches a caught-up state.
   final void Function(FeedEntry entry)? onCaughtUp;
+
+  /// Organic entry id to restore to once entries load.
+  final int? restoreEntryId;
+
+  /// Fallback organic index when the stored item id is missing.
+  final int? restoreApproximateIndex;
+
+  /// Called after an attempted restore jump so the caller can clear state.
+  final VoidCallback? onRestoreApplied;
+
+  /// Optional top pill label for continuity/freshness actions.
+  final String? topActionLabel;
+
+  /// Callback for the top pill tap.
+  final VoidCallback? onTopAction;
+
+  /// Whether this surface is currently visible to the user.
+  final bool isActive;
+
+  /// Whether the top pill should use the dark visual style.
+  final bool topActionDark;
+
+  /// Whether the diagnostics overlay should use the dark visual style.
+  final bool overlayDark;
+
+  /// Whether the current loaded feed is still expandable.
+  final bool overlayHasMore;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,6 +146,54 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       });
       return null;
     }, [feed.valueOrNull, currentPage.value, isCaughtUp]);
+
+    useEffect(() {
+      final entries = feed.valueOrNull;
+      final targetEntryId = restoreEntryId;
+      final fallbackOrganicIndex = restoreApproximateIndex;
+      if (entries == null || entries.isEmpty) {
+        return null;
+      }
+      if (targetEntryId == null && fallbackOrganicIndex == null) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!effectiveController.hasClients) return;
+        final targetIndex = _resolveRestorePageIndex(
+          entries,
+          targetEntryId: targetEntryId,
+          fallbackOrganicIndex: fallbackOrganicIndex,
+        );
+        if (targetIndex != null) {
+          effectiveController.jumpToPage(targetIndex);
+          currentPage.value = targetIndex;
+        }
+        onRestoreApplied?.call();
+      });
+      return null;
+    }, [feed.valueOrNull, restoreEntryId, restoreApproximateIndex]);
+
+    useEffect(() {
+      final entries = feed.valueOrNull;
+      if (!isActive ||
+          entries == null ||
+          entries.isEmpty ||
+          onPrimaryVisibleEntrySettled == null) {
+        return null;
+      }
+
+      final index = currentPage.value.clamp(0, entries.length - 1);
+      final organicEntry = entries[index].organicEntry;
+      if (organicEntry == null) {
+        return null;
+      }
+
+      final timer = Timer(const Duration(seconds: 1), () {
+        onPrimaryVisibleEntrySettled?.call(organicEntry);
+      });
+      return timer.cancel;
+    }, [feed.valueOrNull, currentPage.value, isActive]);
 
     return SafeArea(
       bottom: false,
@@ -157,6 +249,8 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
     final showCaughtUpBanner =
         isCaughtUp && currentPage.value >= entries.length - 1;
+    final showTopAction = topActionLabel != null && onTopAction != null;
+    final overlayData = _buildOverlayData(entries, currentPage.value);
 
     return Stack(
       children: [
@@ -176,6 +270,24 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
             child: builder(entries[index], index == currentPage.value),
           ),
         ),
+        if (showTopAction)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: FeedActionPill(
+              label: topActionLabel!,
+              onTap: onTopAction!,
+              dark: topActionDark,
+            ),
+          ),
+        FeedStatusOverlay(
+          title:
+              '$overlayLabel ${overlayData.position}/${overlayData.total}${overlayHasMore ? '+' : ''}',
+          subtitle: overlayData.subtitle,
+          dark: overlayDark,
+          topInset: showTopAction ? 50 : 0,
+        ),
         if (showCaughtUpBanner)
           Positioned(
             left: 0,
@@ -187,6 +299,48 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     );
   }
 
+  _FeedOverlayData _buildOverlayData(List<T> entries, int currentPage) {
+    final organicEntries = entries
+        .where((entry) => entry.organicEntry != null)
+        .toList(growable: false);
+    final total = organicEntries.length;
+    if (total == 0) {
+      return const _FeedOverlayData(
+        position: 0,
+        total: 0,
+        subtitle: 'no content',
+      );
+    }
+
+    final boundedPage = currentPage.clamp(0, entries.length - 1);
+    final currentOrganic = entries[boundedPage].organicEntry;
+    var organicPosition = 0;
+
+    for (var i = 0; i <= boundedPage; i += 1) {
+      if (entries[i].organicEntry != null) {
+        organicPosition += 1;
+      }
+    }
+
+    if (organicPosition <= 0) {
+      organicPosition = 1;
+    }
+
+    if (currentOrganic == null) {
+      return _FeedOverlayData(
+        position: organicPosition.clamp(1, total),
+        total: total,
+        subtitle: 'ad slot',
+      );
+    }
+
+    return _FeedOverlayData(
+      position: organicPosition.clamp(1, total),
+      total: total,
+      subtitle: '#${currentOrganic.id} · ${overlayHasMore ? 'more' : 'end'}',
+    );
+  }
+
   void _handlePageChange(
     int index,
     List<T> entries,
@@ -194,7 +348,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     bool hasVideos,
   ) {
     // Notify parent of page change for cache position tracking
-    onPageChanged?.call(index);
+    onPageChanged?.call(index, entries[index].organicEntry);
 
     // Video preloading logic
     if (hasVideos) {
@@ -205,6 +359,44 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     if (onLoadMore != null && index >= entries.length - 3) {
       Future.microtask(() => onLoadMore!());
     }
+  }
+
+  int? _resolveRestorePageIndex(
+    List<T> entries, {
+    required int? targetEntryId,
+    required int? fallbackOrganicIndex,
+  }) {
+    if (entries.isEmpty) return null;
+
+    if (targetEntryId != null) {
+      for (var pageIndex = 0; pageIndex < entries.length; pageIndex += 1) {
+        if (entries[pageIndex].organicEntry?.id == targetEntryId) {
+          return pageIndex;
+        }
+      }
+    }
+
+    if (fallbackOrganicIndex == null) {
+      return null;
+    }
+
+    var seenOrganic = 0;
+    for (var pageIndex = 0; pageIndex < entries.length; pageIndex += 1) {
+      if (entries[pageIndex].organicEntry == null) {
+        continue;
+      }
+      if (seenOrganic >= fallbackOrganicIndex) {
+        return pageIndex;
+      }
+      seenOrganic += 1;
+    }
+
+    for (var pageIndex = entries.length - 1; pageIndex >= 0; pageIndex -= 1) {
+      if (entries[pageIndex].organicEntry != null) {
+        return pageIndex;
+      }
+    }
+    return 0;
   }
 
   void _handleVideoPreloading(
@@ -253,4 +445,16 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     }
     return entry.link.trim();
   }
+}
+
+class _FeedOverlayData {
+  const _FeedOverlayData({
+    required this.position,
+    required this.total,
+    required this.subtitle,
+  });
+
+  final int position;
+  final int total;
+  final String subtitle;
 }

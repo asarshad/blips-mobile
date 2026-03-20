@@ -6,6 +6,7 @@ final class FakeFeedCache implements FeedCacheInterface {
   List<FeedEntry> _feed = const [];
   List<ReelFeedEntry> _reels = const [];
   DateTime? _feedLastSeenAt;
+  final Map<String, String> _meta = <String, String>{};
 
   @override
   Future<void> cacheFeed(List<FeedEntry> entries) async {
@@ -75,5 +76,18 @@ final class FakeFeedCache implements FeedCacheInterface {
   @override
   Future<List<ReelFeedEntry>> getCachedReels({int limit = 50}) async {
     return List<ReelFeedEntry>.from(_reels);
+  }
+
+  @override
+  Future<String?> getMeta(String key) async => _meta[key];
+
+  @override
+  Future<void> setMeta(String key, String value) async {
+    _meta[key] = value;
+  }
+
+  @override
+  Future<void> deleteMeta(String key) async {
+    _meta.remove(key);
   }
 }

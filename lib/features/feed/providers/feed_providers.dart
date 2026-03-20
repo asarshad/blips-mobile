@@ -9,9 +9,9 @@ import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/domain/feed_freshness.dart';
-import 'package:blips_mobile/features/feed/domain/feed_ordering.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Provides a singleton [FeedRepository].
@@ -25,12 +25,63 @@ final feedCacheProvider = Provider<FeedCacheInterface>((ref) {
   return FeedCache.instance;
 });
 
+/// Provides persisted continuity/session state helpers for feed surfaces.
+final feedSessionStoreProvider = Provider<FeedSessionStore>((ref) {
+  return FeedSessionStore(ref.watch(feedCacheProvider));
+});
+
+class FeedSurfaceUiState {
+  const FeedSurfaceUiState({
+    this.pendingNewCount = 0,
+    this.restoreItemId,
+    this.restoreApproximateIndex,
+  });
+
+  final int pendingNewCount;
+  final int? restoreItemId;
+  final int? restoreApproximateIndex;
+
+  bool get hasPendingNewItems => pendingNewCount > 0;
+
+  FeedSurfaceUiState copyWith({
+    int? pendingNewCount,
+    int? restoreItemId,
+    bool clearRestoreItemId = false,
+    int? restoreApproximateIndex,
+    bool clearRestoreApproximateIndex = false,
+  }) {
+    return FeedSurfaceUiState(
+      pendingNewCount: pendingNewCount ?? this.pendingNewCount,
+      restoreItemId:
+          clearRestoreItemId ? null : (restoreItemId ?? this.restoreItemId),
+      restoreApproximateIndex: clearRestoreApproximateIndex
+          ? null
+          : (restoreApproximateIndex ?? this.restoreApproximateIndex),
+    );
+  }
+}
+
+final feedSurfaceUiStateProvider =
+    StateProvider.family<FeedSurfaceUiState, FeedSurface>(
+  (ref, _) => const FeedSurfaceUiState(),
+);
+
 // ---------------------------------------------------------------------------
 // Shared feed-seen state
 // ---------------------------------------------------------------------------
 
 /// Shared "last seen" cutoff across articles and videos.
 final _feedLastSeenAtProvider = StateProvider<DateTime?>((ref) => null);
+
+List<int> _headBaselineIds<T extends FeedEntry>(List<T> entries, int limit) {
+  return entries.take(limit).map((entry) => entry.id).toList(growable: false);
+}
+
+int _countHeadNewItems(List<int> baselineIds, List<int> freshHeadIds) {
+  if (baselineIds.isEmpty) return 0;
+  final baseline = baselineIds.toSet();
+  return freshHeadIds.where((id) => !baseline.contains(id)).length;
+}
 
 // ---------------------------------------------------------------------------
 // ArticlesNotifier
@@ -44,15 +95,21 @@ final _feedLastSeenAtProvider = StateProvider<DateTime?>((ref) => null);
 /// 3. Seamlessly merge new data, preserving user's current position
 class ArticlesNotifier
     extends StateNotifier<AsyncValue<List<ArticleFeedEntry>>> {
-  ArticlesNotifier(this._repository, this._cache, this._ref)
-      : super(const AsyncValue.loading()) {
+  ArticlesNotifier(
+    this._repository,
+    this._cache,
+    this._sessionStore,
+    this._ref,
+  ) : super(const AsyncValue.loading()) {
     _loadInitial();
     _startPolling();
   }
 
   final FeedRepository _repository;
   final FeedCacheInterface _cache;
+  final FeedSessionStore _sessionStore;
   final Ref _ref;
+  final FeedSurface _surface = FeedSurface.articles;
   int _page = 1;
   bool _hasMore = true;
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
@@ -62,11 +119,38 @@ class ArticlesNotifier
   static const int _limit = 15;
   static const Duration _pollInterval = Duration(seconds: 90);
   Set<int> _newSinceLastSeenIds = <int>{};
+  List<int> _currentHeadBaselineIds = const <int>[];
 
-  int _currentViewIndex = 0;
+  int? _currentItemId;
+  bool _canContinueRemotely = true;
 
-  void setCurrentViewIndex(int index) {
-    _currentViewIndex = index;
+  FeedSurfaceUiState get _uiState =>
+      _ref.read(feedSurfaceUiStateProvider(_surface));
+
+  void _setUiState(FeedSurfaceUiState value) {
+    _ref.read(feedSurfaceUiStateProvider(_surface).notifier).state = value;
+  }
+
+  void setCurrentViewPosition(int index, ArticleFeedEntry? entry) {
+    _currentItemId = entry?.id;
+    unawaited(_persistActiveSession());
+  }
+
+  Future<void> markExposed(int contentId) async {
+    await _sessionStore.markExposed(_surface, contentId);
+  }
+
+  Future<void> markConsumed(int contentId) async {
+    await _sessionStore.markConsumed(_surface, contentId);
+  }
+
+  void consumeRestoreTarget() {
+    _setUiState(
+      _uiState.copyWith(
+        clearRestoreItemId: true,
+        clearRestoreApproximateIndex: true,
+      ),
+    );
   }
 
   bool isEntryNewSinceLastSeen(int entryId) {
@@ -83,11 +167,21 @@ class ArticlesNotifier
     if (!mounted) return;
     await _loadLastSeenCutoff();
 
+    final restore = await _sessionStore.prepareRestore(_surface);
+    if (restore.resumeSnapshot != null) {
+      _applyResumedSnapshot(restore.resumeSnapshot!);
+      _markFeedSeenNowInBackground();
+      unawaited(_refreshInBackground());
+      return;
+    }
+
     try {
       final cached = await _cache.getCachedArticles(limit: _limit);
       if (cached.isNotEmpty && mounted) {
         state = AsyncValue.data(cached);
         _updateNewSinceLastSeen(cached);
+        _currentItemId = cached.firstOrNull?.id;
+        _currentHeadBaselineIds = _headBaselineIds(cached, _limit);
         _page = 1;
         _hasMore = true;
         _inventoryState = FeedInventoryState.healthy;
@@ -98,7 +192,11 @@ class ArticlesNotifier
         );
 
         _markFeedSeenNowInBackground();
-        _refreshInBackground();
+        unawaited(
+          _fetchFreshSessionFromNetwork(
+            preserveVisibleState: true,
+          ),
+        );
         return;
       }
     } catch (e) {
@@ -108,30 +206,49 @@ class ArticlesNotifier
 
     logger.info('Articles cache MISS: fetching from network',
         category: LogCategory.app);
-    await _fetchFromNetwork();
+    await _fetchFreshSessionFromNetwork();
     _markFeedSeenNowInBackground();
   }
 
-  Future<void> _fetchFromNetwork() async {
+  Future<bool> _fetchFreshSessionFromNetwork({
+    RequestMode requestMode = RequestMode.normal,
+    bool preserveVisibleState = false,
+  }) async {
+    final previousState = state;
     try {
-      if (!mounted) return;
-      state = const AsyncValue.loading();
+      if (!mounted) return false;
+      if (!(preserveVisibleState && previousState.hasValue)) {
+        state = const AsyncValue.loading();
+      }
 
-      final page = await _repository.fetchArticlesPage(page: 1, size: _limit);
-      if (!mounted) return;
-      _page = 1;
-      _hasMore = page.hasMore;
-      _inventoryState = page.inventoryState;
+      final page = await _repository.fetchArticlesPage(
+        page: 1,
+        size: _limit,
+        requestMode: requestMode,
+      );
+      if (!mounted) return false;
       final articles =
           page.items.whereType<ArticleFeedEntry>().toList(growable: false);
-      state = AsyncValue.data(articles);
-      _updateNewSinceLastSeen(articles);
+      _applyFreshArticles(
+        articles,
+        hasMore: page.hasMore,
+        inventoryState: page.inventoryState,
+      );
       _cacheInBackground(articles);
+      await _persistActiveSession(
+        pendingNewCount: 0,
+      );
+      return true;
     } catch (e, st) {
-      if (!mounted) return;
+      if (!mounted) return false;
+      if (preserveVisibleState && previousState.hasValue) {
+        state = previousState;
+      } else {
+        state = AsyncValue.error(e, st);
+      }
       logger.warning('Failed to load articles',
           category: LogCategory.network, error: e, stackTrace: st);
-      state = AsyncValue.error(e, st);
+      return false;
     }
   }
 
@@ -140,32 +257,26 @@ class ArticlesNotifier
     _isRefreshing = true;
 
     try {
-      final freshPage =
-          await _repository.fetchArticlesPage(page: 1, size: _limit);
+      final freshPage = await _repository.previewArticlesHead(size: _limit);
       final freshItems =
           freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
-      _hasMore = freshPage.hasMore;
-      _inventoryState = freshPage.inventoryState;
-      if (!mounted || freshItems.isEmpty) return;
-
-      _cacheInBackground(freshItems);
-
-      final currentList = state.valueOrNull;
-      if (currentList == null || currentList.isEmpty) {
-        _page = 1;
-        state = AsyncValue.data(freshItems);
-        _updateNewSinceLastSeen(freshItems);
-        return;
+      if (!mounted) return;
+      if (freshItems.isNotEmpty) {
+        _cacheInBackground(freshItems);
       }
 
-      final merged = mergeFeedWithStableOrdering(
-        currentItems: currentList,
-        freshItems: freshItems,
-        prependNewItems: _currentViewIndex <= 1,
-      ).whereType<ArticleFeedEntry>().toList(growable: false);
-
-      state = AsyncValue.data(merged);
-      _updateNewSinceLastSeen(merged);
+      final freshHeadIds = _headBaselineIds(freshItems, _limit);
+      final baseline = _currentHeadBaselineIds;
+      final pendingNewCount =
+          freshHeadIds.isEmpty ? 0 : _countHeadNewItems(baseline, freshHeadIds);
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: pendingNewCount,
+        ),
+      );
+      await _persistActiveSession(
+        pendingNewCount: pendingNewCount,
+      );
     } catch (e, st) {
       logger.warning('Background articles refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
@@ -183,8 +294,9 @@ class ArticlesNotifier
 
     _isLoadingMore = true;
     try {
-      final nextPage =
-          await _repository.fetchArticlesPage(page: _page + 1, size: _limit);
+      final nextPage = _canContinueRemotely
+          ? await _repository.fetchArticlesPage(page: _page + 1, size: _limit)
+          : await _startFreshContinuationAfterExpiry(currentList);
       final nextItems =
           nextPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
 
@@ -199,6 +311,7 @@ class ArticlesNotifier
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
         _cacheInBackground(nextItems);
+        await _persistActiveSession();
       }
     } catch (e, st) {
       logger.warning('Failed to load more articles',
@@ -212,23 +325,18 @@ class ArticlesNotifier
   /// returns false on failure or timeout (no state mutation).
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository.fetchArticlesPage(
-        page: 1,
-        size: _limit,
-        requestMode: RequestMode.manualRefresh,
+      _currentItemId = null;
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: 0,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+        ),
       );
-
-      if (!mounted) return false;
-      final articles =
-          page.items.whereType<ArticleFeedEntry>().toList(growable: false);
-      _page = 1;
-      _hasMore = page.hasMore;
-      _inventoryState = page.inventoryState;
-      _currentViewIndex = 0;
-      state = AsyncValue.data(articles);
-      _updateNewSinceLastSeen(articles);
-      _cacheInBackground(articles);
-      return true;
+      return await _fetchFreshSessionFromNetwork(
+        requestMode: RequestMode.manualRefresh,
+        preserveVisibleState: true,
+      );
     } catch (e, st) {
       logger.warning('Manual articles refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
@@ -292,6 +400,124 @@ class ArticlesNotifier
     });
   }
 
+  void _applyResumedSnapshot(FeedSessionSnapshot snapshot) {
+    final articles =
+        snapshot.items.whereType<ArticleFeedEntry>().toList(growable: false);
+    _page = ((articles.length - 1) ~/ _limit) + 1;
+    _hasMore = snapshot.hasMore;
+    _inventoryState = snapshot.inventoryState;
+    _currentHeadBaselineIds = snapshot.headBaselineIds.isNotEmpty
+        ? snapshot.headBaselineIds
+        : _headBaselineIds(articles, _limit);
+    _currentItemId = snapshot.currentItemId ?? articles.firstOrNull?.id;
+    _canContinueRemotely =
+        _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
+    if (_canContinueRemotely) {
+      _repository.restoreArticleSession(
+        sessionId: snapshot.sessionId,
+        cursor: int.tryParse(snapshot.continuationCursor ?? ''),
+      );
+    } else {
+      _repository.restoreArticleSession(sessionId: null, cursor: null);
+    }
+    state = AsyncValue.data(articles);
+    _updateNewSinceLastSeen(articles);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: snapshot.pendingNewCount,
+        restoreItemId: snapshot.currentItemId,
+        restoreApproximateIndex:
+            _restoreApproximateIndex(snapshot.currentItemId, articles),
+      ),
+    );
+  }
+
+  void _applyFreshArticles(
+    List<ArticleFeedEntry> articles, {
+    required bool hasMore,
+    required FeedInventoryState inventoryState,
+  }) {
+    _page = 1;
+    _hasMore = hasMore;
+    _inventoryState = inventoryState;
+    _currentItemId = articles.firstOrNull?.id;
+    _currentHeadBaselineIds = _headBaselineIds(articles, _limit);
+    _canContinueRemotely = true;
+    state = AsyncValue.data(articles);
+    _updateNewSinceLastSeen(articles);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+      ),
+    );
+  }
+
+  int _restoreApproximateIndex(
+    int? itemId,
+    List<ArticleFeedEntry> entries,
+  ) {
+    if (entries.isEmpty) return 0;
+    if (itemId == null) return 0;
+    final index = entries.indexWhere((entry) => entry.id == itemId);
+    return index < 0 ? 0 : index;
+  }
+
+  Future<FeedPageResult<FeedEntry>> _startFreshContinuationAfterExpiry(
+    List<ArticleFeedEntry> currentList,
+  ) async {
+    final existingIds = currentList.map((entry) => entry.id).toSet();
+    var result = await _repository.fetchArticlesPage(page: 1, size: _limit);
+    var collected = result.items.whereType<ArticleFeedEntry>().where((entry) {
+      return !existingIds.contains(entry.id);
+    }).toList(growable: true);
+
+    var pageCount = 1;
+    while (collected.isEmpty && result.hasMore && pageCount < 3) {
+      pageCount += 1;
+      result =
+          await _repository.fetchArticlesPage(page: pageCount, size: _limit);
+      collected.addAll(
+        result.items
+            .whereType<ArticleFeedEntry>()
+            .where((entry) => !existingIds.contains(entry.id)),
+      );
+    }
+
+    _canContinueRemotely = true;
+    _page = pageCount;
+    return FeedPageResult<FeedEntry>(
+      items: collected,
+      hasMore: result.hasMore,
+      inventoryState: result.inventoryState,
+      sessionId: result.sessionId,
+    );
+  }
+
+  Future<void> _persistActiveSession({int? pendingNewCount}) async {
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty) return;
+    final currentItemId = _currentItemId ?? items.first.id;
+    final baseline = _currentHeadBaselineIds.isNotEmpty
+        ? _currentHeadBaselineIds
+        : _headBaselineIds(items, _limit);
+    _currentHeadBaselineIds = baseline;
+    await _sessionStore.saveActiveSession(
+      FeedSessionSnapshot(
+        surface: _surface,
+        items: items,
+        currentItemId: currentItemId,
+        lastActiveAt: DateTime.now().toUtc(),
+        headBaselineIds: baseline,
+        sessionId: _canContinueRemotely ? _repository.articleSessionId : null,
+        continuationCursor:
+            _canContinueRemotely ? _repository.articleCursor?.toString() : null,
+        hasMore: _hasMore,
+        inventoryState: _inventoryState,
+        pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -305,8 +531,12 @@ class ArticlesNotifier
 
 /// Manages the paginated state of the videos feed.
 class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
-  VideosNotifier(this._repository, this._cache, this._ref)
-      : super(const AsyncValue.loading()) {
+  VideosNotifier(
+    this._repository,
+    this._cache,
+    this._sessionStore,
+    this._ref,
+  ) : super(const AsyncValue.loading()) {
     _loadInitial();
     // Stagger: videos start polling after a 45-second initial delay.
     _startPollingWithDelay(const Duration(seconds: 45));
@@ -314,7 +544,9 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   final FeedRepository _repository;
   final FeedCacheInterface _cache;
+  final FeedSessionStore _sessionStore;
   final Ref _ref;
+  final FeedSurface _surface = FeedSurface.videos;
   int _page = 1;
   bool _hasMore = true;
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
@@ -325,11 +557,38 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   static const int _limit = 10;
   static const Duration _pollInterval = Duration(seconds: 90);
   Set<int> _newSinceLastSeenIds = <int>{};
+  List<int> _currentHeadBaselineIds = const <int>[];
 
-  int _currentViewIndex = 0;
+  int? _currentItemId;
+  bool _canContinueRemotely = true;
 
-  void setCurrentViewIndex(int index) {
-    _currentViewIndex = index;
+  FeedSurfaceUiState get _uiState =>
+      _ref.read(feedSurfaceUiStateProvider(_surface));
+
+  void _setUiState(FeedSurfaceUiState value) {
+    _ref.read(feedSurfaceUiStateProvider(_surface).notifier).state = value;
+  }
+
+  void setCurrentViewPosition(int index, VideoFeedEntry? entry) {
+    _currentItemId = entry?.id;
+    unawaited(_persistActiveSession());
+  }
+
+  Future<void> markExposed(int contentId) async {
+    await _sessionStore.markExposed(_surface, contentId);
+  }
+
+  Future<void> markConsumed(int contentId) async {
+    await _sessionStore.markConsumed(_surface, contentId);
+  }
+
+  void consumeRestoreTarget() {
+    _setUiState(
+      _uiState.copyWith(
+        clearRestoreItemId: true,
+        clearRestoreApproximateIndex: true,
+      ),
+    );
   }
 
   bool isEntryNewSinceLastSeen(int entryId) {
@@ -346,11 +605,20 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     if (!mounted) return;
     await _loadLastSeenCutoff();
 
+    final restore = await _sessionStore.prepareRestore(_surface);
+    if (restore.resumeSnapshot != null) {
+      _applyResumedSnapshot(restore.resumeSnapshot!);
+      unawaited(_refreshInBackground());
+      return;
+    }
+
     try {
       final cached = await _cache.getCachedVideos(limit: _limit);
       if (cached.isNotEmpty && mounted) {
         state = AsyncValue.data(cached);
         _updateNewSinceLastSeen(cached);
+        _currentItemId = cached.isEmpty ? null : cached.first.id;
+        _currentHeadBaselineIds = _headBaselineIds(cached, _limit);
         _page = 1;
         _hasMore = true;
         _inventoryState = FeedInventoryState.healthy;
@@ -360,7 +628,11 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           category: LogCategory.app,
         );
 
-        _refreshInBackground();
+        unawaited(
+          _fetchFreshSessionFromNetwork(
+            preserveVisibleState: true,
+          ),
+        );
         return;
       }
     } catch (e) {
@@ -370,29 +642,48 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
     logger.info('Videos cache MISS: fetching from network',
         category: LogCategory.app);
-    await _fetchFromNetwork();
+    await _fetchFreshSessionFromNetwork();
   }
 
-  Future<void> _fetchFromNetwork() async {
+  Future<bool> _fetchFreshSessionFromNetwork({
+    RequestMode requestMode = RequestMode.normal,
+    bool preserveVisibleState = false,
+  }) async {
+    final previousState = state;
     try {
-      if (!mounted) return;
-      state = const AsyncValue.loading();
+      if (!mounted) return false;
+      if (!(preserveVisibleState && previousState.hasValue)) {
+        state = const AsyncValue.loading();
+      }
 
-      final page = await _repository.fetchVideosPage(page: 1, size: _limit);
-      if (!mounted) return;
-      _page = 1;
-      _hasMore = page.hasMore;
-      _inventoryState = page.inventoryState;
+      final page = await _repository.fetchVideosPage(
+        page: 1,
+        size: _limit,
+        requestMode: requestMode,
+      );
+      if (!mounted) return false;
       final videos =
           page.items.whereType<VideoFeedEntry>().toList(growable: false);
-      state = AsyncValue.data(videos);
-      _updateNewSinceLastSeen(videos);
+      _applyFreshVideos(
+        videos,
+        hasMore: page.hasMore,
+        inventoryState: page.inventoryState,
+      );
       _replaceCacheSnapshotInBackground(videos);
+      await _persistActiveSession(
+        pendingNewCount: 0,
+      );
+      return true;
     } catch (e, st) {
-      if (!mounted) return;
+      if (!mounted) return false;
+      if (preserveVisibleState && previousState.hasValue) {
+        state = previousState;
+      } else {
+        state = AsyncValue.error(e, st);
+      }
       logger.warning('Failed to load videos',
           category: LogCategory.network, error: e, stackTrace: st);
-      state = AsyncValue.error(e, st);
+      return false;
     }
   }
 
@@ -401,48 +692,27 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _isRefreshing = true;
 
     try {
-      final freshPage =
-          await _repository.fetchVideosPage(page: 1, size: _limit);
+      final freshPage = await _repository.previewVideosHead(size: _limit);
       final freshItems =
           freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
-      _hasMore = freshPage.hasMore;
-      _inventoryState = freshPage.inventoryState;
       if (!mounted) return;
 
-      _replaceCacheSnapshotInBackground(freshItems);
-
-      final currentList = state.valueOrNull;
-      final hasOnlyPageOne =
-          currentList == null || currentList.length <= _limit;
-      if (freshItems.isEmpty) {
-        if (hasOnlyPageOne) {
-          _page = 1;
-          state = const AsyncValue.data(<VideoFeedEntry>[]);
-          _updateNewSinceLastSeen(const <VideoFeedEntry>[]);
-        }
-        return;
-      }
-      if (currentList == null || currentList.isEmpty) {
-        _page = 1;
-        state = AsyncValue.data(freshItems);
-        _updateNewSinceLastSeen(freshItems);
-        return;
-      }
-      if (hasOnlyPageOne) {
-        _page = 1;
-        state = AsyncValue.data(freshItems);
-        _updateNewSinceLastSeen(freshItems);
-        return;
+      if (freshItems.isNotEmpty) {
+        _replaceCacheSnapshotInBackground(freshItems);
       }
 
-      final merged = mergeFeedWithStableOrdering(
-        currentItems: currentList,
-        freshItems: freshItems,
-        prependNewItems: _currentViewIndex <= 1,
-      ).whereType<VideoFeedEntry>().toList(growable: false);
-
-      state = AsyncValue.data(merged);
-      _updateNewSinceLastSeen(merged);
+      final freshHeadIds = _headBaselineIds(freshItems, _limit);
+      final pendingNewCount = freshHeadIds.isEmpty
+          ? 0
+          : _countHeadNewItems(_currentHeadBaselineIds, freshHeadIds);
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: pendingNewCount,
+        ),
+      );
+      await _persistActiveSession(
+        pendingNewCount: pendingNewCount,
+      );
     } catch (e, st) {
       logger.warning('Background videos refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
@@ -460,8 +730,9 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
     _isLoadingMore = true;
     try {
-      final nextPage =
-          await _repository.fetchVideosPage(page: _page + 1, size: _limit);
+      final nextPage = _canContinueRemotely
+          ? await _repository.fetchVideosPage(page: _page + 1, size: _limit)
+          : await _startFreshContinuationAfterExpiry(currentList);
       final nextItems =
           nextPage.items.whereType<VideoFeedEntry>().toList(growable: false);
 
@@ -476,6 +747,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
         _cacheInBackground(nextItems);
+        await _persistActiveSession();
       }
     } catch (e, st) {
       logger.warning('Failed to load more videos',
@@ -489,23 +761,18 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   /// returns false on failure or timeout (no state mutation).
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository.fetchVideosPage(
-        page: 1,
-        size: _limit,
-        requestMode: RequestMode.manualRefresh,
+      _currentItemId = null;
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: 0,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+        ),
       );
-
-      if (!mounted) return false;
-      final videos =
-          page.items.whereType<VideoFeedEntry>().toList(growable: false);
-      _page = 1;
-      _hasMore = page.hasMore;
-      _inventoryState = page.inventoryState;
-      _currentViewIndex = 0;
-      state = AsyncValue.data(videos);
-      _updateNewSinceLastSeen(videos);
-      _replaceCacheSnapshotInBackground(videos);
-      return true;
+      return await _fetchFreshSessionFromNetwork(
+        requestMode: RequestMode.manualRefresh,
+        preserveVisibleState: true,
+      );
     } catch (e, st) {
       logger.warning('Manual videos refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
@@ -575,6 +842,124 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     );
   }
 
+  void _applyResumedSnapshot(FeedSessionSnapshot snapshot) {
+    final videos =
+        snapshot.items.whereType<VideoFeedEntry>().toList(growable: false);
+    _page = ((videos.length - 1) ~/ _limit) + 1;
+    _hasMore = snapshot.hasMore;
+    _inventoryState = snapshot.inventoryState;
+    _currentHeadBaselineIds = snapshot.headBaselineIds.isNotEmpty
+        ? snapshot.headBaselineIds
+        : _headBaselineIds(videos, _limit);
+    _currentItemId =
+        snapshot.currentItemId ?? (videos.isEmpty ? null : videos.first.id);
+    _canContinueRemotely =
+        _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
+    if (_canContinueRemotely) {
+      _repository.restoreVideoSession(
+        sessionId: snapshot.sessionId,
+        cursor: int.tryParse(snapshot.continuationCursor ?? ''),
+      );
+    } else {
+      _repository.restoreVideoSession(sessionId: null, cursor: null);
+    }
+    state = AsyncValue.data(videos);
+    _updateNewSinceLastSeen(videos);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: snapshot.pendingNewCount,
+        restoreItemId: snapshot.currentItemId,
+        restoreApproximateIndex:
+            _restoreApproximateIndex(snapshot.currentItemId, videos),
+      ),
+    );
+  }
+
+  void _applyFreshVideos(
+    List<VideoFeedEntry> videos, {
+    required bool hasMore,
+    required FeedInventoryState inventoryState,
+  }) {
+    _page = 1;
+    _hasMore = hasMore;
+    _inventoryState = inventoryState;
+    _currentItemId = videos.isEmpty ? null : videos.first.id;
+    _currentHeadBaselineIds = _headBaselineIds(videos, _limit);
+    _canContinueRemotely = true;
+    state = AsyncValue.data(videos);
+    _updateNewSinceLastSeen(videos);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+      ),
+    );
+  }
+
+  int _restoreApproximateIndex(
+    int? itemId,
+    List<VideoFeedEntry> entries,
+  ) {
+    if (entries.isEmpty) return 0;
+    if (itemId == null) return 0;
+    final index = entries.indexWhere((entry) => entry.id == itemId);
+    return index < 0 ? 0 : index;
+  }
+
+  Future<FeedPageResult<FeedEntry>> _startFreshContinuationAfterExpiry(
+    List<VideoFeedEntry> currentList,
+  ) async {
+    final existingIds = currentList.map((entry) => entry.id).toSet();
+    var result = await _repository.fetchVideosPage(page: 1, size: _limit);
+    var collected = result.items.whereType<VideoFeedEntry>().where((entry) {
+      return !existingIds.contains(entry.id);
+    }).toList(growable: true);
+
+    var pageCount = 1;
+    while (collected.isEmpty && result.hasMore && pageCount < 3) {
+      pageCount += 1;
+      result = await _repository.fetchVideosPage(page: pageCount, size: _limit);
+      collected.addAll(
+        result.items
+            .whereType<VideoFeedEntry>()
+            .where((entry) => !existingIds.contains(entry.id)),
+      );
+    }
+
+    _canContinueRemotely = true;
+    _page = pageCount;
+    return FeedPageResult<FeedEntry>(
+      items: collected,
+      hasMore: result.hasMore,
+      inventoryState: result.inventoryState,
+      sessionId: result.sessionId,
+    );
+  }
+
+  Future<void> _persistActiveSession({int? pendingNewCount}) async {
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty) return;
+    final currentItemId = _currentItemId ?? items.first.id;
+    final baseline = _currentHeadBaselineIds.isNotEmpty
+        ? _currentHeadBaselineIds
+        : _headBaselineIds(items, _limit);
+    _currentHeadBaselineIds = baseline;
+    await _sessionStore.saveActiveSession(
+      FeedSessionSnapshot(
+        surface: _surface,
+        items: items,
+        currentItemId: currentItemId,
+        lastActiveAt: DateTime.now().toUtc(),
+        headBaselineIds: baseline,
+        sessionId: _canContinueRemotely ? _repository.videoSessionId : null,
+        continuationCursor:
+            _canContinueRemotely ? _repository.videoCursor?.toString() : null,
+        hasMore: _hasMore,
+        inventoryState: _inventoryState,
+        pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _initialDelayTimer?.cancel();
@@ -593,6 +978,7 @@ final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
   (ref) => ArticlesNotifier(
     ref.watch(feedRepositoryProvider),
     ref.watch(feedCacheProvider),
+    ref.watch(feedSessionStoreProvider),
     ref,
   ),
 );
@@ -603,6 +989,7 @@ final videosFeedProvider = StateNotifierProvider.autoDispose<VideosNotifier,
   (ref) => VideosNotifier(
     ref.watch(feedRepositoryProvider),
     ref.watch(feedCacheProvider),
+    ref.watch(feedSessionStoreProvider),
     ref,
   ),
 );
@@ -659,14 +1046,21 @@ final videoFeedWithAdsProvider =
 ///
 /// Implements stale-while-revalidate similar to FeedNotifier.
 class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
-  ReelsNotifier(this._repository, this._cache)
-      : super(const AsyncValue.loading()) {
+  ReelsNotifier(
+    this._repository,
+    this._cache,
+    this._sessionStore,
+    this._ref,
+  ) : super(const AsyncValue.loading()) {
     loadInitial();
     _startPolling();
   }
 
   final FeedRepository _repository;
   final FeedCacheInterface _cache;
+  final FeedSessionStore _sessionStore;
+  final Ref _ref;
+  final FeedSurface _surface = FeedSurface.reels;
   bool _hasMore = true;
   String? _nextCursor;
   FeedInventoryState _inventoryState = FeedInventoryState.warmingUp;
@@ -675,6 +1069,37 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   Timer? _pollTimer;
   static const int _limit = 20;
   static const Duration _pollInterval = Duration(seconds: 60);
+  List<int> _currentHeadBaselineIds = const <int>[];
+  int? _currentItemId;
+
+  FeedSurfaceUiState get _uiState =>
+      _ref.read(feedSurfaceUiStateProvider(_surface));
+
+  void _setUiState(FeedSurfaceUiState value) {
+    _ref.read(feedSurfaceUiStateProvider(_surface).notifier).state = value;
+  }
+
+  void setCurrentViewPosition(int index, ReelFeedEntry? entry) {
+    _currentItemId = entry?.id;
+    unawaited(_persistActiveSession());
+  }
+
+  Future<void> markExposed(int contentId) async {
+    await _sessionStore.markExposed(_surface, contentId);
+  }
+
+  Future<void> markConsumed(int contentId) async {
+    await _sessionStore.markConsumed(_surface, contentId);
+  }
+
+  void consumeRestoreTarget() {
+    _setUiState(
+      _uiState.copyWith(
+        clearRestoreItemId: true,
+        clearRestoreApproximateIndex: true,
+      ),
+    );
+  }
 
   bool get hasMore => _hasMore;
 
@@ -685,6 +1110,13 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   Future<void> loadInitial() async {
     if (!mounted) return;
 
+    final restore = await _sessionStore.prepareRestore(_surface);
+    if (restore.resumeSnapshot != null) {
+      _applyResumedSnapshot(restore.resumeSnapshot!);
+      unawaited(_refreshInBackground());
+      return;
+    }
+
     // Try to show cached data first
     try {
       final cached = await _cache.getCachedReels(limit: _limit);
@@ -694,13 +1126,19 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         _hasMore = true;
         _nextCursor = null;
         _inventoryState = FeedInventoryState.healthy;
+        _currentItemId = cached.isEmpty ? null : cached.first.id;
+        _currentHeadBaselineIds = _headBaselineIds(cached, _limit);
 
         logger.info(
           'Reels cache HIT: ${cached.length} items served from cache',
           category: LogCategory.app,
         );
 
-        _refreshInBackground();
+        unawaited(
+          _fetchFreshSessionFromNetwork(
+            preserveVisibleState: true,
+          ),
+        );
         return;
       }
     } catch (e) {
@@ -716,30 +1154,49 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       category: LogCategory.app,
     );
 
-    await _fetchFromNetwork();
+    await _fetchFreshSessionFromNetwork();
   }
 
-  Future<void> _fetchFromNetwork() async {
+  Future<bool> _fetchFreshSessionFromNetwork({
+    RequestMode requestMode = RequestMode.normal,
+    bool preserveVisibleState = false,
+  }) async {
+    final previousState = state;
     try {
-      if (!mounted) return;
-      state = const AsyncValue.loading();
-      final page = await _repository.fetchReelsPage(limit: _limit);
-      if (!mounted) return;
-      _hasMore = page.hasMore;
-      _nextCursor = page.nextCursor;
-      _inventoryState = page.inventoryState;
-      state = AsyncValue.data(page.items);
-
+      if (!mounted) return false;
+      if (!(preserveVisibleState && previousState.hasValue)) {
+        state = const AsyncValue.loading();
+      }
+      final page = await _repository.fetchReelsPage(
+        limit: _limit,
+        requestMode: requestMode,
+      );
+      if (!mounted) return false;
+      _applyFreshReels(
+        page.items,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+        inventoryState: page.inventoryState,
+      );
       _replaceCacheSnapshotInBackground(page.items);
+      await _persistActiveSession(
+        pendingNewCount: 0,
+      );
+      return true;
     } catch (e, st) {
-      if (!mounted) return;
+      if (!mounted) return false;
+      if (preserveVisibleState && previousState.hasValue) {
+        state = previousState;
+      } else {
+        state = AsyncValue.error(e, st);
+      }
       logger.warning(
         'Failed to load reels',
         category: LogCategory.network,
         error: e,
         stackTrace: st,
       );
-      state = AsyncValue.error(e, st);
+      return false;
     }
   }
 
@@ -748,38 +1205,24 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _isRefreshing = true;
 
     try {
-      final freshPage = await _repository.fetchReelsPage(limit: _limit);
+      final freshPage = await _repository.previewReelsHead(limit: _limit);
       final freshReels = freshPage.items;
-      _inventoryState = freshPage.inventoryState;
       if (!mounted) return;
-      _replaceCacheSnapshotInBackground(freshReels);
-      if (freshReels.isEmpty) {
-        return;
+      if (freshReels.isNotEmpty) {
+        _replaceCacheSnapshotInBackground(freshReels);
       }
-
-      final currentList = state.valueOrNull;
-      final preservePagination =
-          currentList != null && currentList.length > _limit;
-      if (!preservePagination) {
-        _hasMore = freshPage.hasMore;
-        _nextCursor = freshPage.nextCursor;
-      }
-      if (currentList == null || currentList.isEmpty) {
-        state = AsyncValue.data(freshReels);
-        return;
-      }
-
-      final merged = mergeFeedWithStableOrdering(
-        currentItems: currentList,
-        freshItems: freshReels,
-        // Reels is a full-screen, position-sensitive surface.
-        // Silent refresh must never prepend page-1 newcomers into a live
-        // session because that can shift the visible reel away from the
-        // numeric page index the player manager is using.
-        prependNewItems: false,
-      ).whereType<ReelFeedEntry>().toList(growable: false);
-
-      state = AsyncValue.data(merged);
+      final freshHeadIds = _headBaselineIds(freshReels, _limit);
+      final pendingNewCount = freshHeadIds.isEmpty
+          ? 0
+          : _countHeadNewItems(_currentHeadBaselineIds, freshHeadIds);
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: pendingNewCount,
+        ),
+      );
+      await _persistActiveSession(
+        pendingNewCount: pendingNewCount,
+      );
     } catch (e, st) {
       logger.warning(
         'Background reels refresh failed',
@@ -846,6 +1289,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         state = AsyncValue.data([...latestList, ...uniqueNextReels]);
 
         _cacheInBackground(nextReels);
+        await _persistActiveSession();
       }
     } catch (e, st) {
       logger.warning(
@@ -863,18 +1307,18 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   /// returns false on failure or timeout.
   Future<bool> manualRefresh() async {
     try {
-      final page = await _repository.fetchReelsPage(
-        limit: _limit,
-        requestMode: RequestMode.manualRefresh,
+      _currentItemId = null;
+      _setUiState(
+        _uiState.copyWith(
+          pendingNewCount: 0,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+        ),
       );
-
-      if (!mounted) return false;
-      _hasMore = page.hasMore;
-      _nextCursor = page.nextCursor;
-      _inventoryState = page.inventoryState;
-      state = AsyncValue.data(page.items);
-      _replaceCacheSnapshotInBackground(page.items);
-      return true;
+      return await _fetchFreshSessionFromNetwork(
+        requestMode: RequestMode.manualRefresh,
+        preserveVisibleState: true,
+      );
     } catch (e, st) {
       logger.warning('Manual reels refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
@@ -895,6 +1339,81 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     });
   }
 
+  void _applyResumedSnapshot(FeedSessionSnapshot snapshot) {
+    final reels =
+        snapshot.items.whereType<ReelFeedEntry>().toList(growable: false);
+    _hasMore = snapshot.hasMore;
+    _nextCursor = snapshot.continuationCursor;
+    _inventoryState = snapshot.inventoryState;
+    _currentHeadBaselineIds = snapshot.headBaselineIds.isNotEmpty
+        ? snapshot.headBaselineIds
+        : _headBaselineIds(reels, _limit);
+    _currentItemId =
+        snapshot.currentItemId ?? (reels.isEmpty ? null : reels.first.id);
+    _repository.restoreReelsCursor(snapshot.continuationCursor);
+    state = AsyncValue.data(reels);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: snapshot.pendingNewCount,
+        restoreItemId: snapshot.currentItemId,
+        restoreApproximateIndex:
+            _restoreApproximateIndex(snapshot.currentItemId, reels),
+      ),
+    );
+  }
+
+  void _applyFreshReels(
+    List<ReelFeedEntry> reels, {
+    required bool hasMore,
+    required String? nextCursor,
+    required FeedInventoryState inventoryState,
+  }) {
+    _hasMore = hasMore;
+    _nextCursor = nextCursor;
+    _inventoryState = inventoryState;
+    _currentItemId = reels.isEmpty ? null : reels.first.id;
+    _currentHeadBaselineIds = _headBaselineIds(reels, _limit);
+    state = AsyncValue.data(reels);
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+      ),
+    );
+  }
+
+  int _restoreApproximateIndex(
+    int? itemId,
+    List<ReelFeedEntry> entries,
+  ) {
+    if (entries.isEmpty) return 0;
+    if (itemId == null) return 0;
+    final index = entries.indexWhere((entry) => entry.id == itemId);
+    return index < 0 ? 0 : index;
+  }
+
+  Future<void> _persistActiveSession({int? pendingNewCount}) async {
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty) return;
+    final currentItemId = _currentItemId ?? items.first.id;
+    final baseline = _currentHeadBaselineIds.isNotEmpty
+        ? _currentHeadBaselineIds
+        : _headBaselineIds(items, _limit);
+    _currentHeadBaselineIds = baseline;
+    await _sessionStore.saveActiveSession(
+      FeedSessionSnapshot(
+        surface: _surface,
+        items: items,
+        currentItemId: currentItemId,
+        lastActiveAt: DateTime.now().toUtc(),
+        headBaselineIds: baseline,
+        continuationCursor: _nextCursor,
+        hasMore: _hasMore,
+        inventoryState: _inventoryState,
+        pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -908,5 +1427,7 @@ final reelsFeedProvider = StateNotifierProvider.autoDispose<ReelsNotifier,
   (ref) => ReelsNotifier(
     ref.watch(feedRepositoryProvider),
     ref.watch(feedCacheProvider),
+    ref.watch(feedSessionStoreProvider),
+    ref,
   ),
 );

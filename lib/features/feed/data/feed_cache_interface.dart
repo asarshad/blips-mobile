@@ -32,4 +32,13 @@ abstract interface class FeedCacheInterface {
 
   /// Replaces the persisted page-1 reels snapshot.
   Future<void> replaceReelsSnapshot(List<ReelFeedEntry> reels);
+
+  /// Generic metadata key/value storage for feed UX state.
+  Future<String?> getMeta(String key);
+
+  /// Upsert a metadata value.
+  Future<void> setMeta(String key, String value);
+
+  /// Delete a metadata value.
+  Future<void> deleteMeta(String key);
 }

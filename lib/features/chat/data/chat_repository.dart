@@ -167,10 +167,32 @@ class ChatRepository {
     // 3. Call API
     try {
       final isVideo = articleId < 0;
+      final contentItemId = isVideo ? -articleId : articleId;
+
+      try {
+        await _dio.post<void>(
+          '/session/interactions',
+          data: {
+            'content_item_id': contentItemId,
+            'event_type': 'CHAT_MESSAGE',
+            'extra_data': {
+              'surface': isVideo ? 'videos' : 'articles',
+            },
+          },
+        );
+      } catch (e, stack) {
+        logger.warning(
+          'Failed to record chat message interaction',
+          category: LogCategory.network,
+          error: e,
+          stackTrace: stack,
+        );
+      }
+
       final payload = <String, dynamic>{
         'message': message,
         'sender': 'user',
-        'content_item_id': isVideo ? -articleId : articleId,
+        'content_item_id': contentItemId,
         'history': previousHistory
             .map((m) => {
                   'role': m.role,

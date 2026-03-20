@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
@@ -44,6 +45,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final currentIndex = useState(0);
     final lastCaughtUpEntryId = useRef<int?>(null);
     final reelsNotifier = ref.read(reelsFeedProvider.notifier);
+    final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.reels));
 
     _useInitialPreload(reelsFeed, videoManager, isVisible);
     _useVisibilityHandler(reelsFeed, videoManager, isVisible, currentIndex);
@@ -54,6 +56,20 @@ class OptimizedReelsPage extends HookConsumerWidget {
       currentIndex: currentIndex,
       isCaughtUp: reelsNotifier.isCaughtUp,
       lastCaughtUpEntryId: lastCaughtUpEntryId,
+    );
+    _useRestorePosition(
+      reelsFeed: reelsFeed,
+      controller: effectiveController,
+      currentIndex: currentIndex,
+      restoreEntryId: uiState.restoreItemId,
+      restoreApproximateIndex: uiState.restoreApproximateIndex,
+      onRestoreApplied: reelsNotifier.consumeRestoreTarget,
+    );
+    _useExposureTracking(
+      reelsFeed: reelsFeed,
+      currentIndex: currentIndex,
+      isVisible: isVisible,
+      onExposed: reelsNotifier.markExposed,
     );
 
     final isMounted = useIsMounted();
@@ -67,7 +83,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
           videoManager: videoManager,
           currentIndex: currentIndex,
           isMounted: isMounted,
+          hasMore: reelsNotifier.hasMore,
           isCaughtUp: reelsNotifier.isCaughtUp,
+          uiState: uiState,
           ref: ref,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -253,13 +271,69 @@ class OptimizedReelsPage extends HookConsumerWidget {
     }, [reelsFeed.valueOrNull, currentIndex.value, isCaughtUp]);
   }
 
+  void _useRestorePosition({
+    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required PageController controller,
+    required ValueNotifier<int> currentIndex,
+    required int? restoreEntryId,
+    required int? restoreApproximateIndex,
+    required VoidCallback onRestoreApplied,
+  }) {
+    useEffect(() {
+      final entries = reelsFeed.valueOrNull;
+      if (entries == null || entries.isEmpty) return null;
+      if (restoreEntryId == null && restoreApproximateIndex == null) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!controller.hasClients) return;
+
+        final exactIndex = restoreEntryId == null
+            ? -1
+            : entries.indexWhere((entry) => entry.id == restoreEntryId);
+        final targetIndex = exactIndex >= 0
+            ? exactIndex
+            : (restoreApproximateIndex == null
+                ? 0
+                : restoreApproximateIndex.clamp(0, entries.length - 1));
+        controller.jumpToPage(targetIndex);
+        currentIndex.value = targetIndex;
+        onRestoreApplied();
+      });
+      return null;
+    }, [reelsFeed.valueOrNull, restoreEntryId, restoreApproximateIndex]);
+  }
+
+  void _useExposureTracking({
+    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required ValueNotifier<int> currentIndex,
+    required bool isVisible,
+    required Future<void> Function(int contentId) onExposed,
+  }) {
+    useEffect(() {
+      final entries = reelsFeed.valueOrNull;
+      if (!isVisible || entries == null || entries.isEmpty) {
+        return null;
+      }
+
+      final index = currentIndex.value.clamp(0, entries.length - 1);
+      final timer = Timer(const Duration(seconds: 1), () {
+        unawaited(onExposed(entries[index].id));
+      });
+      return timer.cancel;
+    }, [reelsFeed.valueOrNull, currentIndex.value, isVisible]);
+  }
+
   Widget _buildContent({
     required List<ReelFeedEntry> entries,
     required PageController controller,
     required YoutubePlayerManagerBase videoManager,
     required ValueNotifier<int> currentIndex,
     required bool Function() isMounted,
+    required bool hasMore,
     required bool isCaughtUp,
+    required FeedSurfaceUiState uiState,
     required WidgetRef ref,
   }) {
     if (entries.isEmpty) {
@@ -280,6 +354,11 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
     final showCaughtUpBanner =
         isCaughtUp && currentIndex.value >= entries.length - 1;
+    final topActionLabel = uiState.hasPendingNewItems
+        ? '${uiState.pendingNewCount} new item${uiState.pendingNewCount == 1 ? '' : 's'}'
+        : null;
+    final boundedIndex = currentIndex.value.clamp(0, entries.length - 1);
+    final currentEntry = entries[boundedIndex];
 
     return Stack(
       children: [
@@ -294,6 +373,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
           },
           onPageChanged: (index) {
             currentIndex.value = index;
+            ref
+                .read(reelsFeedProvider.notifier)
+                .setCurrentViewPosition(index, entries[index]);
 
             videoManager.onPageChanged(
               currentIndex: index,
@@ -316,6 +398,24 @@ class OptimizedReelsPage extends HookConsumerWidget {
             isActive: index == currentIndex.value,
             isVisible: isVisible,
           ),
+        ),
+        if (topActionLabel != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: FeedActionPill(
+              label: topActionLabel,
+              onTap: () => onManualRefresh?.call(),
+              dark: true,
+            ),
+          ),
+        FeedStatusOverlay(
+          title:
+              'REEL ${boundedIndex + 1}/${entries.length}${hasMore ? '+' : ''}',
+          subtitle: '#${currentEntry.id} · ${hasMore ? 'more' : 'end'}',
+          dark: true,
+          topInset: topActionLabel != null ? 50 : 0,
         ),
         if (showCaughtUpBanner)
           const Positioned(

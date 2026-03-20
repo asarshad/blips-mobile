@@ -1,6 +1,9 @@
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -44,12 +47,17 @@ class FloatingChatBubbles extends ConsumerWidget {
             ? entry.conversationStarters
             : _defaultFallbackStarters;
 
-        return _buildBubbles(starters, maxBubbleWidth);
+        return _buildBubbles(context, ref, starters, maxBubbleWidth);
       },
     );
   }
 
-  Widget _buildBubbles(List<String> questions, double maxBubbleWidth) {
+  Widget _buildBubbles(
+    BuildContext context,
+    WidgetRef ref,
+    List<String> questions,
+    double maxBubbleWidth,
+  ) {
     // Filter out any empty/blank strings to prevent blank bubbles
     final validQuestions =
         questions.where((q) => q.trim().isNotEmpty).take(3).toList();
@@ -67,11 +75,13 @@ class FloatingChatBubbles extends ConsumerWidget {
               entry: entry,
               onClose: onClose,
               maxWidth: maxBubbleWidth,
+              ref: ref,
             )),
         _AskCustomBubble(
           entry: entry,
           onClose: onClose,
           maxWidth: maxBubbleWidth,
+          ref: ref,
         ),
       ],
     );
@@ -84,12 +94,14 @@ class _ChatBubble extends StatelessWidget {
     required this.entry,
     required this.onClose,
     required this.maxWidth,
+    required this.ref,
   });
 
   final String question;
   final FeedEntry entry;
   final VoidCallback onClose;
   final double maxWidth;
+  final WidgetRef ref;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +161,7 @@ class _ChatBubble extends StatelessWidget {
 
   Future<void> _navigateToChat(BuildContext context) async {
     onClose();
+    await _recordChatStart(ref, entry);
 
     final articleEntry = _convertToArticleEntry(entry);
 
@@ -193,11 +206,13 @@ class _AskCustomBubble extends StatelessWidget {
     required this.entry,
     required this.onClose,
     required this.maxWidth,
+    required this.ref,
   });
 
   final FeedEntry entry;
   final VoidCallback onClose;
   final double maxWidth;
+  final WidgetRef ref;
 
   @override
   Widget build(BuildContext context) {
@@ -262,6 +277,7 @@ class _AskCustomBubble extends StatelessWidget {
 
   Future<void> _navigateToChat(BuildContext context) async {
     onClose();
+    await _recordChatStart(ref, entry);
 
     final articleEntry = _convertToArticleEntry(entry);
 
@@ -295,4 +311,23 @@ class _AskCustomBubble extends StatelessWidget {
       readTime: video.readTime,
     );
   }
+}
+
+Future<void> _recordChatStart(WidgetRef ref, FeedEntry entry) async {
+  final repository = ref.read(feedRepositoryProvider);
+  final sessionStore = ref.read(feedSessionStoreProvider);
+  final surface = switch (entry) {
+    ArticleFeedEntry() => FeedSurface.articles,
+    ReelFeedEntry() => FeedSurface.reels,
+    VideoFeedEntry() => FeedSurface.videos,
+    _ => FeedSurface.articles,
+  };
+  final surfaceName = surface.storageKey;
+
+  await repository.recordInteraction(
+    contentItemId: entry.id,
+    eventType: FeedInteractionEvent.chatStart,
+    extraData: {'surface': surfaceName},
+  );
+  await sessionStore.markConsumed(surface, entry.id);
 }

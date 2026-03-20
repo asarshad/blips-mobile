@@ -145,6 +145,43 @@ class FeedCache implements FeedCacheInterface {
     }
   }
 
+  @override
+  Future<String?> getMeta(String key) async {
+    final db = await database;
+    final rows = await db.query(
+      'cache_meta',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  @override
+  Future<void> setMeta(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'cache_meta',
+      {
+        'key': key,
+        'value': value,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> deleteMeta(String key) async {
+    final db = await database;
+    await db.delete(
+      'cache_meta',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+  }
+
   /// Decode a JSON-encoded starters list from SQLite, returning empty list on null/error.
   static List<String> _decodeStarters(dynamic value) {
     if (value == null) return const <String>[];

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
@@ -38,6 +39,7 @@ class ReelItem extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.read(feedRepositoryProvider);
+    final sessionStore = ref.read(feedSessionStoreProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
     final playerState = videoManager.getState(entry.link);
@@ -169,6 +171,7 @@ class ReelItem extends HookConsumerWidget {
               extraData: const {'surface': 'reels'},
             ),
           );
+          unawaited(sessionStore.markConsumed(FeedSurface.reels, entry.id));
         }
       }
 
@@ -265,8 +268,8 @@ class ReelItem extends HookConsumerWidget {
 
         // Action Buttons
         _ActionButtons(
-          onShare: () => _shareReel(repository),
-          onOpen: () => _openReel(repository),
+          onShare: () => _shareReel(repository, sessionStore),
+          onOpen: () => _openReel(repository, sessionStore),
         ),
 
         // Info Layer (not tappable for play/pause, but text is tappable for expand/collapse)
@@ -355,24 +358,32 @@ class ReelItem extends HookConsumerWidget {
     }
   }
 
-  Future<void> _shareReel(FeedRepository repository) async {
+  Future<void> _shareReel(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.videoShare,
       extraData: const {'surface': 'reels'},
     );
+    await sessionStore.markConsumed(FeedSurface.reels, entry.id);
     await ShareService.instance.shareReel(
       title: entry.title,
       videoUrl: entry.link,
     );
   }
 
-  Future<void> _openReel(FeedRepository repository) async {
+  Future<void> _openReel(
+    FeedRepository repository,
+    FeedSessionStore sessionStore,
+  ) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.openSource,
       extraData: const {'surface': 'reels'},
     );
+    await sessionStore.markConsumed(FeedSurface.reels, entry.id);
     final uri = Uri.parse(entry.link);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);

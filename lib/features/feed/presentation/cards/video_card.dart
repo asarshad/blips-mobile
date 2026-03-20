@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
@@ -42,6 +43,7 @@ class VideoCard extends HookConsumerWidget {
     final preview = entry.thumbnailUrl ?? _videoFallbackImage;
 
     final feedRepository = ref.read(feedRepositoryProvider);
+    final sessionStore = ref.read(feedSessionStoreProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final playbackUrl = _resolvePlaybackUrl(videoManager);
     final controller = videoManager.getController(playbackUrl);
@@ -169,6 +171,7 @@ class VideoCard extends HookConsumerWidget {
               extraData: const {'surface': 'videos'},
             ),
           );
+          unawaited(sessionStore.markConsumed(FeedSurface.videos, entry.id));
         }
         if (!sent95Pct.value && ratio >= 0.95) {
           sent95Pct.value = true;
@@ -179,6 +182,7 @@ class VideoCard extends HookConsumerWidget {
               extraData: const {'surface': 'videos'},
             ),
           );
+          unawaited(sessionStore.markConsumed(FeedSurface.videos, entry.id));
         }
       }
 
@@ -245,15 +249,18 @@ class VideoCard extends HookConsumerWidget {
             playbackUrl: playbackUrl,
             playerState: playerState,
           ),
-          onLongPress: () => _showActionsSheet(context, feedRepository),
+          onLongPress: () =>
+              _showActionsSheet(context, feedRepository, sessionStore),
           onOpenLink: () => _openInBrowser(
             url: entry.link,
             repository: feedRepository,
+            sessionStore: sessionStore,
           ),
           onChat: () => showBubbles.value = !showBubbles.value,
           onShare: () => _shareVideo(
             context,
             feedRepository,
+            sessionStore,
           ),
         ),
         if (showBubbles.value)
@@ -311,12 +318,14 @@ class VideoCard extends HookConsumerWidget {
   Future<void> _openInBrowser({
     required String url,
     required FeedRepository repository,
+    required FeedSessionStore sessionStore,
   }) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.openSource,
       extraData: const {'surface': 'videos'},
     );
+    await sessionStore.markConsumed(FeedSurface.videos, entry.id);
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -326,12 +335,14 @@ class VideoCard extends HookConsumerWidget {
   Future<void> _shareVideo(
     BuildContext context,
     FeedRepository repository,
+    FeedSessionStore sessionStore,
   ) async {
     await repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.videoShare,
       extraData: const {'surface': 'videos'},
     );
+    await sessionStore.markConsumed(FeedSurface.videos, entry.id);
     final dateLabel = DateFormat(
       'MMM d, yyyy',
     ).format(entry.publishedAt.toLocal());
@@ -353,6 +364,7 @@ class VideoCard extends HookConsumerWidget {
   Future<void> _showActionsSheet(
     BuildContext context,
     FeedRepository repository,
+    FeedSessionStore sessionStore,
   ) async {
     final action = await showModalBottomSheet<_VideoCardAction>(
       context: context,
@@ -393,6 +405,7 @@ class VideoCard extends HookConsumerWidget {
             'source': entry.source,
           },
         );
+        await sessionStore.markConsumed(FeedSurface.videos, entry.id);
         _showFeedback(context, 'Saved for future ranking.');
         break;
       case _VideoCardAction.lessFromCreator:
