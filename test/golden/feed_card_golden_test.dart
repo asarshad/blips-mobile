@@ -18,6 +18,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:network_image_mock/network_image_mock.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
+import '../test_utils/fake_feed_cache.dart';
 import '../test_utils/fake_youtube_player_manager.dart';
 import 'golden_test_utils.dart';
 
@@ -78,8 +79,22 @@ void main() {
           await tester.pumpWidget(
             goldenTestWrapper(
               device: c.device,
-              child: Scaffold(
-                body: ArticleCard(entry: article),
+              child: ProviderScope(
+                overrides: [
+                  feedRepositoryProvider.overrideWithValue(
+                    FeedRepository(
+                      FakeBackendApiClient(
+                        responses: const {
+                          '/session/interactions': {'success': true},
+                        },
+                      ),
+                    ),
+                  ),
+                  feedCacheProvider.overrideWithValue(FakeFeedCache()),
+                ],
+                child: Scaffold(
+                  body: ArticleCard(entry: article),
+                ),
               ),
             ),
           );
