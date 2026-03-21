@@ -13,6 +13,12 @@ class AdSurfaceConfig {
     this.firstSlotAfter = 0,
   });
 
+  static const runtimeDefault = AdSurfaceConfig(
+    enabled: true,
+    frequency: 8,
+    firstSlotAfter: 2,
+  );
+
   factory AdSurfaceConfig.fromJson(Map<String, dynamic>? json) {
     final data = json ?? const <String, dynamic>{};
     return AdSurfaceConfig(
@@ -25,6 +31,27 @@ class AdSurfaceConfig {
   final bool enabled;
   final int frequency;
   final int firstSlotAfter;
+
+  AdSurfaceConfig copyWith({
+    bool? enabled,
+    int? frequency,
+    int? firstSlotAfter,
+  }) {
+    return AdSurfaceConfig(
+      enabled: enabled ?? this.enabled,
+      frequency: frequency ?? this.frequency,
+      firstSlotAfter: firstSlotAfter ?? this.firstSlotAfter,
+    );
+  }
+
+  AdSurfaceConfig forceEnabled({
+    AdSurfaceConfig fallback = runtimeDefault,
+  }) {
+    if (enabled && frequency > 0) {
+      return this;
+    }
+    return fallback;
+  }
 }
 
 /// Surface bundle returned by the backend.
@@ -53,6 +80,26 @@ class AdsSurfacesConfig {
   final AdSurfaceConfig articles;
   final AdSurfaceConfig videos;
   final AdSurfaceConfig reels;
+
+  AdsSurfacesConfig copyWith({
+    AdSurfaceConfig? articles,
+    AdSurfaceConfig? videos,
+    AdSurfaceConfig? reels,
+  }) {
+    return AdsSurfacesConfig(
+      articles: articles ?? this.articles,
+      videos: videos ?? this.videos,
+      reels: reels ?? this.reels,
+    );
+  }
+
+  AdsSurfacesConfig forceEnabled() {
+    return AdsSurfacesConfig(
+      articles: articles.forceEnabled(),
+      videos: videos.forceEnabled(),
+      reels: reels.forceEnabled(),
+    );
+  }
 }
 
 /// Server-side ad configuration model.
@@ -101,6 +148,24 @@ class AdsConfig {
   /// Surface-specific configuration.
   final AdsSurfacesConfig surfaces;
 
+  AdsConfig copyWith({
+    bool? enabled,
+    String? provider,
+    bool? eligible,
+    int? canaryPercent,
+    int? configTtlSeconds,
+    AdsSurfacesConfig? surfaces,
+  }) {
+    return AdsConfig(
+      enabled: enabled ?? this.enabled,
+      provider: provider ?? this.provider,
+      eligible: eligible ?? this.eligible,
+      canaryPercent: canaryPercent ?? this.canaryPercent,
+      configTtlSeconds: configTtlSeconds ?? this.configTtlSeconds,
+      surfaces: surfaces ?? this.surfaces,
+    );
+  }
+
   Duration get configTtl => Duration(seconds: configTtlSeconds);
 
   /// Whether any feed surface should render ads for this caller.
@@ -119,5 +184,14 @@ class AdsConfig {
 
   bool isSurfaceEnabled(AdSurface surface) {
     return showFeedAds && surfaceConfig(surface).enabled;
+  }
+
+  AdsConfig forceEnableFeedAds({String? provider}) {
+    return copyWith(
+      enabled: true,
+      eligible: true,
+      provider: provider,
+      surfaces: surfaces.forceEnabled(),
+    );
   }
 }

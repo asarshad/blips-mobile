@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -192,7 +193,7 @@ class FeedLocalHistory {
     );
   }
 
-  factory FeedLocalHistory.empty() => const FeedLocalHistory(
+  factory FeedLocalHistory.empty() => FeedLocalHistory(
         exposedAt: <String, DateTime>{},
         consumedAt: <String, DateTime>{},
       );
@@ -325,13 +326,18 @@ class FeedSessionStore {
       }
     })();
 
-    history.exposedAt.removeWhere(
+    final mutableHistory = FeedLocalHistory(
+      exposedAt: Map<String, DateTime>.from(history.exposedAt),
+      consumedAt: Map<String, DateTime>.from(history.consumedAt),
+    );
+
+    mutableHistory.exposedAt.removeWhere(
       (_, value) => reference.difference(value) > kExposedDemotionWindow,
     );
-    history.consumedAt.removeWhere(
+    mutableHistory.consumedAt.removeWhere(
       (_, value) => reference.difference(value) > kConsumedSuppressionWindow,
     );
-    return history;
+    return mutableHistory;
   }
 
   Future<void> _saveHistory(FeedLocalHistory history) async {
@@ -381,7 +387,8 @@ Map<String, dynamic> _serializeEntry(FeedEntry entry) {
         'freshness_reason': entry.freshnessReason,
         'conversation_starters': entry.conversationStarters,
         'url': entry.url,
-        'image_url': entry.imageUrl,
+        'image_url':
+            entry.imageUrl ?? FeedFallbacks.imageForCategory(entry.category),
         'category': entry.category,
         'read_time': entry.readTime,
         'tags': entry.tags,
@@ -439,6 +446,7 @@ FeedEntry _deserializeEntry(Map<String, dynamic> json) {
 
   switch (json['entry_type'] as String? ?? '') {
     case 'article':
+      final category = json['category'] as String? ?? '';
       return ArticleFeedEntry(
         id: json['id'] as int,
         title: json['title'] as String,
@@ -446,8 +454,9 @@ FeedEntry _deserializeEntry(Map<String, dynamic> json) {
         source: json['source'] as String? ?? '',
         publishedAt: publishedAt,
         url: json['url'] as String? ?? '',
-        imageUrl: json['image_url'] as String? ?? '',
-        category: json['category'] as String? ?? '',
+        imageUrl: _nullIfBlankString(json['image_url']) ??
+            FeedFallbacks.imageForCategory(category),
+        category: category,
         readTime: json['read_time'] as int? ?? 1,
         tags: (json['tags'] as List<dynamic>? ?? const [])
             .whereType<String>()
@@ -503,4 +512,11 @@ extension _NullableStringX on String? {
     if (value == null || value.isEmpty) return null;
     return transform(value);
   }
+}
+
+String? _nullIfBlankString(dynamic value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return null;
+  return trimmed;
 }

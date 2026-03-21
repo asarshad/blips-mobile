@@ -352,4 +352,59 @@ void main() {
       );
     },
   );
+
+  test(
+    'loadMore skips a duplicate continuation page and keeps advancing',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+
+          final cursor = queryParameters?['cursor'];
+          if (cursor == null) {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          if (cursor == 10) {
+            return {
+              ..._videosResponse(List<int>.generate(10, (index) => index + 1)),
+              'cursor': 20,
+              'has_more': true,
+            };
+          }
+          if (cursor == 20) {
+            return {
+              ..._videosResponse(List<int>.generate(10, (index) => index + 11)),
+              'cursor': 30,
+              'has_more': true,
+            };
+          }
+          throw StateError('Unexpected cursor: $cursor');
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+      await container.read(videosFeedProvider.notifier).loadMore();
+      await _settle();
+
+      final entries = container.read(videosFeedProvider).value;
+      expect(entries, isNotNull);
+      expect(entries!.map((entry) => entry.id), [
+        ...List<int>.generate(10, (index) => index + 1),
+        ...List<int>.generate(10, (index) => index + 11),
+      ]);
+    },
+  );
 }

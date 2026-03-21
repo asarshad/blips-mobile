@@ -3,6 +3,7 @@ library image_starters_regression_test;
 
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
 import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Regression tests for two production incidents:
@@ -74,10 +75,9 @@ void main() {
       });
 
       final entry = dto.toDomain();
-      expect(entry.imageUrl, contains('unsplash'),
+      expect(entry.imageUrl, FeedFallbacks.imageForCategory('Technology'),
           reason:
               'Null imageUrl should trigger FeedFallbacks.imageForCategory()');
-      expect(entry.imageUrl, isNot(isEmpty));
     });
 
     test('empty string thumbnail_url becomes null in VideoDto', () {

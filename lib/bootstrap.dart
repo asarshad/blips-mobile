@@ -1,6 +1,7 @@
 import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
+import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -93,7 +94,22 @@ Future<void> bootstrapWithOverrides({
 }
 
 Future<void> _initializeAdMob() async {
+  final runtimeConfig = AdsRuntimeConfig.fromEnvironment();
+
+  if (!runtimeConfig.usesSdkAds) {
+    logger.info(
+      'AdMob skipped in mock ads mode',
+      category: LogCategory.lifecycle,
+    );
+    return;
+  }
+
   try {
+    if (runtimeConfig.testDeviceIds.isNotEmpty) {
+      await MobileAds.instance.updateRequestConfiguration(
+        RequestConfiguration(testDeviceIds: runtimeConfig.testDeviceIds),
+      );
+    }
     await MobileAds.instance.initialize();
     logger.info('AdMob initialized', category: LogCategory.lifecycle);
   } catch (e, stackTrace) {

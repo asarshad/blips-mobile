@@ -3,6 +3,9 @@ library reels_notifier_stability_test;
 
 import 'dart:async';
 
+import 'package:blips_mobile/features/ads/domain/ads_config.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
+import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
@@ -60,6 +63,49 @@ List<int> _ids(ProviderContainer container) {
 
 void main() {
   group('ReelsNotifier silent refresh stability', () {
+    test('reels feed with ads injects native slots when enabled', () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/videos/reels': _reelsResponse(
+            ids: List<int>.generate(10, (index) => index + 1),
+            hasMore: true,
+            nextCursor: '10',
+          ),
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+          adsConfigProvider.overrideWith(
+            (_) async => const AdsConfig(
+              enabled: true,
+              eligible: true,
+              surfaces: AdsSurfacesConfig(
+                reels: AdSurfaceConfig(
+                  enabled: true,
+                  frequency: 8,
+                  firstSlotAfter: 2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(reelsFeedWithAdsProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final items = container.read(reelsFeedWithAdsProvider).value;
+      expect(items, isNotNull);
+      expect(items!.length, 11);
+      expect(items.whereType<NativeAdSlotFeedPageItem>(), hasLength(1));
+      expect(items[8], isA<NativeAdSlotFeedPageItem>());
+    });
+
     test(
       'preserves deep-scroll ordering and pagination cursor across silent refresh',
       () async {
@@ -388,6 +434,153 @@ void main() {
             .length,
         2,
       );
+    },
+  );
+
+  test(
+    'ReelsNotifier loadMore skips a duplicate continuation page and keeps advancing',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) {
+          if (method != 'GET' || path != '/videos/reels') {
+            return const <String, dynamic>{};
+          }
+
+          final cursor = queryParameters?['cursor'] as String?;
+          if (cursor == null) {
+            return _reelsResponse(
+              ids: List<int>.generate(20, (index) => index + 1),
+              hasMore: true,
+              nextCursor: '20',
+            );
+          }
+          if (cursor == '20') {
+            return _reelsResponse(
+              ids: List<int>.generate(20, (index) => index + 1),
+              hasMore: true,
+              nextCursor: '40',
+            );
+          }
+          if (cursor == '40') {
+            return _reelsResponse(
+              ids: List<int>.generate(20, (index) => index + 21),
+              hasMore: true,
+              nextCursor: '60',
+            );
+          }
+          throw StateError('Unexpected cursor: $cursor');
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(reelsFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+      await container.read(reelsFeedProvider.notifier).loadMore();
+      await _settle();
+
+      expect(
+        _ids(container),
+        [
+          ...List<int>.generate(20, (index) => index + 1),
+          ...List<int>.generate(20, (index) => index + 21),
+        ],
+      );
+    },
+  );
+
+  test(
+    'ReelsNotifier manualRefresh waits for in-flight loadMore before replacing reels',
+    () async {
+      final loadMoreResponse = Completer<Map<String, dynamic>>();
+      var headCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/videos/reels') {
+            return const <String, dynamic>{};
+          }
+
+          final cursor = queryParameters?['cursor'] as String?;
+          if (cursor == '20') {
+            return loadMoreResponse.future;
+          }
+
+          if (cursor != null) {
+            throw StateError('Unexpected cursor: $cursor');
+          }
+
+          headCallCount += 1;
+          if (headCallCount == 1) {
+            return _reelsResponse(
+              ids: List<int>.generate(20, (index) => index + 1),
+              hasMore: true,
+              nextCursor: '20',
+            );
+          }
+
+          return _reelsResponse(
+            ids: List<int>.generate(20, (index) => index + 101),
+            hasMore: true,
+            nextCursor: '20',
+          );
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(reelsFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final notifier = container.read(reelsFeedProvider.notifier);
+      final loadMoreFuture = notifier.loadMore();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final refreshFuture = notifier.manualRefresh();
+      final earlyResult = await Future.any<Object?>([
+        refreshFuture.then<Object?>((_) => 'completed'),
+        Future<Object?>.delayed(
+          const Duration(milliseconds: 30),
+          () => 'waiting',
+        ),
+      ]);
+      expect(earlyResult, 'waiting');
+
+      loadMoreResponse.complete(
+        _reelsResponse(
+          ids: List<int>.generate(20, (index) => index + 21),
+          hasMore: true,
+          nextCursor: '40',
+        ),
+      );
+
+      await loadMoreFuture;
+      expect(await refreshFuture, isTrue);
+      await _settle();
+
+      expect(
+        _ids(container),
+        List<int>.generate(20, (index) => index + 101),
+      );
+
+      final requestCursors = api.requests
+          .where((request) => request.method == 'GET')
+          .map((request) => request.queryParameters?['cursor'])
+          .toList(growable: false);
+      expect(requestCursors, [null, '20', null]);
     },
   );
 }

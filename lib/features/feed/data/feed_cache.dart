@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:path/path.dart';
@@ -25,30 +26,14 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
   }
 
   Future<void> _createDB(Database db, int version) async {
-    // Articles table
-    await db.execute('''
-      CREATE TABLE articles (
-        id INTEGER PRIMARY KEY,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        source TEXT NOT NULL,
-        published_at TEXT NOT NULL,
-        url TEXT NOT NULL,
-        image_url TEXT NOT NULL,
-        category TEXT NOT NULL,
-        read_time INTEGER NOT NULL,
-        tags TEXT NOT NULL,
-        conversation_starters TEXT,
-        cached_at TEXT NOT NULL
-      )
-    ''');
+    await _createArticlesTable(db);
 
     // Videos table
     await db.execute('''
@@ -143,6 +128,41 @@ class FeedCache implements FeedCacheInterface {
         )
       ''');
     }
+    if (oldVersion < 5) {
+      // v5: Clear stale article snapshots after article image fallback changes.
+      await db.execute('DROP TABLE IF EXISTS articles');
+      await _createArticlesTable(db);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)',
+      );
+      await db.delete(
+        'cache_meta',
+        where: 'key = ?',
+        whereArgs: ['feed_session:articles'],
+      );
+    }
+  }
+
+  Future<void> _createArticlesTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE articles (
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        source TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        url TEXT NOT NULL,
+        image_url TEXT,
+        category TEXT NOT NULL,
+        read_time INTEGER NOT NULL,
+        tags TEXT NOT NULL,
+        conversation_starters TEXT,
+        cached_at TEXT NOT NULL
+      )
+    ''');
   }
 
   @override
@@ -214,7 +234,8 @@ class FeedCache implements FeedCacheInterface {
             'source': article.source,
             'published_at': article.publishedAt.toIso8601String(),
             'url': article.url,
-            'image_url': article.imageUrl,
+            'image_url': article.imageUrl ??
+                FeedFallbacks.imageForCategory(article.category),
             'category': article.category,
             'read_time': article.readTime,
             'tags': jsonEncode(article.tags),
@@ -242,6 +263,7 @@ class FeedCache implements FeedCacheInterface {
   }
 
   ArticleFeedEntry _articleFromRow(Map<String, dynamic> row) {
+    final category = row['category'] as String;
     return ArticleFeedEntry(
       id: row['id'] as int,
       title: row['title'] as String,
@@ -249,8 +271,9 @@ class FeedCache implements FeedCacheInterface {
       source: row['source'] as String,
       publishedAt: DateTime.parse(row['published_at'] as String),
       url: row['url'] as String,
-      imageUrl: row['image_url'] as String,
-      category: row['category'] as String,
+      imageUrl: _nullIfBlankString(row['image_url']) ??
+          FeedFallbacks.imageForCategory(category),
+      category: category,
       readTime: row['read_time'] as int,
       tags: (jsonDecode(row['tags'] as String) as List<dynamic>)
           .cast<String>()
@@ -513,4 +536,11 @@ class FeedCache implements FeedCacheInterface {
     );
     return (count ?? 0) > 0;
   }
+}
+
+String? _nullIfBlankString(dynamic value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return null;
+  return trimmed;
 }

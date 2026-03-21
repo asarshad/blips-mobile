@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blips_mobile/core/config/memory_config.dart';
+import 'package:blips_mobile/features/feed/providers/video/reel_autoplay_recovery.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -26,6 +27,9 @@ final youtubePlayerManagerProvider =
 /// can resume the correct video on foreground.
 class YoutubePlayerManager extends YoutubePlayerManagerBase
     with WidgetsBindingObserver {
+  static const Duration _recoveryInterval = Duration(milliseconds: 700);
+  static const int _maxRecoveryAttempts = 4;
+
   YoutubePlayerManager() {
     WidgetsBinding.instance.addObserver(this);
   }
@@ -222,6 +226,10 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       _notifySafe();
     }
 
+    if (newState == YTPlayerState.playing && _currentActiveUrl == url) {
+      _cancelRecovery();
+    }
+
     // Auto-play when this is the intended active video and the iframe is
     // ready, even if the first callback arrives as unknown/paused on some
     // devices. Keep this after state mapping so UI never gets stuck in a
@@ -331,8 +339,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   @override
   void pauseAll() {
     if (kDebugMode) debugPrint('YoutubePlayerManager: pauseAll()');
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
+    _cancelRecovery();
     _currentActiveUrl = null;
     for (final entry in _controllers.entries) {
       entry.value.pause();
@@ -349,8 +356,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   void _pauseAllForBackground() {
     if (kDebugMode)
       debugPrint('YoutubePlayerManager: _pauseAllForBackground()');
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
+    _cancelRecovery();
     for (final entry in _controllers.entries) {
       entry.value.pause();
       _states[entry.key] = YTPlayerState.paused;
@@ -402,8 +408,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // runs, _handleControllerUpdate needs to see the correct target URL or
     // the video will be silently skipped.
     _currentActiveUrl = currentUrl;
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
+    _cancelRecovery();
 
     // Pause all other controllers synchronously to prevent audio bleed.
     for (final entry in _controllers.entries) {
@@ -457,35 +462,50 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
         }
       }
 
-      // Recovery nudge: if the active page is still not playing shortly after
-      // swipe completion, issue one more play command. This mirrors the manual
-      // swipe-away-and-back recovery users reported, without overriding an
-      // explicit user pause.
-      _recoveryTimer?.cancel();
-      _recoveryTimer = Timer(const Duration(milliseconds: 1500), () {
-        if (_isDisposed || _currentActiveUrl != currentUrl) return;
-        final state = _states[currentUrl];
-        if (state == YTPlayerState.loading &&
-            _controllers.containsKey(currentUrl) &&
-            !_pendingInit.contains(currentUrl)) {
-          if (kDebugMode) {
-            debugPrint(
-              'YoutubePlayerManager: [onPageChanged] retrying stalled active reel → $currentUrl',
-            );
-          }
-          unawaited(retryVideo(currentUrl));
-          return;
-        }
-        if (state == YTPlayerState.ready) {
-          if (kDebugMode) {
-            debugPrint(
-              'YoutubePlayerManager: [onPageChanged] recovery nudge → $currentUrl (state=$state)',
-            );
-          }
-          unawaited(playVideo(currentUrl));
-        }
-      });
+      _scheduleRecovery(currentUrl, attempt: 0);
     });
+  }
+
+  void _scheduleRecovery(String currentUrl, {required int attempt}) {
+    _cancelRecovery();
+    _recoveryTimer = Timer(_recoveryInterval, () {
+      if (_isDisposed || _currentActiveUrl != currentUrl) return;
+
+      final state = _states[currentUrl] ?? YTPlayerState.idle;
+      final action = resolveReelAutoplayRecoveryAction(
+        isCurrentActive: _currentActiveUrl == currentUrl,
+        controllerExists: _controllers.containsKey(currentUrl),
+        isPendingInit: _pendingInit.contains(currentUrl),
+        state: state,
+        attempt: attempt,
+        maxAttempts: _maxRecoveryAttempts,
+      );
+
+      if (kDebugMode) {
+        debugPrint(
+          'YoutubePlayerManager: [recovery] url=$currentUrl'
+          ' attempt=$attempt state=$state action=$action',
+        );
+      }
+
+      switch (action) {
+        case ReelAutoplayRecoveryAction.stop:
+          _cancelRecovery();
+        case ReelAutoplayRecoveryAction.wait:
+          _scheduleRecovery(currentUrl, attempt: attempt + 1);
+        case ReelAutoplayRecoveryAction.retry:
+          unawaited(retryVideo(currentUrl));
+          _scheduleRecovery(currentUrl, attempt: attempt + 1);
+        case ReelAutoplayRecoveryAction.play:
+          unawaited(playVideo(currentUrl));
+          _scheduleRecovery(currentUrl, attempt: attempt + 1);
+      }
+    });
+  }
+
+  void _cancelRecovery() {
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
   }
 
   /// Releases a specific video controller.
@@ -514,8 +534,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
   /// Releases all controllers.
   void releaseAll() {
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
+    _cancelRecovery();
     _currentActiveUrl = null;
     for (final entry in _controllers.entries) {
       try {
@@ -572,8 +591,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _isDisposed = true;
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
+    _cancelRecovery();
     for (final entry in _controllers.entries) {
       try {
         entry.value.dispose();

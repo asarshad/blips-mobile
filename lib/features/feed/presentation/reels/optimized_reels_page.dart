@@ -2,18 +2,24 @@ import 'dart:async';
 
 import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
+import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
+import 'package:blips_mobile/features/ads/presentation/native_ad_card.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
-import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+const _loadMoreOrganicRemainingThreshold = 5;
 
 /// Optimized Reels page with video player pooling and preloading.
 ///
@@ -38,7 +44,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reelsFeed = ref.watch(reelsFeedProvider);
+    final reelsFeed = ref.watch(reelsFeedWithAdsProvider);
     final fallbackController = usePageController();
     final effectiveController = controller ?? fallbackController;
     final videoManager = ref.watch(youtubePlayerManagerProvider);
@@ -46,8 +52,15 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final lastCaughtUpEntryId = useRef<int?>(null);
     final reelsNotifier = ref.read(reelsFeedProvider.notifier);
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.reels));
+    final isMounted = useIsMounted();
 
     _useInitialPreload(reelsFeed, videoManager, isVisible);
+    _useViewportWarmup(
+      reelsFeed: reelsFeed,
+      controller: effectiveController,
+      videoManager: videoManager,
+      isVisible: isVisible,
+    );
     _useVisibilityHandler(reelsFeed, videoManager, isVisible, currentIndex);
     _useLifecycleObserver(reelsFeed, videoManager, isVisible, currentIndex);
     _useCaughtUpTracking(
@@ -65,6 +78,12 @@ class OptimizedReelsPage extends HookConsumerWidget {
       restoreApproximateIndex: uiState.restoreApproximateIndex,
       onRestoreApplied: reelsNotifier.consumeRestoreTarget,
     );
+    _useLoadMoreNearEnd(
+      reelsFeed: reelsFeed,
+      currentIndex: currentIndex,
+      isMounted: isMounted,
+      onLoadMore: () => ref.read(reelsFeedProvider.notifier).loadMore(),
+    );
     _useExposureTracking(
       reelsFeed: reelsFeed,
       currentIndex: currentIndex,
@@ -72,12 +91,11 @@ class OptimizedReelsPage extends HookConsumerWidget {
       onExposed: reelsNotifier.markExposed,
     );
 
-    final isMounted = useIsMounted();
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: reelsFeed.when(
         data: (entries) => _buildContent(
+          context: context,
           entries: entries,
           controller: effectiveController,
           videoManager: videoManager,
@@ -104,12 +122,9 @@ class OptimizedReelsPage extends HookConsumerWidget {
   ///
   /// Only initialises controllers — does NOT call playVideo.
   /// Playback is started exclusively by `_useVisibilityHandler` so there is a
-  /// single, authoritative place that decides what should be playing.  Having
-  /// `isVisible` in this effect's deps caused it to re-run on every tab switch
-  /// and call playVideo(entries[0]) instead of entries[currentIndex], fighting
-  /// with [_useVisibilityHandler].
+  /// single, authoritative place that decides what should be playing.
   void _useInitialPreload(
-    AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    AsyncValue<List<FeedPageItem>> reelsFeed,
     YoutubePlayerManagerBase videoManager,
     bool isVisible,
   ) {
@@ -121,11 +136,10 @@ class OptimizedReelsPage extends HookConsumerWidget {
           );
         }
         if (reelsFeed.hasValue && reelsFeed.value!.isNotEmpty) {
-          final entries = reelsFeed.value!;
+          final entries = _organicEntries(reelsFeed.value!);
+          if (entries.isEmpty) return null;
 
-          // Keep warm preloads aligned with pool capacity to avoid churn.
-          final warmTarget =
-              MemoryConfig.reelPreloadCount + 1; // current + ahead
+          final warmTarget = MemoryConfig.reelPreloadCount + 1;
           final cappedWarmTarget = warmTarget > MemoryConfig.playerPoolSize
               ? MemoryConfig.playerPoolSize
               : warmTarget;
@@ -135,7 +149,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
           Future.microtask(() async {
             for (var i = 0; i < preloadCount; i++) {
               if (cancelled) return;
-              await videoManager.initController(entries[i].link);
+              unawaited(videoManager.initController(entries[i].link));
             }
           });
           return () => cancelled = true;
@@ -143,37 +157,80 @@ class OptimizedReelsPage extends HookConsumerWidget {
         return null;
       },
       [reelsFeed.valueOrNull],
-    ); // isVisible intentionally excluded — see above
+    );
+  }
+
+  void _useViewportWarmup({
+    required AsyncValue<List<FeedPageItem>> reelsFeed,
+    required PageController controller,
+    required YoutubePlayerManagerBase videoManager,
+    required bool isVisible,
+  }) {
+    useEffect(() {
+      final pageItems = reelsFeed.valueOrNull;
+      if (!isVisible || pageItems == null || pageItems.isEmpty) {
+        return null;
+      }
+
+      void warmViewport() {
+        if (!controller.hasClients) return;
+        final page = controller.page ?? controller.initialPage.toDouble();
+        final lower = page.floor().clamp(0, pageItems.length - 1);
+        final upper = page.ceil().clamp(0, pageItems.length - 1);
+        _warmPageIfOrganic(pageItems, lower, videoManager);
+        _warmPageIfOrganic(pageItems, upper, videoManager);
+
+        final rounded = page.round().clamp(0, pageItems.length - 1);
+        final nextPage = _nextOrganicPageIndex(pageItems, rounded + 1);
+        if (nextPage != null) {
+          _warmPageIfOrganic(pageItems, nextPage, videoManager);
+        }
+      }
+
+      controller.addListener(warmViewport);
+      WidgetsBinding.instance.addPostFrameCallback((_) => warmViewport());
+      return () => controller.removeListener(warmViewport);
+    }, [reelsFeed.valueOrNull, controller, isVisible]);
   }
 
   /// Handle visibility changes.
   void _useVisibilityHandler(
-    AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    AsyncValue<List<FeedPageItem>> reelsFeed,
     YoutubePlayerManagerBase videoManager,
     bool isVisible,
     ValueNotifier<int> currentIndex,
   ) {
     useEffect(
       () {
-        final entries = reelsFeed.valueOrNull;
-        if (entries == null || entries.isEmpty) return null;
+        final pageItems = reelsFeed.valueOrNull;
+        if (pageItems == null || pageItems.isEmpty) return null;
+
+        final entries = _organicEntries(pageItems);
+        if (entries.isEmpty) return null;
 
         if (isVisible) {
-          // Route through onPageChanged so visible-entry playback uses the
-          // same proven path as manual swipes (pause others + preload next).
-          final index = currentIndex.value.clamp(0, entries.length - 1);
+          final pageIndex = currentIndex.value.clamp(0, pageItems.length - 1);
+          final organicIndex = _organicIndexForPageIndex(pageItems, pageIndex);
+          if (organicIndex == null) {
+            if (kDebugMode) {
+              debugPrint('ReelsPage: Visibility ON — ad page active, pausing');
+            }
+            videoManager.pauseAll();
+            return null;
+          }
+
           final urls = entries.map((e) => e.link).toList(growable: false);
           if (kDebugMode) {
             debugPrint(
-                'ReelsPage: Visibility ON — playing video at index $index');
+              'ReelsPage: Visibility ON — playing video at organic index $organicIndex',
+            );
           }
           videoManager.onPageChanged(
-            currentIndex: index,
+            currentIndex: organicIndex,
             videoUrls: urls,
             preloadAhead: MemoryConfig.reelPreloadCount,
           );
         } else {
-          // Pause all when leaving (keep cached for faster resume)
           if (kDebugMode) {
             debugPrint('ReelsPage: Visibility OFF — pausing all');
           }
@@ -189,33 +246,27 @@ class OptimizedReelsPage extends HookConsumerWidget {
   }
 
   /// Re-start the current reel whenever the app returns to the foreground.
-  ///
-  /// iOS (and Android) can suspend or kill the WKWebView process while the
-  /// app is in the background.  When the user returns — whether from a
-  /// home-screen visit, a notification check, or tapping “Open” to watch
-  /// a reel in the browser — the cached controller may have a stale iframe.
-  /// Calling [retryVideo] disposes the old controller and initialises a fresh
-  /// one so playback resumes reliably instead of silently hanging.
-  ///
-  /// We register the observer once and use a [useRef] to hold a
-  /// fresh closure on every rebuild, avoiding any stale-capture issues.
   void _useLifecycleObserver(
-    AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    AsyncValue<List<FeedPageItem>> reelsFeed,
     YoutubePlayerManagerBase videoManager,
     bool isVisible,
     ValueNotifier<int> currentIndex,
   ) {
-    // Callback ref keeps the closure fresh without removing/re-adding the
-    // WidgetsBindingObserver on every rebuild.
     final callbackRef = useRef<VoidCallback>(() {});
     callbackRef.value = () {
       if (!isVisible) return;
       if (!reelsFeed.hasValue || reelsFeed.value!.isEmpty) return;
-      final entries = reelsFeed.value!;
-      final index = currentIndex.value.clamp(0, entries.length - 1);
-      final link = entries[index].link;
+      final pageItems = reelsFeed.value!;
+      final entries = _organicEntries(pageItems);
+      if (entries.isEmpty) return;
+
+      final pageIndex = currentIndex.value.clamp(0, pageItems.length - 1);
+      final organicIndex = _organicIndexForPageIndex(pageItems, pageIndex);
+      if (organicIndex == null) return;
+
+      final link = entries[organicIndex].link;
       debugPrint(
-        'ReelsPage: App resumed — retrying video at index $index to clear stale iframe',
+        'ReelsPage: App resumed — retrying video at organic index $organicIndex to clear stale iframe',
       );
       videoManager.retryVideo(link);
     };
@@ -229,28 +280,32 @@ class OptimizedReelsPage extends HookConsumerWidget {
         return () => WidgetsBinding.instance.removeObserver(observer);
       },
       const [],
-    ); // register once for the lifetime of the page
+    );
   }
 
   void _useCaughtUpTracking({
     required WidgetRef ref,
-    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required AsyncValue<List<FeedPageItem>> reelsFeed,
     required ValueNotifier<int> currentIndex,
     required bool isCaughtUp,
     required ObjectRef<int?> lastCaughtUpEntryId,
   }) {
     useEffect(() {
-      final entries = reelsFeed.valueOrNull;
-      if (entries == null || entries.isEmpty || !isCaughtUp) {
+      final pageItems = reelsFeed.valueOrNull;
+      if (pageItems == null || pageItems.isEmpty || !isCaughtUp) {
         return null;
       }
 
-      final index = currentIndex.value.clamp(0, entries.length - 1);
-      if (index < entries.length - 1) {
+      final entries = _organicEntries(pageItems);
+      if (entries.isEmpty) return null;
+
+      final pageIndex = currentIndex.value.clamp(0, pageItems.length - 1);
+      final organicIndex = _organicIndexForPageIndex(pageItems, pageIndex);
+      if (organicIndex == null || organicIndex < entries.length - 1) {
         return null;
       }
 
-      final entry = entries[index];
+      final entry = entries[organicIndex];
       if (lastCaughtUpEntryId.value == entry.id) {
         return null;
       }
@@ -272,7 +327,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
   }
 
   void _useRestorePosition({
-    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required AsyncValue<List<FeedPageItem>> reelsFeed,
     required PageController controller,
     required ValueNotifier<int> currentIndex,
     required int? restoreEntryId,
@@ -280,8 +335,8 @@ class OptimizedReelsPage extends HookConsumerWidget {
     required VoidCallback onRestoreApplied,
   }) {
     useEffect(() {
-      final entries = reelsFeed.valueOrNull;
-      if (entries == null || entries.isEmpty) return null;
+      final pageItems = reelsFeed.valueOrNull;
+      if (pageItems == null || pageItems.isEmpty) return null;
       if (restoreEntryId == null && restoreApproximateIndex == null) {
         return null;
       }
@@ -291,12 +346,18 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
         final exactIndex = restoreEntryId == null
             ? -1
-            : entries.indexWhere((entry) => entry.id == restoreEntryId);
+            : pageItems.indexWhere(
+                (entry) => entry.organicEntry?.id == restoreEntryId,
+              );
         final targetIndex = exactIndex >= 0
             ? exactIndex
             : (restoreApproximateIndex == null
                 ? 0
-                : restoreApproximateIndex.clamp(0, entries.length - 1));
+                : (_pageIndexForOrganicIndex(
+                      pageItems,
+                      restoreApproximateIndex,
+                    ) ??
+                    0));
         controller.jumpToPage(targetIndex);
         currentIndex.value = targetIndex;
         onRestoreApplied();
@@ -306,27 +367,53 @@ class OptimizedReelsPage extends HookConsumerWidget {
   }
 
   void _useExposureTracking({
-    required AsyncValue<List<ReelFeedEntry>> reelsFeed,
+    required AsyncValue<List<FeedPageItem>> reelsFeed,
     required ValueNotifier<int> currentIndex,
     required bool isVisible,
     required Future<void> Function(int contentId) onExposed,
   }) {
     useEffect(() {
-      final entries = reelsFeed.valueOrNull;
-      if (!isVisible || entries == null || entries.isEmpty) {
+      final pageItems = reelsFeed.valueOrNull;
+      if (!isVisible || pageItems == null || pageItems.isEmpty) {
         return null;
       }
 
-      final index = currentIndex.value.clamp(0, entries.length - 1);
+      final index = currentIndex.value.clamp(0, pageItems.length - 1);
+      final entry = pageItems[index].organicEntry;
+      if (entry == null) {
+        return null;
+      }
+
       final timer = Timer(const Duration(seconds: 1), () {
-        unawaited(onExposed(entries[index].id));
+        unawaited(onExposed(entry.id));
       });
       return timer.cancel;
     }, [reelsFeed.valueOrNull, currentIndex.value, isVisible]);
   }
 
+  void _useLoadMoreNearEnd({
+    required AsyncValue<List<FeedPageItem>> reelsFeed,
+    required ValueNotifier<int> currentIndex,
+    required bool Function() isMounted,
+    required Future<void> Function() onLoadMore,
+  }) {
+    useEffect(() {
+      final pageItems = reelsFeed.valueOrNull;
+      if (pageItems == null || pageItems.isEmpty) return null;
+      if (!_shouldLoadMore(pageItems, currentIndex.value)) return null;
+
+      Future.microtask(() {
+        if (isMounted()) {
+          unawaited(onLoadMore());
+        }
+      });
+      return null;
+    }, [reelsFeed.valueOrNull, currentIndex.value]);
+  }
+
   Widget _buildContent({
-    required List<ReelFeedEntry> entries,
+    required BuildContext context,
+    required List<FeedPageItem> entries,
     required PageController controller,
     required YoutubePlayerManagerBase videoManager,
     required ValueNotifier<int> currentIndex,
@@ -347,75 +434,122 @@ class OptimizedReelsPage extends HookConsumerWidget {
       );
     }
 
-    final urls = entries.map((e) => e.link).toList();
-    final indexByEntryId = <int, int>{
-      for (var i = 0; i < entries.length; i++) entries[i].id: i,
+    final organicEntries = _organicEntries(entries);
+    if (organicEntries.isEmpty) {
+      return Theme(
+        data: ThemeData.dark(),
+        child: FeedMessageState(
+          message: 'No reels available right now.',
+          actionLabel: 'Refresh',
+          onAction: onManualRefresh ?? () => ref.invalidate(reelsFeedProvider),
+        ),
+      );
+    }
+
+    final urls = organicEntries.map((e) => e.link).toList(growable: false);
+    final indexByStableId = <int, int>{
+      for (var i = 0; i < entries.length; i++) entries[i].stableId: i,
     };
 
-    final showCaughtUpBanner =
-        isCaughtUp && currentIndex.value >= entries.length - 1;
+    final boundedIndex = currentIndex.value.clamp(0, entries.length - 1);
+    final currentPageItem = entries[boundedIndex];
+    final currentOrganicIndex =
+        _organicIndexForPageIndex(entries, boundedIndex);
+    final currentOrganicPosition =
+        _organicCountThroughPageIndex(entries, boundedIndex).clamp(
+      1,
+      organicEntries.length,
+    );
+    final currentEntry = currentOrganicIndex == null
+        ? null
+        : organicEntries[currentOrganicIndex];
+    final showCaughtUpBanner = isCaughtUp &&
+        currentOrganicIndex != null &&
+        currentOrganicIndex >= organicEntries.length - 1;
     final topActionLabel = uiState.hasPendingNewItems
         ? '${uiState.pendingNewCount} new item${uiState.pendingNewCount == 1 ? '' : 's'}'
         : null;
-    final boundedIndex = currentIndex.value.clamp(0, entries.length - 1);
-    final currentEntry = entries[boundedIndex];
 
     return Stack(
       children: [
         PageView.builder(
           controller: controller,
           scrollDirection: Axis.vertical,
+          dragStartBehavior: DragStartBehavior.down,
+          pageSnapping: true,
+          physics: buildFeedPagePhysics(context),
           findChildIndexCallback: (key) {
             if (key is ValueKey<int>) {
-              return indexByEntryId[key.value];
+              return indexByStableId[key.value];
             }
             return null;
           },
           onPageChanged: (index) {
             currentIndex.value = index;
-            ref
-                .read(reelsFeedProvider.notifier)
-                .setCurrentViewPosition(index, entries[index]);
+            final organicEntry = entries[index].organicEntry;
+            final organicIndex = _organicIndexForPageIndex(entries, index);
 
-            videoManager.onPageChanged(
-              currentIndex: index,
-              videoUrls: urls,
-              preloadAhead: MemoryConfig.reelPreloadCount,
-            );
+            if (organicEntry is ReelFeedEntry && organicIndex != null) {
+              ref
+                  .read(reelsFeedProvider.notifier)
+                  .setCurrentViewPosition(organicIndex, organicEntry);
+              videoManager.onPageChanged(
+                currentIndex: organicIndex,
+                videoUrls: urls,
+                preloadAhead: MemoryConfig.reelPreloadCount,
+              );
+            } else {
+              videoManager.pauseAll();
+            }
 
-            // Pagination: Load more when close to end
-            if (index >= entries.length - 3) {
+            if (_shouldLoadMore(entries, index)) {
               Future.microtask(() {
-                if (isMounted())
-                  ref.read(reelsFeedProvider.notifier).loadMore();
+                if (isMounted()) {
+                  unawaited(ref.read(reelsFeedProvider.notifier).loadMore());
+                }
               });
             }
           },
           itemCount: entries.length,
-          itemBuilder: (context, index) => ReelItem(
-            key: ValueKey(entries[index].id),
-            entry: entries[index],
-            isActive: index == currentIndex.value,
-            isVisible: isVisible,
-          ),
+          itemBuilder: (context, index) {
+            final pageItem = entries[index];
+            if (pageItem is NativeAdSlotFeedPageItem) {
+              return NativeAdCard(slot: pageItem);
+            }
+            if (pageItem is SponsorCardFeedPageItem) {
+              return AdCard(entry: pageItem.entry);
+            }
+            final organicEntry = pageItem.organicEntry;
+            if (organicEntry is! ReelFeedEntry) {
+              return const SizedBox.shrink();
+            }
+            return ReelItem(
+              key: ValueKey(pageItem.stableId),
+              entry: organicEntry,
+              isActive: index == currentIndex.value,
+              isVisible: isVisible,
+            );
+          },
         ),
         if (topActionLabel != null)
           Positioned(
-            top: 0,
+            bottom: 0,
             left: 0,
             right: 0,
             child: FeedActionPill(
               label: topActionLabel,
               onTap: () => onManualRefresh?.call(),
               dark: true,
+              placement: FeedActionPillPlacement.bottom,
             ),
           ),
         FeedStatusOverlay(
           title:
-              'REEL ${boundedIndex + 1}/${entries.length}${hasMore ? '+' : ''}',
-          subtitle: '#${currentEntry.id} · ${hasMore ? 'more' : 'end'}',
+              '${currentPageItem.organicEntry == null ? 'AD' : 'REEL'} $currentOrganicPosition/${organicEntries.length}${hasMore ? '+' : ''}',
+          subtitle: currentPageItem is NativeAdSlotFeedPageItem
+              ? 'slot ${currentPageItem.slotIndex + 1} · ${hasMore ? 'more' : 'end'}'
+              : '#${currentEntry?.id ?? '-'} · ${hasMore ? 'more' : 'end'}',
           dark: true,
-          topInset: topActionLabel != null ? 50 : 0,
         ),
         if (showCaughtUpBanner)
           const Positioned(
@@ -432,8 +566,88 @@ class OptimizedReelsPage extends HookConsumerWidget {
   }
 }
 
+List<ReelFeedEntry> _organicEntries(List<FeedPageItem> pageItems) {
+  return pageItems
+      .map((item) => item.organicEntry)
+      .whereType<ReelFeedEntry>()
+      .toList(growable: false);
+}
+
+void _warmPageIfOrganic(
+  List<FeedPageItem> pageItems,
+  int pageIndex,
+  YoutubePlayerManagerBase videoManager,
+) {
+  if (pageIndex < 0 || pageIndex >= pageItems.length) return;
+  final entry = pageItems[pageIndex].organicEntry;
+  if (entry is ReelFeedEntry) {
+    unawaited(videoManager.initController(entry.link));
+  }
+}
+
+int? _organicIndexForPageIndex(List<FeedPageItem> pageItems, int pageIndex) {
+  if (pageIndex < 0 || pageIndex >= pageItems.length) return null;
+  if (pageItems[pageIndex].organicEntry is! ReelFeedEntry) return null;
+
+  var organicIndex = -1;
+  for (var i = 0; i <= pageIndex; i++) {
+    if (pageItems[i].organicEntry is ReelFeedEntry) {
+      organicIndex += 1;
+    }
+  }
+  return organicIndex >= 0 ? organicIndex : null;
+}
+
+int _organicCountThroughPageIndex(List<FeedPageItem> pageItems, int pageIndex) {
+  final clamped = pageIndex.clamp(0, pageItems.length - 1);
+  var count = 0;
+  for (var i = 0; i <= clamped; i++) {
+    if (pageItems[i].organicEntry is ReelFeedEntry) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+bool _shouldLoadMore(List<FeedPageItem> pageItems, int pageIndex) {
+  if (pageItems.isEmpty) return false;
+  final totalOrganic = _organicEntries(pageItems).length;
+  if (totalOrganic == 0) return false;
+
+  final boundedPage = pageIndex.clamp(0, pageItems.length - 1);
+  final organicPosition = _organicCountThroughPageIndex(pageItems, boundedPage);
+  final remainingAfterCurrent = totalOrganic - organicPosition;
+  return remainingAfterCurrent <= _loadMoreOrganicRemainingThreshold;
+}
+
+int? _pageIndexForOrganicIndex(
+  List<FeedPageItem> pageItems,
+  int organicIndex,
+) {
+  if (organicIndex < 0) return null;
+  var seenOrganic = 0;
+  for (var i = 0; i < pageItems.length; i++) {
+    if (pageItems[i].organicEntry is ReelFeedEntry) {
+      if (seenOrganic == organicIndex) {
+        return i;
+      }
+      seenOrganic += 1;
+    }
+  }
+  return null;
+}
+
+int? _nextOrganicPageIndex(List<FeedPageItem> pageItems, int startIndex) {
+  for (var i = startIndex; i < pageItems.length; i++) {
+    if (pageItems[i].organicEntry is ReelFeedEntry) {
+      return i;
+    }
+  }
+  return null;
+}
+
 /// [WidgetsBindingObserver] that fires a callback when the app returns to the
-/// foreground.  Kept as a private top-level class so it can be instantiated
+/// foreground. Kept as a private top-level class so it can be instantiated
 /// inside a flutter_hooks [useEffect] without capturing stale closures.
 class _ReelLifecycleObserver extends WidgetsBindingObserver {
   _ReelLifecycleObserver({required this.onResumed});

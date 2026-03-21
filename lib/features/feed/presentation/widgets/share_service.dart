@@ -18,7 +18,7 @@ typedef ShareCardCaptureOverride = Future<Uint8List?> Function({
   required String category,
   required String date,
   required String readTime,
-  required String imageUrl,
+  required String? imageUrl,
   required bool isVideo,
 });
 
@@ -68,7 +68,7 @@ class ShareService {
     required String category,
     required String date,
     required String readTime,
-    required String imageUrl,
+    required String? imageUrl,
     required String articleUrl,
   }) async {
     if (_isSharing) return;
@@ -211,7 +211,7 @@ class ShareService {
     required String category,
     required String date,
     required String readTime,
-    required String imageUrl,
+    required String? imageUrl,
     required bool isVideo,
   }) async {
     final completer = Completer<Uint8List?>();
@@ -219,13 +219,16 @@ class ShareService {
     OverlayEntry? overlayEntry;
     final overlay = Overlay.of(context);
     final theme = Theme.of(context);
+    final normalizedImageUrl = imageUrl?.trim();
 
     try {
-      // Pre-cache the network image
-      debugPrint('ShareService: Pre-caching image: $imageUrl');
-      final imageProvider = NetworkImage(imageUrl);
-      await precacheImage(imageProvider, context);
-      debugPrint('ShareService: Image cached');
+      if (normalizedImageUrl != null && normalizedImageUrl.isNotEmpty) {
+        // Pre-cache the network image when an article/video actually has one.
+        debugPrint('ShareService: Pre-caching image: $normalizedImageUrl');
+        final imageProvider = NetworkImage(normalizedImageUrl);
+        await precacheImage(imageProvider, context);
+        debugPrint('ShareService: Image cached');
+      }
 
       // Create the overlay entry with the card
       overlayEntry = OverlayEntry(
@@ -245,7 +248,7 @@ class ShareService {
                   category: category,
                   date: date,
                   readTime: readTime,
-                  imageUrl: imageUrl,
+                  imageUrl: normalizedImageUrl,
                   isVideo: isVideo,
                 ),
               ),
@@ -300,7 +303,7 @@ class ShareService {
     required String category,
     required String date,
     required String readTime,
-    required String imageUrl,
+    required String? imageUrl,
     required bool isVideo,
   }) {
     final colorScheme = theme.colorScheme;
@@ -341,10 +344,23 @@ class ShareService {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => ColoredBox(
+                      if (imageUrl != null && imageUrl.isNotEmpty)
+                        Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => ColoredBox(
+                            color: fallbackMediaColor,
+                            child: Center(
+                              child: Icon(
+                                Icons.image,
+                                size: 80,
+                                color: onSurfaceVariant.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ColoredBox(
                           color: fallbackMediaColor,
                           child: Center(
                             child: Icon(
@@ -354,7 +370,6 @@ class ShareService {
                             ),
                           ),
                         ),
-                      ),
                       if (isVideo)
                         Center(
                           child: Container(

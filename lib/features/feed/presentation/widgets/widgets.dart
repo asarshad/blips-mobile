@@ -4,6 +4,7 @@ library;
 export 'feed_card_frame.dart';
 export 'feed_action_pill.dart';
 export 'feed_message_state.dart';
+export 'feed_page_scroll_physics.dart';
 export 'feed_state_banner.dart';
 export 'feed_status_overlay.dart';
 export 'floating_chat_bubbles.dart';

@@ -22,7 +22,7 @@ class MemoryConfig {
   /// Number of reels to preload ahead and behind current position.
   ///
   /// Higher values provide smoother scrolling but use more memory.
-  static const int reelPreloadCount = 1;
+  static const int reelPreloadCount = 2;
 
   /// Number of long-form videos to preload ahead of current position.
   ///

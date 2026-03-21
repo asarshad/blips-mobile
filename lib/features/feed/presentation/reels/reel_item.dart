@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
+import 'package:blips_mobile/features/feed/domain/external_video_url.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
+import 'package:blips_mobile/features/feed/presentation/reels/reel_playback_tap_action.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -338,24 +340,20 @@ class ReelItem extends HookConsumerWidget {
     YoutubePlayerManagerBase videoManager,
     YTPlayerState playerState,
   ) {
-    // If error state, retry loading
-    if (playerState == YTPlayerState.error) {
-      debugPrint('Retrying failed video: ${entry.link}');
-      videoManager.retryVideo(entry.link);
-      return;
-    }
+    final action = resolveReelPlaybackTapAction(
+      hasController: controller != null,
+      playerState: playerState,
+      controllerPlayerState: controller?.value.playerState,
+    );
 
-    // If no controller yet, try to play (will trigger load)
-    if (controller == null) {
-      videoManager.playVideo(entry.link);
-      return;
-    }
-
-    // Toggle play/pause
-    if (controller.value.playerState == PlayerState.playing) {
-      videoManager.pauseVideo(entry.link);
-    } else {
-      videoManager.playVideo(entry.link);
+    switch (action) {
+      case ReelPlaybackTapAction.retry:
+        debugPrint('Retrying reel playback: ${entry.link}');
+        videoManager.retryVideo(entry.link);
+      case ReelPlaybackTapAction.pause:
+        videoManager.pauseVideo(entry.link);
+      case ReelPlaybackTapAction.play:
+        videoManager.playVideo(entry.link);
     }
   }
 
@@ -396,13 +394,25 @@ class ReelItem extends HookConsumerWidget {
     FeedSessionStore sessionStore,
   ) async {
     unawaited(_recordOpenIntent(repository, sessionStore));
-    final uri = Uri.parse(entry.link);
+    final uri = resolvePreferredExternalVideoUri(
+      sourceUrl: entry.link,
+      videoUrl: entry.videoUrl,
+      preferShorts: true,
+    );
+    if (uri == null) {
+      logger.warning(
+        'Missing launchable external reel URL',
+        category: LogCategory.app,
+        error: 'source=${entry.link} video=${entry.videoUrl}',
+      );
+      return;
+    }
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched) {
       logger.warning(
         'Failed to launch reel URL',
         category: LogCategory.app,
-        error: entry.link,
+        error: uri.toString(),
       );
     }
   }

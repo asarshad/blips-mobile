@@ -196,19 +196,19 @@ class _ArticleMedia extends StatelessWidget {
     required this.source,
   });
 
-  final String imageUrl;
+  final String? imageUrl;
   final String category;
   final String source;
 
   @override
   Widget build(BuildContext context) {
-    // Guard against empty or whitespace-only URLs that slip through
-    if (imageUrl.trim().isEmpty) {
+    final mediaUrl = imageUrl?.trim();
+    if (mediaUrl == null || mediaUrl.isEmpty) {
       return _CategoryPlaceholder(category: category, source: source);
     }
 
     return Image.network(
-      imageUrl,
+      mediaUrl,
       fit: BoxFit.cover,
       loadingBuilder: (_, child, progress) {
         if (progress == null) return child;

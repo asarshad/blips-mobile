@@ -2,6 +2,7 @@
 library ads_config_test;
 
 import 'package:blips_mobile/features/ads/domain/ads_config.dart';
+import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -50,6 +51,49 @@ void main() {
       expect(config.isSurfaceEnabled(AdSurface.articles), isTrue);
       expect(config.isSurfaceEnabled(AdSurface.videos), isFalse);
       expect(config.isSurfaceEnabled(AdSurface.reels), isTrue);
+    });
+
+    test('forceEnableFeedAds enables disabled surfaces with sane defaults', () {
+      const config = AdsConfig();
+
+      final forced = config.forceEnableFeedAds(provider: 'mock_native');
+
+      expect(forced.enabled, isTrue);
+      expect(forced.eligible, isTrue);
+      expect(forced.provider, 'mock_native');
+      expect(forced.surfaceConfig(AdSurface.articles).enabled, isTrue);
+      expect(forced.surfaceConfig(AdSurface.videos).enabled, isTrue);
+      expect(forced.surfaceConfig(AdSurface.reels).enabled, isTrue);
+      expect(forced.surfaceConfig(AdSurface.articles).frequency, 8);
+      expect(forced.surfaceConfig(AdSurface.articles).firstSlotAfter, 2);
+    });
+
+    test('forceEnableFeedAds preserves configured enabled surfaces', () {
+      const config = AdsConfig(
+        surfaces: AdsSurfacesConfig(
+          articles: AdSurfaceConfig(
+            enabled: true,
+            frequency: 5,
+            firstSlotAfter: 1,
+          ),
+        ),
+      );
+
+      final forced = config.forceEnableFeedAds();
+
+      expect(forced.surfaceConfig(AdSurface.articles).frequency, 5);
+      expect(forced.surfaceConfig(AdSurface.articles).firstSlotAfter, 1);
+      expect(forced.surfaceConfig(AdSurface.videos).frequency, 8);
+    });
+
+    test('non-production runtime modes force feed ads', () {
+      const mock = AdsRuntimeConfig(mode: AdsMode.mock);
+      const testMode = AdsRuntimeConfig(mode: AdsMode.admobTest);
+      const production = AdsRuntimeConfig(mode: AdsMode.production);
+
+      expect(mock.shouldForceFeedAds, isTrue);
+      expect(testMode.shouldForceFeedAds, isTrue);
+      expect(production.shouldForceFeedAds, isFalse);
     });
 
     group('fromJson', () {

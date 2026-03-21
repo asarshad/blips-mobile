@@ -37,7 +37,7 @@ void main() {
       summary:
           'A video used to prove share/open/chat interactions are immediate.',
       videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      link: 'https://www.youtube.com/watch?v=aaaaaaaaaaa',
+      link: 'https://www.theverge.com/2026/03/20/video-story',
       source: 'YouTube',
       category: 'Technology',
       publishedAt: DateTime.utc(2026, 3, 1),
@@ -99,7 +99,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(recordingUrlLauncher.launches, hasLength(1));
-    expect(recordingUrlLauncher.launches.single.url, video.link);
+    expect(
+      recordingUrlLauncher.launches.single.url,
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    );
 
     await settleDelayedInteraction(tester);
   });

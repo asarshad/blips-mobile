@@ -4,6 +4,8 @@ library articles_notifier_refresh_test;
 import 'dart:async';
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
+import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -206,6 +208,66 @@ void main() {
             )
             .length,
         2,
+      );
+    },
+  );
+
+  test(
+    'ArticlesNotifier refreshes resumed article metadata when preview returns the same ids',
+    () async {
+      final cache = FakeFeedCache();
+      final sessionStore = FeedSessionStore(cache);
+      await sessionStore.saveActiveSession(
+        FeedSessionSnapshot(
+          surface: FeedSurface.articles,
+          items: <FeedEntry>[
+            ArticleFeedEntry(
+              id: 1,
+              title: 'Article 1',
+              summary: 'Summary 1',
+              source: 'example.com',
+              publishedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+              url: 'https://example.com/articles/1',
+              imageUrl: null,
+              category: 'Technology',
+              readTime: 1,
+            ),
+          ],
+          currentItemId: 1,
+          lastActiveAt: DateTime.now().toUtc(),
+          headBaselineIds: const [1],
+          sessionId: 'restored-session',
+          continuationCursor: '1',
+          hasMore: true,
+          inventoryState: FeedInventoryState.healthy,
+        ),
+      );
+
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': _articlesResponse(const [1]),
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(cache),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final state = container.read(articlesFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value, hasLength(1));
+      expect(state.value!.single.id, 1);
+      expect(
+        state.value!.single.imageUrl,
+        equals('https://example.com/article_1.jpg'),
       );
     },
   );

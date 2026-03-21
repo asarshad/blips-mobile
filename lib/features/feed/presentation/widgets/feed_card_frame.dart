@@ -376,7 +376,7 @@ class _Summary extends StatelessWidget {
       ).createShader(bounds),
       blendMode: BlendMode.dstIn,
       child: Text(
-        summary,
+        summary.trim(),
         style: textTheme.bodySmall?.copyWith(
           color: colorScheme.onSurfaceVariant,
           height: AppTypography.lineHeightNormal,

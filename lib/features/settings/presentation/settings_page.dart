@@ -1,11 +1,16 @@
+import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/database/database_helper.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
 import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
+import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
+import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,6 +38,9 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final themeModeNotifier = ref.read(themeModeProvider.notifier);
+    final adsRuntimeConfig = ref.watch(adsRuntimeConfigProvider);
+    final diagnostics = ref.watch(appDiagnosticsProvider);
+    final diagnosticsConfig = ref.watch(appDiagnosticsConfigProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final isAndroidUi = _isAndroidUi(context);
     final listView = ListView(
@@ -154,6 +162,93 @@ class SettingsPage extends ConsumerWidget {
             },
           ),
         ),
+        if (adsRuntimeConfig.showTestingTools) ...[
+          SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
+          _SettingsSectionCard(
+            title: 'Ads testing',
+            subtitle: 'This build is configured for local ad validation.',
+            child: Column(
+              children: [
+                _SettingsActionTile(
+                  title: 'Ads mode',
+                  subtitle:
+                      '${adsRuntimeConfig.displayName}${adsRuntimeConfig.shouldForceFeedAds ? ' · forced slots' : ''}',
+                  icon: adsRuntimeConfig.usesMockAds
+                      ? Icons.draw_outlined
+                      : Icons.verified_outlined,
+                  onTap: null,
+                ),
+                if (adsRuntimeConfig.mode == AdsMode.admobTest) ...[
+                  const _SectionDivider(),
+                  _SettingsActionTile(
+                    title: 'Open Ad Inspector',
+                    subtitle: adsRuntimeConfig.testDeviceIds.isEmpty
+                        ? 'Launch the Google inspector if this device is registered as a test device.'
+                        : 'Launch the Google inspector for this registered test device.',
+                    icon: Icons.ad_units_rounded,
+                    onTap: () => _openAdInspector(context),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        if (diagnosticsConfig.enabled) ...[
+          SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
+          _SettingsSectionCard(
+            title: 'Diagnostics',
+            subtitle: 'Structured app traces for refresh, pagination, and '
+                'feed recovery.',
+            child: Column(
+              children: [
+                _SettingsActionTile(
+                  title: 'Diagnostics status',
+                  subtitle:
+                      '${diagnostics.count} events buffered${diagnostics.latest == null ? '' : ' · latest ${diagnostics.latest!.action}/${diagnostics.latest!.stage}'}',
+                  icon: Icons.bug_report_outlined,
+                  onTap: null,
+                ),
+                const _SectionDivider(),
+                _SettingsActionTile(
+                  title: 'Copy diagnostics log',
+                  subtitle:
+                      'Copies the latest app trace lines for sharing or review.',
+                  icon: Icons.copy_all_outlined,
+                  onTap: () async {
+                    await Clipboard.setData(
+                      ClipboardData(
+                        text: diagnostics.exportText(limit: 120),
+                      ),
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Diagnostics copied to clipboard'),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const _SectionDivider(),
+                _SettingsActionTile(
+                  title: 'Clear diagnostics',
+                  subtitle: 'Clears the in-memory diagnostics buffer.',
+                  icon: Icons.delete_sweep_outlined,
+                  onTap: () {
+                    diagnostics.clear();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Diagnostics cleared'),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
         if (kIsDevMode) ...[
           SizedBox(height: isAndroidUi ? AppSpacing.lg : AppSpacing.xl),
           _SettingsSectionCard(
@@ -247,6 +342,15 @@ class SettingsPage extends ConsumerWidget {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  Future<void> _openAdInspector(BuildContext context) async {
+    MobileAds.instance.openAdInspector((error) {
+      if (!context.mounted || error == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ad Inspector failed: ${error.message}')),
+      );
+    });
   }
 
   Future<void> _confirmDeleteMyData(BuildContext context, WidgetRef ref) async {
@@ -510,14 +614,14 @@ class _SettingsActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.onTap,
+    this.onTap,
     this.accentColor,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color? accentColor;
 
   @override
@@ -580,11 +684,12 @@ class _SettingsActionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Icon(
-                Icons.arrow_outward_rounded,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
-                size: AppSizes.iconSm,
-              ),
+              if (onTap != null)
+                Icon(
+                  Icons.arrow_outward_rounded,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+                  size: AppSizes.iconSm,
+                ),
             ],
           ),
         ),
@@ -778,74 +883,99 @@ class _ThemeModeTilePreview extends StatelessWidget {
       AppThemeMode.system => throw UnimplementedError(),
     };
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: palette.background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Column(
-          children: [
-            Container(
-              height: 7,
-              decoration: BoxDecoration(
-                color: palette.surface,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: palette.border.withValues(alpha: 0.18),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(
-                    color: palette.border.withValues(alpha: 0.18),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final outerPadding = constraints.maxHeight < 50 ? 4.0 : 6.0;
+        final headerHeight = constraints.maxHeight < 50 ? 5.0 : 7.0;
+        final headerGap = constraints.maxHeight < 50 ? 4.0 : 6.0;
+        final innerPadding = constraints.maxHeight < 50 ? 4.0 : 6.0;
+        final lineHeight = constraints.maxHeight < 50 ? 3.0 : 4.0;
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: palette.background,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(outerPadding),
+            child: Column(
+              children: [
+                Container(
+                  height: headerHeight,
+                  decoration: BoxDecoration(
+                    color: palette.surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: palette.border.withValues(alpha: 0.18),
+                    ),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 18,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: palette.primary,
-                        borderRadius: BorderRadius.circular(AppRadius.full),
+                SizedBox(height: headerGap),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(innerPadding),
+                    decoration: BoxDecoration(
+                      color: palette.surface,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: palette.border.withValues(alpha: 0.18),
                       ),
                     ),
-                    const Spacer(),
-                    Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: palette.surfaceAlt,
-                        borderRadius: BorderRadius.circular(AppRadius.full),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    FractionallySizedBox(
-                      widthFactor: 0.58,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: palette.textMuted.withValues(alpha: 0.32),
-                          borderRadius: BorderRadius.circular(AppRadius.full),
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: Alignment.topLeft,
+                          child: Container(
+                            width: 18,
+                            height: lineHeight,
+                            decoration: BoxDecoration(
+                              color: palette.primary,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.full),
+                            ),
+                          ),
                         ),
-                      ),
+                        Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                height: lineHeight,
+                                decoration: BoxDecoration(
+                                  color: palette.surfaceAlt,
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.full),
+                                ),
+                              ),
+                              SizedBox(height: lineHeight - 1),
+                              FractionallySizedBox(
+                                widthFactor: 0.58,
+                                child: Container(
+                                  height: lineHeight,
+                                  decoration: BoxDecoration(
+                                    color: palette.textMuted
+                                        .withValues(alpha: 0.32),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.full,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -930,56 +1060,69 @@ class _SystemMiniCard extends StatelessWidget {
     final muted =
         isDark ? Colors.white.withValues(alpha: 0.28) : const Color(0xFF94A3B8);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: border),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        children: [
-          Container(
-            height: 5,
-            decoration: BoxDecoration(
-              color: surface,
-              borderRadius: BorderRadius.circular(4),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final padding = constraints.maxHeight < 28 ? 3.0 : 4.0;
+        final headerHeight = constraints.maxHeight < 28 ? 4.0 : 5.0;
+        final gap = constraints.maxHeight < 28 ? 3.0 : 4.0;
+        final lineHeight = constraints.maxHeight < 28 ? 2.0 : 3.0;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border),
           ),
-          const SizedBox(height: 4),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(5),
+          padding: EdgeInsets.all(padding),
+          child: Column(
+            children: [
+              Container(
+                height: headerHeight,
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
-              padding: const EdgeInsets.all(4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 12,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: strong,
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                    ),
+              SizedBox(height: gap),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(5),
                   ),
-                  const Spacer(),
-                  Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: muted,
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                    ),
+                  padding: EdgeInsets.all(padding),
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: Container(
+                          width: 12,
+                          height: lineHeight,
+                          decoration: BoxDecoration(
+                            color: strong,
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Container(
+                          height: lineHeight,
+                          decoration: BoxDecoration(
+                            color: muted,
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

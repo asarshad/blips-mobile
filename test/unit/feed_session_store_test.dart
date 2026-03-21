@@ -53,6 +53,36 @@ FeedSessionSnapshot _snapshot({
 }
 
 void main() {
+  test('markExposed and markConsumed work with empty local history', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-18T18:00:00Z');
+
+    await store.markExposed(
+      FeedSurface.articles,
+      99,
+      at: now,
+    );
+    await store.markConsumed(
+      FeedSurface.videos,
+      42,
+      at: now,
+    );
+
+    expect(
+      await store.getRecentlyExposedIds(FeedSurface.articles, now: now),
+      contains(99),
+    );
+    expect(
+      await store.getRecentlyExposedIds(FeedSurface.videos, now: now),
+      contains(42),
+    );
+    expect(
+      await store.getRecentlyConsumedIds(FeedSurface.videos, now: now),
+      contains(42),
+    );
+  });
+
   test('prepareRestore resumes same-day session within 2 hours', () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
@@ -121,5 +151,41 @@ void main() {
       await store.getActiveSession(FeedSurface.articles),
       isNull,
     );
+  });
+
+  test('active session restores stable fallback image URLs', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final snapshot = FeedSessionSnapshot(
+      surface: FeedSurface.articles,
+      items: <FeedEntry>[
+        ArticleFeedEntry(
+          id: 1,
+          title: 'Article 1',
+          summary: 'Summary 1',
+          source: 'Source',
+          publishedAt: DateTime.parse('2026-03-18T09:00:00Z'),
+          url: 'https://example.com/1',
+          imageUrl: null,
+          category: 'Technology',
+          readTime: 3,
+        ),
+      ],
+      currentItemId: 1,
+      lastActiveAt: DateTime.parse('2026-03-18T18:00:00Z'),
+      headBaselineIds: const [1],
+      sessionId: 'session-1',
+      continuationCursor: '15',
+      hasMore: true,
+      inventoryState: FeedInventoryState.healthy,
+    );
+
+    await store.saveActiveSession(snapshot);
+    final restored = await store.getActiveSession(FeedSurface.articles);
+
+    expect(restored, isNotNull);
+    final article = restored!.items.single as ArticleFeedEntry;
+    expect(article.imageUrl, isNotNull);
+    expect(article.imageUrl, contains('unsplash'));
   });
 }

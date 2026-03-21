@@ -94,6 +94,7 @@ class _ChatListItem extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    final imageUrl = chat.article.imageUrl?.trim();
 
     return Dismissible(
       key: ValueKey(chat.articleId),
@@ -135,7 +136,7 @@ class _ChatListItem extends StatelessWidget {
       child: InkWell(
         onTap: () {
           Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (context) => ChatDetailPage(
                 article: chat.article,
                 existingConversation: chat,
@@ -161,21 +162,31 @@ class _ChatListItem extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: AppRadius.borderMd,
-                child: Image.network(
-                  chat.article.imageUrl,
-                  width: AppSizes.thumbnailSm,
-                  height: AppSizes.thumbnailSm,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: AppSizes.thumbnailSm,
-                    height: AppSizes.thumbnailSm,
-                    color: colorScheme.surfaceContainerHighest,
-                    child: Icon(
-                      Icons.article,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
+                child: imageUrl != null && imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        width: AppSizes.thumbnailSm,
+                        height: AppSizes.thumbnailSm,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: AppSizes.thumbnailSm,
+                          height: AppSizes.thumbnailSm,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: Icon(
+                            Icons.article,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: AppSizes.thumbnailSm,
+                        height: AppSizes.thumbnailSm,
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.article,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 
-/// Compact tappable pill shown at the top of feed surfaces for freshness
-/// actions, such as loading newly available items.
+enum FeedActionPillPlacement { top, bottom }
+
+/// Compact tappable pill shown on feed surfaces for freshness actions, such as
+/// loading newly available items.
 class FeedActionPill extends StatelessWidget {
   const FeedActionPill({
     super.key,
     required this.label,
     required this.onTap,
     this.dark = false,
+    this.placement = FeedActionPillPlacement.top,
   });
 
   final String label;
   final VoidCallback onTap;
   final bool dark;
+  final FeedActionPillPlacement placement;
 
   @override
   Widget build(BuildContext context) {
@@ -22,11 +26,17 @@ class FeedActionPill extends StatelessWidget {
         : colorScheme.surface.withValues(alpha: 0.96);
     final foreground = dark ? Colors.white : colorScheme.onSurface;
 
+    final verticalPadding = switch (placement) {
+      FeedActionPillPlacement.top => const EdgeInsets.only(top: 12),
+      FeedActionPillPlacement.bottom => const EdgeInsets.only(bottom: 72),
+    };
+
     return SafeArea(
-      bottom: false,
+      top: placement == FeedActionPillPlacement.top,
+      bottom: placement == FeedActionPillPlacement.bottom,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: verticalPadding,
           child: Material(
             color: Colors.transparent,
             child: InkWell(

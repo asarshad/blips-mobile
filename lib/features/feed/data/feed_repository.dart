@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
@@ -52,9 +53,10 @@ abstract final class FeedInteractionEvent {
 /// Repository responsible for loading feed items from the backend.
 class FeedRepository {
   /// Creates the repository with the provided API client.
-  FeedRepository(this._api);
+  FeedRepository(this._api, [this._diagnostics]);
 
   final BackendApiClient _api;
+  final AppDiagnosticsController? _diagnostics;
   static const String _sessionPlaylistPath = '/session/playlist';
   static const String _interactionPath = '/session/interactions';
 
@@ -202,44 +204,89 @@ class FeedRepository {
     required int page,
     required int size,
     RequestMode requestMode = RequestMode.normal,
+    bool captureSessionState = true,
   }) async {
     final query = <String, dynamic>{
       'type': type,
       'size': size,
       if (page > 1) ..._sessionContinuationQuery(type),
     };
-
-    final response = await _api.get(
-      _sessionPlaylistPath,
-      queryParameters: query,
-      requestMode: requestMode,
+    final span = _diagnostics?.startSpan(
+      scope: 'feed.repository',
+      action: 'sessionPlaylist',
+      surface: _surfaceLabelForType(type),
+      data: <String, Object?>{
+        'page': page,
+        'size': size,
+        'requestMode': requestMode.name,
+        'captureSessionState': captureSessionState,
+        if (query.containsKey('session_id')) 'sessionId': query['session_id'],
+        if (query.containsKey('cursor')) 'cursor': query['cursor'],
+      },
     );
-    final items = (response['items'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>();
 
-    _captureSessionState(
-      type: type,
-      sessionId: response['session_id'] as String?,
-      cursor: response['cursor'] as int?,
-    );
-
-    final parsed = _parsePlaylistItems(items);
-    if (parsed.isNotEmpty) {
-      final hasMore = response['has_more'] as bool? ?? true;
-      return FeedPageResult(
-        items: parsed,
-        hasMore: hasMore,
-        inventoryState: _parseInventoryState(
-          value: response['inventory_state'] as String?,
-          hasMore: hasMore,
-          itemCount: parsed.length,
-        ),
-        sessionId: response['session_id'] as String?,
+    try {
+      final response = await _api.get(
+        _sessionPlaylistPath,
+        queryParameters: query,
+        requestMode: requestMode,
       );
-    }
+      final items = (response['items'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>();
 
-    // Backward-compatible fallback for environments without /session/playlist support.
-    return _fetchLegacyFeedPage(type: type, page: page, size: size);
+      if (captureSessionState) {
+        _captureSessionState(
+          type: type,
+          sessionId: response['session_id'] as String?,
+          cursor: response['cursor'] as int?,
+        );
+      }
+
+      final parsed = _parsePlaylistItems(items);
+      if (parsed.isNotEmpty) {
+        final hasMore = response['has_more'] as bool? ?? true;
+        span?.success(
+          data: <String, Object?>{
+            'itemCount': parsed.length,
+            'hasMore': hasMore,
+            'sessionId': response['session_id'] as String? ?? '',
+            'cursor': response['cursor'] as int?,
+            'inventoryState':
+                response['inventory_state'] as String? ?? 'unknown',
+          },
+        );
+        return FeedPageResult(
+          items: parsed,
+          hasMore: hasMore,
+          inventoryState: _parseInventoryState(
+            value: response['inventory_state'] as String?,
+            hasMore: hasMore,
+            itemCount: parsed.length,
+          ),
+          sessionId: response['session_id'] as String?,
+        );
+      }
+
+      span?.step(
+        'legacyFallback',
+        level: AppDiagnosticsLevel.warning,
+        message: 'Session playlist empty; falling back to legacy endpoint',
+      );
+      // Backward-compatible fallback for environments without /session/playlist support.
+      final fallback =
+          await _fetchLegacyFeedPage(type: type, page: page, size: size);
+      span?.success(
+        stage: 'legacySuccess',
+        data: <String, Object?>{
+          'itemCount': fallback.items.length,
+          'hasMore': fallback.hasMore,
+        },
+      );
+      return fallback;
+    } catch (error, stackTrace) {
+      span?.failure(error, stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   Future<FeedPageResult<FeedEntry>> previewArticlesHead({
@@ -269,23 +316,13 @@ class FeedRepository {
     required int size,
     required RequestMode requestMode,
   }) async {
-    final savedArticleSessionId = _articleSessionId;
-    final savedArticleCursor = _articleCursor;
-    final savedVideoSessionId = _videoSessionId;
-    final savedVideoCursor = _videoCursor;
-    try {
-      return await _fetchSessionPlaylist(
-        type: type,
-        page: 1,
-        size: size,
-        requestMode: requestMode,
-      );
-    } finally {
-      _articleSessionId = savedArticleSessionId;
-      _articleCursor = savedArticleCursor;
-      _videoSessionId = savedVideoSessionId;
-      _videoCursor = savedVideoCursor;
-    }
+    return _fetchSessionPlaylist(
+      type: type,
+      page: 1,
+      size: size,
+      requestMode: requestMode,
+      captureSessionState: false,
+    );
   }
 
   Map<String, dynamic> _sessionContinuationQuery(String type) {
@@ -448,9 +485,21 @@ class FeedRepository {
     String? cursor,
     int limit = 20,
     RequestMode requestMode = RequestMode.normal,
+    bool captureCursorState = true,
   }) async {
+    final span = _diagnostics?.startSpan(
+      scope: 'feed.repository',
+      action: 'reelsPage',
+      surface: 'reels',
+      data: <String, Object?>{
+        'cursor': cursor ?? '',
+        'limit': limit,
+        'requestMode': requestMode.name,
+        'captureCursorState': captureCursorState,
+      },
+    );
     try {
-      if (cursor == null) {
+      if (captureCursorState && cursor == null) {
         _reelsCursor = null;
       }
 
@@ -475,7 +524,17 @@ class FeedRepository {
       final currentOffset = int.tryParse(cursor ?? '0') ?? 0;
       final nextCursor = response['next_cursor'] as String? ??
           (hasMore ? '${currentOffset + limit}' : null);
-      _reelsCursor = nextCursor;
+      if (captureCursorState) {
+        _reelsCursor = nextCursor;
+      }
+      span?.success(
+        data: <String, Object?>{
+          'itemCount': items.length,
+          'hasMore': hasMore,
+          'nextCursor': nextCursor ?? '',
+          'inventoryState': response['inventory_state'] as String? ?? 'unknown',
+        },
+      );
       return FeedPageResult(
         items: items,
         hasMore: hasMore,
@@ -488,8 +547,10 @@ class FeedRepository {
         servedAt: _parseServedAt(response['served_at']),
       );
     } on DioException catch (e, stack) {
+      span?.failure(e, stackTrace: stack);
       throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
     } catch (e, stack) {
+      span?.failure(e, stackTrace: stack);
       throw DataException.fromParseError(e, stack);
     }
   }
@@ -498,16 +559,12 @@ class FeedRepository {
     int limit = 20,
     RequestMode requestMode = RequestMode.normal,
   }) async {
-    final savedCursor = _reelsCursor;
-    try {
-      return await fetchReelsPage(
-        cursor: null,
-        limit: limit,
-        requestMode: requestMode,
-      );
-    } finally {
-      _reelsCursor = savedCursor;
-    }
+    return fetchReelsPage(
+      cursor: null,
+      limit: limit,
+      requestMode: requestMode,
+      captureCursorState: false,
+    );
   }
 
   Future<void> recordInteraction({
@@ -587,5 +644,13 @@ class FeedRepository {
     if (a == null) return b;
     if (b == null) return a;
     return a.isAfter(b) ? a : b;
+  }
+
+  String _surfaceLabelForType(String type) {
+    return switch (type) {
+      'ARTICLE' => 'articles',
+      'VIDEO' => 'videos',
+      _ => type.toLowerCase(),
+    };
   }
 }

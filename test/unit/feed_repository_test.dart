@@ -194,6 +194,137 @@ void main() {
           page.servedAt?.toUtc().toIso8601String(), '2025-01-04T01:00:00.000Z');
     });
 
+    test(
+      'previewVideosHead does not overwrite live video continuation state',
+      () async {
+        final api = FakeBackendApiClient(
+          queuedResponses: {
+            '/session/playlist': [
+              {
+                'items': [
+                  {
+                    'id': 10,
+                    'type': 'VIDEO',
+                    'title': 'Video p1',
+                    'video_url': 'https://cdn.example.com/v10.mp4',
+                    'source_url': 'https://youtube.com/watch?v=v10',
+                    'source': 'YouTube',
+                    'published_at': '2025-01-03T00:00:00Z',
+                  },
+                ],
+                'session_id': 'video-session',
+                'cursor': 10,
+                'has_more': true,
+              },
+              {
+                'items': [
+                  {
+                    'id': 999,
+                    'type': 'VIDEO',
+                    'title': 'Preview video',
+                    'video_url': 'https://cdn.example.com/v999.mp4',
+                    'source_url': 'https://youtube.com/watch?v=v999',
+                    'source': 'YouTube',
+                    'published_at': '2025-01-04T00:00:00Z',
+                  },
+                ],
+                'session_id': 'preview-session',
+                'cursor': 999,
+                'has_more': true,
+              },
+              {
+                'items': [
+                  {
+                    'id': 11,
+                    'type': 'VIDEO',
+                    'title': 'Video p2',
+                    'video_url': 'https://cdn.example.com/v11.mp4',
+                    'source_url': 'https://youtube.com/watch?v=v11',
+                    'source': 'YouTube',
+                    'published_at': '2025-01-02T00:00:00Z',
+                  },
+                ],
+                'session_id': 'video-session',
+                'cursor': 20,
+                'has_more': true,
+              },
+            ],
+          },
+        );
+
+        final repo = FeedRepository(api);
+        await repo.fetchVideosPage();
+        await repo.previewVideosHead();
+        await repo.fetchVideosPage(page: 2);
+
+        expect(api.requests.length, 3);
+        expect(api.requests[2].queryParameters?['session_id'], 'video-session');
+        expect(api.requests[2].queryParameters?['cursor'], 10);
+      },
+    );
+
+    test('previewReelsHead does not overwrite live reels cursor', () async {
+      final api = FakeBackendApiClient(
+        queuedResponses: {
+          '/videos/reels': [
+            {
+              'items': [
+                {
+                  'id': 77,
+                  'title': 'Reel 77',
+                  'video_url': 'https://youtube.com/watch?v=reel77',
+                  'source_url': 'https://youtube.com/watch?v=reel77',
+                  'source': 'YouTube',
+                  'published_at': '2025-01-04T00:00:00Z',
+                  'duration_seconds': 42,
+                },
+              ],
+              'next_cursor': '20',
+              'has_more': true,
+            },
+            {
+              'items': [
+                {
+                  'id': 88,
+                  'title': 'Preview reel',
+                  'video_url': 'https://youtube.com/watch?v=reel88',
+                  'source_url': 'https://youtube.com/watch?v=reel88',
+                  'source': 'YouTube',
+                  'published_at': '2025-01-05T00:00:00Z',
+                  'duration_seconds': 55,
+                },
+              ],
+              'next_cursor': '999',
+              'has_more': true,
+            },
+            {
+              'items': [
+                {
+                  'id': 99,
+                  'title': 'Reel 99',
+                  'video_url': 'https://youtube.com/watch?v=reel99',
+                  'source_url': 'https://youtube.com/watch?v=reel99',
+                  'source': 'YouTube',
+                  'published_at': '2025-01-06T00:00:00Z',
+                  'duration_seconds': 65,
+                },
+              ],
+              'next_cursor': '40',
+              'has_more': true,
+            },
+          ],
+        },
+      );
+
+      final repo = FeedRepository(api);
+      await repo.fetchReelsPage(limit: 20);
+      await repo.previewReelsHead(limit: 20);
+      await repo.fetchReelsPage(cursor: repo.reelsCursor, limit: 20);
+
+      expect(api.requests.length, 3);
+      expect(api.requests[2].queryParameters?['cursor'], '20');
+    });
+
     test('recordInteraction posts the expected payload', () async {
       final api = FakeBackendApiClient(
         responses: {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
+import 'package:blips_mobile/features/feed/domain/external_video_url.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
@@ -257,7 +258,6 @@ class VideoCard extends HookConsumerWidget {
           onLongPress: () =>
               _showActionsSheet(context, feedRepository, sessionStore),
           onOpenLink: () => _openInBrowser(
-            url: entry.link,
             repository: feedRepository,
             sessionStore: sessionStore,
           ),
@@ -321,18 +321,28 @@ class VideoCard extends HookConsumerWidget {
   }
 
   Future<void> _openInBrowser({
-    required String url,
     required FeedRepository repository,
     required FeedSessionStore sessionStore,
   }) async {
     unawaited(_recordOpenIntent(repository, sessionStore));
-    final uri = Uri.parse(url);
+    final uri = resolvePreferredExternalVideoUri(
+      sourceUrl: entry.link,
+      videoUrl: entry.videoUrl,
+    );
+    if (uri == null) {
+      logger.warning(
+        'Missing launchable external video URL',
+        category: LogCategory.app,
+        error: 'source=${entry.link} video=${entry.videoUrl}',
+      );
+      return;
+    }
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched) {
       logger.warning(
         'Failed to launch video URL',
         category: LogCategory.app,
-        error: url,
+        error: uri.toString(),
       );
     }
   }

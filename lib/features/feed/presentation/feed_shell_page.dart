@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
 import 'package:blips_mobile/core/theme/theme.dart';
@@ -243,10 +244,21 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       final listener = AppLifecycleListener(
         onResume: () {
+          final diagnostics = ref.read(appDiagnosticsProvider);
           final now = DateTime.now();
           final last = lastRefreshAt.value;
           if (last != null &&
               now.difference(last) < const Duration(seconds: 45)) {
+            diagnostics.record(
+              scope: 'feed.shell',
+              action: 'resumeRefresh',
+              stage: 'skipped',
+              level: AppDiagnosticsLevel.info,
+              data: <String, Object?>{
+                'currentIndex': currentIndex,
+                'reason': 'cooldown',
+              },
+            );
             return;
           }
           lastRefreshAt.value = now;
@@ -254,6 +266,19 @@ class FeedShellPage extends HookConsumerWidget {
           if (ref.read(appConfigRepositoryProvider).isCacheStale) {
             ref.invalidate(adsConfigProvider);
           }
+
+          diagnostics.record(
+            scope: 'feed.shell',
+            action: 'resumeRefresh',
+            stage: 'start',
+            surface: switch (currentIndex) {
+              0 => 'articles',
+              1 => 'videos',
+              2 => 'reels',
+              _ => null,
+            },
+            data: <String, Object?>{'currentIndex': currentIndex},
+          );
 
           switch (currentIndex) {
             case 0:
@@ -310,15 +335,32 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller,
   ) {
+    final diagnostics = ref.read(appDiagnosticsProvider);
+    final span = diagnostics.startSpan(
+      scope: 'feed.shell',
+      action: 'manualRefresh',
+      surface: 'articles',
+      data: <String, Object?>{'trigger': 'tabRetap'},
+    );
     unawaited(
       ref.read(articlesFeedProvider.notifier).manualRefresh().then((ok) {
         if (ok && controller.hasClients) {
+          span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
         } else if (!ok) {
+          span.step(
+            'uiFailure',
+            level: AppDiagnosticsLevel.warning,
+            message: 'Showing retry snackbar',
+          );
           _showRetrySnackbar(context, 'Articles refresh failed.', () {
             _refreshArticlesManually(ref, context, controller);
           });
+        } else {
+          span.success(data: <String, Object?>{'jumpedToTop': false});
         }
+      }).catchError((Object error, StackTrace stackTrace) {
+        span.failure(error, stackTrace: stackTrace);
       }),
     );
   }
@@ -328,15 +370,32 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller,
   ) {
+    final diagnostics = ref.read(appDiagnosticsProvider);
+    final span = diagnostics.startSpan(
+      scope: 'feed.shell',
+      action: 'manualRefresh',
+      surface: 'videos',
+      data: <String, Object?>{'trigger': 'tabRetap'},
+    );
     unawaited(
       ref.read(videosFeedProvider.notifier).manualRefresh().then((ok) {
         if (ok && controller.hasClients) {
+          span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
         } else if (!ok) {
+          span.step(
+            'uiFailure',
+            level: AppDiagnosticsLevel.warning,
+            message: 'Showing retry snackbar',
+          );
           _showRetrySnackbar(context, 'Videos refresh failed.', () {
             _refreshVideosManually(ref, context, controller);
           });
+        } else {
+          span.success(data: <String, Object?>{'jumpedToTop': false});
         }
+      }).catchError((Object error, StackTrace stackTrace) {
+        span.failure(error, stackTrace: stackTrace);
       }),
     );
   }
@@ -346,15 +405,32 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller,
   ) {
+    final diagnostics = ref.read(appDiagnosticsProvider);
+    final span = diagnostics.startSpan(
+      scope: 'feed.shell',
+      action: 'manualRefresh',
+      surface: 'reels',
+      data: <String, Object?>{'trigger': 'tabRetap'},
+    );
     unawaited(
       ref.read(reelsFeedProvider.notifier).manualRefresh().then((ok) {
         if (ok && controller.hasClients) {
+          span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
         } else if (!ok) {
+          span.step(
+            'uiFailure',
+            level: AppDiagnosticsLevel.warning,
+            message: 'Showing retry snackbar',
+          );
           _showRetrySnackbar(context, 'Reels refresh failed.', () {
             _refreshReelsManually(ref, context, controller);
           });
+        } else {
+          span.success(data: <String, Object?>{'jumpedToTop': false});
         }
+      }).catchError((Object error, StackTrace stackTrace) {
+        span.failure(error, stackTrace: stackTrace);
       }),
     );
   }

@@ -7,9 +7,12 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+const _loadMoreOrganicRemainingThreshold = 5;
 
 /// Generic vertical-scrolling feed tab with pagination support.
 ///
@@ -200,7 +203,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       if (entries == null || entries.isEmpty || onLoadMore == null) {
         return null;
       }
-      if (currentPage.value < entries.length - 3) {
+      if (!_shouldLoadMore(entries, currentPage.value)) {
         return null;
       }
 
@@ -214,7 +217,13 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       bottom: false,
       child: feed.when(
         data: (entries) => _buildFeedContent(
-            entries, effectiveController, videoManager, hasVideos, currentPage),
+          context,
+          entries,
+          effectiveController,
+          videoManager,
+          hasVideos,
+          currentPage,
+        ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => ErrorView(
           error: error,
@@ -248,6 +257,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   }
 
   Widget _buildFeedContent(
+    BuildContext context,
     List<T> entries,
     PageController controller,
     YoutubePlayerManagerBase videoManager,
@@ -272,9 +282,9 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
         PageView.builder(
           controller: controller,
           scrollDirection: Axis.vertical,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
+          dragStartBehavior: DragStartBehavior.down,
+          pageSnapping: true,
+          physics: buildFeedPagePhysics(context),
           onPageChanged: (index) {
             currentPage.value = index;
             _handlePageChange(index, entries, videoManager, hasVideos);
@@ -287,13 +297,14 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
         ),
         if (showTopAction)
           Positioned(
-            top: 0,
+            bottom: 0,
             left: 0,
             right: 0,
             child: FeedActionPill(
               label: topActionLabel!,
               onTap: onTopAction!,
               dark: topActionDark,
+              placement: FeedActionPillPlacement.bottom,
             ),
           ),
         FeedStatusOverlay(
@@ -301,7 +312,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
               '$overlayLabel ${overlayData.position}/${overlayData.total}${overlayHasMore ? '+' : ''}',
           subtitle: overlayData.subtitle,
           dark: overlayDark,
-          topInset: showTopAction ? 50 : 0,
         ),
         if (showCaughtUpBanner)
           Positioned(
@@ -329,13 +339,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
     final boundedPage = currentPage.clamp(0, entries.length - 1);
     final currentOrganic = entries[boundedPage].organicEntry;
-    var organicPosition = 0;
-
-    for (var i = 0; i <= boundedPage; i += 1) {
-      if (entries[i].organicEntry != null) {
-        organicPosition += 1;
-      }
-    }
+    var organicPosition = _organicCountThroughPageIndex(entries, boundedPage);
 
     if (organicPosition <= 0) {
       organicPosition = 1;
@@ -371,9 +375,19 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     }
 
     // Pagination
-    if (onLoadMore != null && index >= entries.length - 3) {
+    if (onLoadMore != null && _shouldLoadMore(entries, index)) {
       Future.microtask(() => onLoadMore!());
     }
+  }
+
+  bool _shouldLoadMore(List<T> entries, int pageIndex) {
+    final totalOrganic =
+        entries.where((entry) => entry.organicEntry != null).length;
+    if (totalOrganic == 0) return false;
+    final boundedPage = pageIndex.clamp(0, entries.length - 1);
+    final organicPosition = _organicCountThroughPageIndex(entries, boundedPage);
+    final remainingAfterCurrent = totalOrganic - organicPosition;
+    return remainingAfterCurrent <= _loadMoreOrganicRemainingThreshold;
   }
 
   int? _resolveRestorePageIndex(
@@ -412,6 +426,16 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       }
     }
     return 0;
+  }
+
+  int _organicCountThroughPageIndex(List<T> entries, int pageIndex) {
+    var count = 0;
+    for (var i = 0; i <= pageIndex; i += 1) {
+      if (entries[i].organicEntry != null) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   void _handleVideoPreloading(

@@ -37,6 +37,9 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Critical interaction tests
+        run: bash tool/ci/run_critical_interactions.sh
+
       - name: Unit/Widget/Golden tests
         run: flutter test --exclude-tags=integration --exclude-tags=manual
 

@@ -156,5 +156,28 @@ void main() {
 
       expect(find.text('Recently Added Article'), findsOneWidget);
     });
+
+    testWidgets('does not truncate long summaries on the client',
+        (tester) async {
+      final words = List<String>.generate(91, (index) => 'word${index + 1}');
+      final longSummary = words.join(' ');
+
+      final longEntry = ArticleFeedEntry(
+        id: 5,
+        title: 'Long Summary Article',
+        summary: longSummary,
+        source: 'Clamp Source',
+        publishedAt: DateTime(2025, 2, 10),
+        url: 'https://example.com/long-summary',
+        imageUrl: 'https://example.com/long-summary.jpg',
+        category: 'Technology',
+        readTime: 4,
+      );
+
+      await tester.pumpWidget(buildTestWidget(longEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('word86'), findsOneWidget);
+    });
   });
 }

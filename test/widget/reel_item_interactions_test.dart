@@ -34,8 +34,8 @@ void main() {
       id: 42,
       title: 'Reel interaction contract',
       summary: 'A short reel used to prove immediate actions.',
-      videoUrl: 'https://www.youtube.com/watch?v=abc123xyz99',
-      link: 'https://www.youtube.com/shorts/abc123xyz99',
+      videoUrl: 'https://www.youtube.com/shorts/abc123xyz99',
+      link: 'https://www.theverge.com/2026/03/20/reel-story',
       source: 'Test Creator',
       publishedAt: DateTime.utc(2026, 3, 1),
       thumbnailUrl: 'https://example.com/reel.jpg',
@@ -107,7 +107,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(recordingUrlLauncher.launches, hasLength(1));
-    expect(recordingUrlLauncher.launches.single.url, reel.link);
+    expect(
+      recordingUrlLauncher.launches.single.url,
+      'https://www.youtube.com/shorts/abc123xyz99',
+    );
 
     await settleDelayedInteraction(tester);
   });

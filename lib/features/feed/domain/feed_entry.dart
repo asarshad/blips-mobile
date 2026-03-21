@@ -49,7 +49,7 @@ class ArticleFeedEntry extends FeedEntry {
     required this.source,
     required this.publishedAt,
     required this.url,
-    required this.imageUrl,
+    this.imageUrl,
     required this.category,
     required this.readTime,
     List<String> tags = const <String>[],
@@ -93,8 +93,8 @@ class ArticleFeedEntry extends FeedEntry {
   /// Canonical article URL used when opening in browser.
   final String url;
 
-  /// Hero image displayed behind the card contents.
-  final String imageUrl;
+  /// Optional hero image displayed behind the card contents.
+  final String? imageUrl;
 
   /// Category label used for chips.
   final String category;
