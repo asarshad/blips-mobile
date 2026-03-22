@@ -350,10 +350,18 @@ class FeedShellPage extends HookConsumerWidget {
       (fromNewItems
               ? notifier.openPendingNewContent()
               : notifier.manualRefresh())
-          .then((ok) {
+          .then((ok) async {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          controller.jumpToPage(0);
+          if (fromNewItems) {
+            await controller.animateToPage(
+              0,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          } else {
+            controller.jumpToPage(0);
+          }
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -392,10 +400,18 @@ class FeedShellPage extends HookConsumerWidget {
       (fromNewItems
               ? notifier.openPendingNewContent()
               : notifier.manualRefresh())
-          .then((ok) {
+          .then((ok) async {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          controller.jumpToPage(0);
+          if (fromNewItems) {
+            await controller.animateToPage(
+              0,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          } else {
+            controller.jumpToPage(0);
+          }
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -434,10 +450,18 @@ class FeedShellPage extends HookConsumerWidget {
       (fromNewItems
               ? notifier.openPendingNewContent()
               : notifier.manualRefresh())
-          .then((ok) {
+          .then((ok) async {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          controller.jumpToPage(0);
+          if (fromNewItems) {
+            await controller.animateToPage(
+              0,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          } else {
+            controller.jumpToPage(0);
+          }
         } else if (!ok) {
           span.step(
             'uiFailure',

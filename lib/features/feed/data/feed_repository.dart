@@ -18,6 +18,7 @@ class FeedPageResult<T extends FeedEntry> {
     required this.hasMore,
     required this.inventoryState,
     this.nextCursor,
+    this.sessionCursor,
     this.servedAt,
     this.sessionId,
     this.feedVersion,
@@ -29,6 +30,7 @@ class FeedPageResult<T extends FeedEntry> {
   final bool hasMore;
   final FeedInventoryState inventoryState;
   final String? nextCursor;
+  final int? sessionCursor;
   final DateTime? servedAt;
   final String? sessionId;
   final String? feedVersion;
@@ -283,6 +285,7 @@ class FeedRepository {
             itemCount: parsed.length,
           ),
           sessionId: response['session_id'] as String?,
+          sessionCursor: response['cursor'] as int?,
           servedAt: _parseServedAt(response['served_at']),
           feedVersion: response['feed_version'] as String?,
           newestPublishedAt: _parseServedAt(response['newest_published_at']),

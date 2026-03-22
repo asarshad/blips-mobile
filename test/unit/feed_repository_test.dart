@@ -251,6 +251,75 @@ void main() {
     });
 
     test(
+      'previewArticlesHead returns preview continuation without overwriting live article state',
+      () async {
+        final api = FakeBackendApiClient(
+          queuedResponses: {
+            '/session/playlist': [
+              {
+                'items': [
+                  {
+                    'id': 1,
+                    'type': 'ARTICLE',
+                    'title': 'Article p1',
+                    'source_url': 'https://example.com/a1',
+                    'source': 'TechCrunch',
+                    'published_at': '2025-01-03T00:00:00Z',
+                  },
+                ],
+                'session_id': 'article-session',
+                'cursor': 10,
+                'has_more': true,
+              },
+              {
+                'items': [
+                  {
+                    'id': 999,
+                    'type': 'ARTICLE',
+                    'title': 'Preview article',
+                    'source_url': 'https://example.com/a999',
+                    'source': 'TechCrunch',
+                    'published_at': '2025-01-04T00:00:00Z',
+                  },
+                ],
+                'session_id': 'preview-article-session',
+                'cursor': 999,
+                'has_more': true,
+              },
+              {
+                'items': [
+                  {
+                    'id': 2,
+                    'type': 'ARTICLE',
+                    'title': 'Article p2',
+                    'source_url': 'https://example.com/a2',
+                    'source': 'TechCrunch',
+                    'published_at': '2025-01-02T00:00:00Z',
+                  },
+                ],
+                'session_id': 'article-session',
+                'cursor': 20,
+                'has_more': true,
+              },
+            ],
+          },
+        );
+
+        final repo = FeedRepository(api);
+        await repo.fetchArticlesPage();
+        final preview = await repo.previewArticlesHead();
+        await repo.fetchArticlesPage(page: 2);
+
+        expect(preview.sessionId, 'preview-article-session');
+        expect(preview.sessionCursor, 999);
+        expect(api.requests.length, 3);
+        expect(
+            api.requests[2].queryParameters?['session_id'], 'article-session');
+        expect(api.requests[2].queryParameters?['cursor'], 10);
+      },
+    );
+
+    test(
       'previewVideosHead does not overwrite live video continuation state',
       () async {
         final api = FakeBackendApiClient(
@@ -310,9 +379,11 @@ void main() {
 
         final repo = FeedRepository(api);
         await repo.fetchVideosPage();
-        await repo.previewVideosHead();
+        final preview = await repo.previewVideosHead();
         await repo.fetchVideosPage(page: 2);
 
+        expect(preview.sessionId, 'preview-session');
+        expect(preview.sessionCursor, 999);
         expect(api.requests.length, 3);
         expect(api.requests[2].queryParameters?['session_id'], 'video-session');
         expect(api.requests[2].queryParameters?['cursor'], 10);

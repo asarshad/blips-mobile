@@ -318,4 +318,67 @@ void main() {
       expect(uiState.pendingNewCount, 1);
     },
   );
+
+  test(
+    'ArticlesNotifier opens prefetched pending content without another playlist fetch',
+    () async {
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            playlistCallCount += 1;
+            if (playlistCallCount == 1) {
+              return _articlesResponse(
+                List<int>.generate(15, (index) => index + 1),
+                feedVersion: 'article-v1',
+              );
+            }
+            return _articlesResponse(
+              [101, ...List<int>.generate(14, (index) => index + 1)],
+              feedVersion: 'article-v2',
+            );
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+      await container.read(articlesFeedProvider.notifier).refreshSilently();
+      await _settle();
+
+      expect(
+        container
+            .read(feedSurfaceUiStateProvider(FeedSurface.articles))
+            .pendingNewCount,
+        1,
+      );
+
+      final opened = await container
+          .read(articlesFeedProvider.notifier)
+          .openPendingNewContent();
+      await _settle();
+
+      expect(opened, isTrue);
+      final state = container.read(articlesFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value!.first.id, 101);
+      expect(
+        container
+            .read(feedSurfaceUiStateProvider(FeedSurface.articles))
+            .pendingNewCount,
+        0,
+      );
+      expect(playlistCallCount, 2);
+    },
+  );
 }

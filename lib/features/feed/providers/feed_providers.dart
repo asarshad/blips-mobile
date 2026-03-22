@@ -128,6 +128,7 @@ class ArticlesNotifier
   bool _canContinueRemotely = true;
   String? _currentFeedVersion;
   String? _pendingFeedVersion;
+  FeedPageResult<FeedEntry>? _pendingPrefetchedPage;
 
   FeedSurfaceUiState get _uiState =>
       _ref.read(feedSurfaceUiStateProvider(_surface));
@@ -330,25 +331,27 @@ class ArticlesNotifier
       final freshHeadIds = _headBaselineIds(freshItems, _limit);
       final baseline = _currentHeadBaselineIds;
       final freshFeedVersion = freshPage.feedVersion;
-      final versionChanged = freshFeedVersion != null &&
-          freshFeedVersion != _currentFeedVersion &&
-          freshFeedVersion != _pendingFeedVersion;
-      final pendingNewCount = versionChanged
+      final hasPendingVersion =
+          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+      final isNewPendingVersion =
+          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+      final pendingNewCount = hasPendingVersion
           ? countLeadingHeadNewItems(
               baselineIds: baseline,
               freshHeadIds: freshHeadIds,
             )
           : 0;
-      if (versionChanged) {
+      if (hasPendingVersion && pendingNewCount > 0) {
         _pendingFeedVersion = freshFeedVersion;
-        unawaited(
-          _repository.recordFreshnessEvent(
-            eventName: 'feed_version_changed',
-            surface: _surface.storageKey,
-            feedVersion: freshFeedVersion,
-          ),
-        );
-        if (pendingNewCount > 0) {
+        _pendingPrefetchedPage = freshPage;
+        if (isNewPendingVersion) {
+          unawaited(
+            _repository.recordFreshnessEvent(
+              eventName: 'feed_version_changed',
+              surface: _surface.storageKey,
+              feedVersion: freshFeedVersion,
+            ),
+          );
           unawaited(
             _repository.recordFreshnessEvent(
               eventName: 'new_content_available',
@@ -358,6 +361,9 @@ class ArticlesNotifier
             ),
           );
         }
+      } else {
+        _pendingFeedVersion = null;
+        _pendingPrefetchedPage = null;
       }
       _setUiState(
         _uiState.copyWith(
@@ -473,6 +479,7 @@ class ArticlesNotifier
       _currentItemId = null;
       _currentItemIndex = 0;
       _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
@@ -576,6 +583,7 @@ class ArticlesNotifier
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
     _pendingFeedVersion = null;
+    _pendingPrefetchedPage = null;
     _canContinueRemotely =
         _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
     if (_canContinueRemotely) {
@@ -616,6 +624,7 @@ class ArticlesNotifier
     _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
     _pendingFeedVersion = null;
+    _pendingPrefetchedPage = null;
     state = AsyncValue.data(articles);
     _updateNewSinceLastSeen(articles);
     _setUiState(
@@ -757,6 +766,29 @@ class ArticlesNotifier
         ),
       );
     }
+    final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingNewCount > 0 && prefetchedPage != null) {
+      final articles = prefetchedPage.items
+          .whereType<ArticleFeedEntry>()
+          .toList(growable: false);
+      if (articles.isNotEmpty) {
+        _repository.restoreArticleSession(
+          sessionId: prefetchedPage.sessionId,
+          cursor: prefetchedPage.sessionCursor,
+        );
+        _applyFreshArticles(
+          articles,
+          hasMore: prefetchedPage.hasMore,
+          inventoryState: prefetchedPage.inventoryState,
+          feedVersion: prefetchedPage.feedVersion,
+        );
+        _cacheInBackground(articles);
+        await _persistActiveSession(
+          pendingNewCount: 0,
+        );
+        return true;
+      }
+    }
     return manualRefresh();
   }
 
@@ -819,6 +851,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   bool _canContinueRemotely = true;
   String? _currentFeedVersion;
   String? _pendingFeedVersion;
+  FeedPageResult<FeedEntry>? _pendingPrefetchedPage;
 
   FeedSurfaceUiState get _uiState =>
       _ref.read(feedSurfaceUiStateProvider(_surface));
@@ -1018,25 +1051,27 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
       final freshHeadIds = _headBaselineIds(freshItems, _limit);
       final freshFeedVersion = freshPage.feedVersion;
-      final versionChanged = freshFeedVersion != null &&
-          freshFeedVersion != _currentFeedVersion &&
-          freshFeedVersion != _pendingFeedVersion;
-      final pendingNewCount = versionChanged
+      final hasPendingVersion =
+          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+      final isNewPendingVersion =
+          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+      final pendingNewCount = hasPendingVersion
           ? countLeadingHeadNewItems(
               baselineIds: _currentHeadBaselineIds,
               freshHeadIds: freshHeadIds,
             )
           : 0;
-      if (versionChanged) {
+      if (hasPendingVersion && pendingNewCount > 0) {
         _pendingFeedVersion = freshFeedVersion;
-        unawaited(
-          _repository.recordFreshnessEvent(
-            eventName: 'feed_version_changed',
-            surface: _surface.storageKey,
-            feedVersion: freshFeedVersion,
-          ),
-        );
-        if (pendingNewCount > 0) {
+        _pendingPrefetchedPage = freshPage;
+        if (isNewPendingVersion) {
+          unawaited(
+            _repository.recordFreshnessEvent(
+              eventName: 'feed_version_changed',
+              surface: _surface.storageKey,
+              feedVersion: freshFeedVersion,
+            ),
+          );
           unawaited(
             _repository.recordFreshnessEvent(
               eventName: 'new_content_available',
@@ -1046,6 +1081,9 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
             ),
           );
         }
+      } else {
+        _pendingFeedVersion = null;
+        _pendingPrefetchedPage = null;
       }
       _setUiState(
         _uiState.copyWith(
@@ -1161,6 +1199,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       _currentItemId = null;
       _currentItemIndex = 0;
       _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
@@ -1271,6 +1310,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
     _pendingFeedVersion = null;
+    _pendingPrefetchedPage = null;
     _canContinueRemotely =
         _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
     if (_canContinueRemotely) {
@@ -1311,6 +1351,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
     _pendingFeedVersion = null;
+    _pendingPrefetchedPage = null;
     state = AsyncValue.data(videos);
     _updateNewSinceLastSeen(videos);
     _setUiState(
@@ -1406,6 +1447,29 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           count: pendingNewCount,
         ),
       );
+    }
+    final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingNewCount > 0 && prefetchedPage != null) {
+      final videos = prefetchedPage.items
+          .whereType<VideoFeedEntry>()
+          .toList(growable: false);
+      if (videos.isNotEmpty) {
+        _repository.restoreVideoSession(
+          sessionId: prefetchedPage.sessionId,
+          cursor: prefetchedPage.sessionCursor,
+        );
+        _applyFreshVideos(
+          videos,
+          hasMore: prefetchedPage.hasMore,
+          inventoryState: prefetchedPage.inventoryState,
+          feedVersion: prefetchedPage.feedVersion,
+        );
+        _replaceCacheSnapshotInBackground(videos);
+        await _persistActiveSession(
+          pendingNewCount: 0,
+        );
+        return true;
+      }
     }
     return manualRefresh();
   }
@@ -1551,6 +1615,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   String? _currentFeedVersion;
   String? _pendingFeedVersion;
   bool _preferLatestOnRefresh = false;
+  FeedPageResult<ReelFeedEntry>? _pendingPrefetchedPage;
 
   FeedSurfaceUiState get _uiState =>
       _ref.read(feedSurfaceUiStateProvider(_surface));
@@ -1752,31 +1817,33 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       }
       final freshHeadIds = _headBaselineIds(freshReels, _limit);
       final freshFeedVersion = freshPage.feedVersion;
-      final versionChanged = freshFeedVersion != null &&
-          freshFeedVersion != _currentFeedVersion &&
-          freshFeedVersion != _pendingFeedVersion;
-      var pendingNewCount = versionChanged
+      final hasPendingVersion =
+          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+      final isNewPendingVersion =
+          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+      var pendingNewCount = hasPendingVersion
           ? countLeadingHeadNewItems(
               baselineIds: _currentHeadBaselineIds,
               freshHeadIds: freshHeadIds,
             )
           : 0;
       if (_preferLatestOnRefresh &&
-          versionChanged &&
+          hasPendingVersion &&
           pendingNewCount == 0 &&
           freshReels.isNotEmpty) {
         pendingNewCount = 1;
       }
-      if (versionChanged) {
+      if (hasPendingVersion && pendingNewCount > 0) {
         _pendingFeedVersion = freshFeedVersion;
-        unawaited(
-          _repository.recordFreshnessEvent(
-            eventName: 'feed_version_changed',
-            surface: _surface.storageKey,
-            feedVersion: freshFeedVersion,
-          ),
-        );
-        if (pendingNewCount > 0) {
+        _pendingPrefetchedPage = freshPage;
+        if (isNewPendingVersion) {
+          unawaited(
+            _repository.recordFreshnessEvent(
+              eventName: 'feed_version_changed',
+              surface: _surface.storageKey,
+              feedVersion: freshFeedVersion,
+            ),
+          );
           unawaited(
             _repository.recordFreshnessEvent(
               eventName: 'new_content_available',
@@ -1786,6 +1853,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
             ),
           );
         }
+      } else {
+        _pendingFeedVersion = null;
+        _pendingPrefetchedPage = null;
       }
       _setUiState(
         _uiState.copyWith(
@@ -1958,6 +2028,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       _currentItemIndex = 0;
       _pendingFeedVersion = null;
       _preferLatestOnRefresh = false;
+      _pendingPrefetchedPage = null;
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
@@ -2021,6 +2092,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
     _pendingFeedVersion = null;
+    _pendingPrefetchedPage = null;
     _repository.restoreReelsCursor(_nextCursor);
     state = AsyncValue.data(reels);
     _setUiState(
@@ -2052,6 +2124,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _currentFeedVersion = feedVersion;
     _pendingFeedVersion = null;
     _preferLatestOnRefresh = false;
+    _pendingPrefetchedPage = null;
     state = AsyncValue.data(reels);
     _setUiState(
       _uiState.copyWith(
@@ -2114,6 +2187,25 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
           count: pendingNewCount,
         ),
       );
+    }
+    final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingNewCount > 0 && prefetchedPage != null) {
+      final reels = prefetchedPage.items;
+      if (reels.isNotEmpty) {
+        _repository.restoreReelsCursor(prefetchedPage.nextCursor);
+        _applyFreshReels(
+          reels,
+          hasMore: prefetchedPage.hasMore,
+          nextCursor: prefetchedPage.nextCursor,
+          inventoryState: prefetchedPage.inventoryState,
+          feedVersion: prefetchedPage.feedVersion,
+        );
+        _replaceCacheSnapshotInBackground(reels);
+        await _persistActiveSession(
+          pendingNewCount: 0,
+        );
+        return true;
+      }
     }
     return manualRefresh();
   }
