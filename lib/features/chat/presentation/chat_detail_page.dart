@@ -32,6 +32,7 @@ class ChatDetailPage extends HookConsumerWidget {
     final scrollController = useScrollController();
     final isHistoryLoaded = useState(existingConversation != null);
     final hasSentInitialPrompt = useRef(false);
+    final imageUrl = article.imageUrl?.trim();
 
     // Fetch initial quota
     useEffect(() {
@@ -188,20 +189,29 @@ class ChatDetailPage extends HookConsumerWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: Image.network(
-                  article.imageUrl,
-                  width: AppSizes.iconLg + 4,
-                  height: AppSizes.iconLg + 4,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: AppSizes.iconLg + 4,
-                    height: AppSizes.iconLg + 4,
-                    color: colorScheme.surfaceContainerHighest,
-                    child: Icon(Icons.article,
-                        size: AppSizes.iconXs,
-                        color: colorScheme.onSurfaceVariant),
-                  ),
-                ),
+                child: imageUrl != null && imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        width: AppSizes.iconLg + 4,
+                        height: AppSizes.iconLg + 4,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: AppSizes.iconLg + 4,
+                          height: AppSizes.iconLg + 4,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: Icon(Icons.article,
+                              size: AppSizes.iconXs,
+                              color: colorScheme.onSurfaceVariant),
+                        ),
+                      )
+                    : Container(
+                        width: AppSizes.iconLg + 4,
+                        height: AppSizes.iconLg + 4,
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Icon(Icons.article,
+                            size: AppSizes.iconXs,
+                            color: colorScheme.onSurfaceVariant),
+                      ),
               ),
               SizedBox(width: AppSpacing.md),
               Expanded(

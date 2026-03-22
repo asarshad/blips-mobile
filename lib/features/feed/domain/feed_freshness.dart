@@ -20,3 +20,27 @@ Set<int> computeNewSinceLastSeenIds({
       .map((entry) => entry.id)
       .toSet();
 }
+
+/// Counts only the contiguous new prefix ahead of the current session head.
+///
+/// This is intentionally stricter than a generic set-difference count.
+/// If the top story is unchanged and only lower items within the head batch
+/// rotate, we do not surface a "new items" pill because tapping it jumps the
+/// user back to the top. The pill should only appear when there are genuinely
+/// new items ahead of the current head.
+int countLeadingHeadNewItems({
+  required List<int> baselineIds,
+  required List<int> freshHeadIds,
+}) {
+  if (baselineIds.isEmpty || freshHeadIds.isEmpty) return 0;
+
+  final baseline = baselineIds.toSet();
+  var count = 0;
+  for (final id in freshHeadIds) {
+    if (baseline.contains(id)) {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}

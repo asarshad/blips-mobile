@@ -28,13 +28,17 @@ Map<String, dynamic> _articleJson(int id) {
   };
 }
 
-Map<String, dynamic> _articlesResponse(List<int> ids) {
+Map<String, dynamic> _articlesResponse(
+  List<int> ids, {
+  String feedVersion = 'article-v1',
+}) {
   return {
     'items': ids.map(_articleJson).toList(growable: false),
     'session_id': 'article-session',
     'cursor': ids.length,
     'has_more': true,
     'inventory_state': 'healthy',
+    'feed_version': feedVersion,
   };
 }
 
@@ -269,6 +273,49 @@ void main() {
         state.value!.single.imageUrl,
         equals('https://example.com/article_1.jpg'),
       );
+    },
+  );
+
+  test(
+    'ArticlesNotifier surfaces pending new items when feed version changes at the head',
+    () async {
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+          playlistCallCount += 1;
+          if (playlistCallCount == 1) {
+            return _articlesResponse(
+              List<int>.generate(15, (index) => index + 1),
+              feedVersion: 'article-v1',
+            );
+          }
+          return _articlesResponse(
+            [101, ...List<int>.generate(14, (index) => index + 1)],
+            feedVersion: 'article-v2',
+          );
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+      await container.read(articlesFeedProvider.notifier).refreshSilently();
+      await _settle();
+
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.pendingNewCount, 1);
     },
   );
 }

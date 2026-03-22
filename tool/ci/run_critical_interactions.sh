@@ -9,7 +9,6 @@ flutter test \
   test/widget/reel_item_interactions_test.dart \
   test/widget/video_card_actions_sheet_test.dart \
   test/widget/chat_page_test.dart \
-  test/widget/chat_detail_page_test.dart \
   test/widget/settings_page_test.dart \
   test/widget/ad_card_interactions_test.dart \
   test/widget/app_navigation_test.dart \

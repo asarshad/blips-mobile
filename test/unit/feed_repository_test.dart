@@ -74,6 +74,62 @@ void main() {
     );
 
     test(
+      'fetchArticlesPage preserves feed version and freshness metadata from session playlist',
+      () async {
+        final api = FakeBackendApiClient(
+          responses: {
+            '/session/playlist': {
+              'items': [
+                {
+                  'id': 1,
+                  'type': 'ARTICLE',
+                  'title': 'Fresh article',
+                  'source': 'TechCrunch',
+                  'source_url': 'https://example.com/a1',
+                  'summary': 'Summary',
+                  'image_url': 'https://example.com/image.png',
+                  'published_at': '2026-03-21T00:00:00Z',
+                  'created_at': '2026-03-21T01:00:00Z',
+                  'freshness_tier': 'B',
+                  'freshness_reason': 'recently_added',
+                  'published_age_seconds': 3600,
+                  'added_age_seconds': 1200,
+                  'topics': ['Technology'],
+                },
+              ],
+              'session_id': 'article-session',
+              'cursor': 1,
+              'has_more': true,
+              'inventory_state': 'healthy',
+              'feed_version': 'article-v1',
+              'served_at': '2026-03-21T01:30:00Z',
+              'newest_published_at': '2026-03-21T00:00:00Z',
+              'newest_created_at': '2026-03-21T01:00:00Z',
+            },
+          },
+        );
+
+        final repo = FeedRepository(api);
+        final page = await repo.fetchArticlesPage();
+        final article = page.items.single as ArticleFeedEntry;
+
+        expect(page.feedVersion, 'article-v1');
+        expect(
+          page.newestCreatedAt?.toUtc().toIso8601String(),
+          '2026-03-21T01:00:00.000Z',
+        );
+        expect(
+          page.servedAt?.toUtc().toIso8601String(),
+          '2026-03-21T01:30:00.000Z',
+        );
+        expect(article.addedAt?.toUtc().toIso8601String(),
+            '2026-03-21T01:00:00.000Z');
+        expect(article.freshnessTier, FreshnessTier.recentlyAdded);
+        expect(article.freshnessReason, 'recently_added');
+      },
+    );
+
+    test(
       'fetchFeed page 2 reuses session_id and cursor continuation',
       () async {
         final api = FakeBackendApiClient(

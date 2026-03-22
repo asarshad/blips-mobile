@@ -9,10 +9,18 @@ const _kActiveSessionPrefix = 'feed_session:';
 const _kLastSurfaceKey = 'feed_last_surface';
 const _kLocalHistoryKey = 'feed_local_history';
 
-const Duration kFeedResumeWindow = Duration(hours: 2);
 const Duration kBackendSessionTtl = Duration(hours: 1);
 const Duration kConsumedSuppressionWindow = Duration(hours: 24);
 const Duration kExposedDemotionWindow = Duration(hours: 6);
+const Duration kFeedResumeWindow = Duration(hours: 2);
+const Duration kArticleExactRestoreWindow = Duration(hours: 24);
+const Duration kArticleSoftRestoreWindow = Duration(hours: 72);
+const Duration kVideoExactRestoreWindow = Duration(hours: 12);
+const Duration kVideoSoftRestoreWindow = Duration(hours: 48);
+const Duration kReelExactRestoreWindow = Duration(hours: 2);
+const Duration kReelSoftRestoreWindow = Duration(hours: 24);
+const Duration kReelNewestBiasThreshold = Duration(hours: 6);
+const Duration kReelContinuationFreshWindow = Duration(hours: 6);
 
 enum FeedSurface {
   articles,
@@ -44,9 +52,25 @@ enum FeedSurface {
 class FeedSessionRestoreDecision {
   const FeedSessionRestoreDecision({
     this.resumeSnapshot,
+    this.preferLatestOnRefresh = false,
   });
 
   final FeedSessionSnapshot? resumeSnapshot;
+  final bool preferLatestOnRefresh;
+}
+
+class _FeedResumePolicy {
+  const _FeedResumePolicy({
+    required this.exactRestoreWindow,
+    required this.softRestoreWindow,
+    required this.remoteContinuationWindow,
+    this.preferLatestAfter,
+  });
+
+  final Duration exactRestoreWindow;
+  final Duration softRestoreWindow;
+  final Duration remoteContinuationWindow;
+  final Duration? preferLatestAfter;
 }
 
 class FeedSessionSnapshot {
@@ -58,14 +82,17 @@ class FeedSessionSnapshot {
     required this.hasMore,
     required this.inventoryState,
     this.currentItemId,
+    this.lastViewedIndex,
     this.sessionId,
     this.continuationCursor,
     this.pendingNewCount = 0,
+    this.lastFeedVersion,
   });
 
   final FeedSurface surface;
   final List<FeedEntry> items;
   final int? currentItemId;
+  final int? lastViewedIndex;
   final DateTime lastActiveAt;
   final List<int> headBaselineIds;
   final String? sessionId;
@@ -73,19 +100,24 @@ class FeedSessionSnapshot {
   final bool hasMore;
   final FeedInventoryState inventoryState;
   final int pendingNewCount;
+  final String? lastFeedVersion;
 
   Map<String, dynamic> toJson() {
     return {
       'surface': surface.storageKey,
       'items': items.map(_serializeEntry).toList(growable: false),
       'current_item_id': currentItemId,
+      'last_viewed_content_id': currentItemId,
+      'last_viewed_index': lastViewedIndex,
       'last_active_at': lastActiveAt.toIso8601String(),
+      'last_session_timestamp': lastActiveAt.toIso8601String(),
       'head_baseline_ids': headBaselineIds,
       'session_id': sessionId,
       'continuation_cursor': continuationCursor,
       'has_more': hasMore,
       'inventory_state': inventoryState.name,
       'pending_new_count': pendingNewCount,
+      'last_feed_version': lastFeedVersion,
     };
   }
 
@@ -97,8 +129,13 @@ class FeedSessionSnapshot {
               .whereType<Map<String, dynamic>>())
           .map(_deserializeEntry)
           .toList(growable: false),
-      currentItemId: json['current_item_id'] as int?,
-      lastActiveAt: DateTime.parse(json['last_active_at'] as String),
+      currentItemId: (json['last_viewed_content_id'] as int?) ??
+          (json['current_item_id'] as int?),
+      lastViewedIndex: json['last_viewed_index'] as int?,
+      lastActiveAt: DateTime.parse(
+        (json['last_session_timestamp'] as String?) ??
+            (json['last_active_at'] as String),
+      ),
       headBaselineIds: (json['head_baseline_ids'] as List<dynamic>? ?? const [])
           .map((value) => value as int)
           .toList(growable: false),
@@ -110,6 +147,7 @@ class FeedSessionSnapshot {
         orElse: () => FeedInventoryState.healthy,
       ),
       pendingNewCount: json['pending_new_count'] as int? ?? 0,
+      lastFeedVersion: json['last_feed_version'] as String?,
     );
   }
 
@@ -117,6 +155,8 @@ class FeedSessionSnapshot {
     List<FeedEntry>? items,
     int? currentItemId,
     bool clearCurrentItemId = false,
+    int? lastViewedIndex,
+    bool clearLastViewedIndex = false,
     DateTime? lastActiveAt,
     List<int>? headBaselineIds,
     String? sessionId,
@@ -126,12 +166,17 @@ class FeedSessionSnapshot {
     bool? hasMore,
     FeedInventoryState? inventoryState,
     int? pendingNewCount,
+    String? lastFeedVersion,
+    bool clearLastFeedVersion = false,
   }) {
     return FeedSessionSnapshot(
       surface: surface,
       items: items ?? this.items,
       currentItemId:
           clearCurrentItemId ? null : (currentItemId ?? this.currentItemId),
+      lastViewedIndex: clearLastViewedIndex
+          ? null
+          : (lastViewedIndex ?? this.lastViewedIndex),
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       headBaselineIds: headBaselineIds ?? this.headBaselineIds,
       sessionId: clearSessionId ? null : (sessionId ?? this.sessionId),
@@ -141,6 +186,9 @@ class FeedSessionSnapshot {
       hasMore: hasMore ?? this.hasMore,
       inventoryState: inventoryState ?? this.inventoryState,
       pendingNewCount: pendingNewCount ?? this.pendingNewCount,
+      lastFeedVersion: clearLastFeedVersion
+          ? null
+          : (lastFeedVersion ?? this.lastFeedVersion),
     );
   }
 }
@@ -214,8 +262,14 @@ class FeedSessionStore {
     }
 
     final reference = now ?? DateTime.now();
-    if (_isResumeEligible(active, reference)) {
-      return FeedSessionRestoreDecision(resumeSnapshot: active);
+    final policy = _resumePolicy(surface);
+    final age = reference.difference(active.lastActiveAt);
+    if (age <= policy.softRestoreWindow) {
+      return FeedSessionRestoreDecision(
+        resumeSnapshot: active,
+        preferLatestOnRefresh:
+            policy.preferLatestAfter != null && age > policy.preferLatestAfter!,
+      );
     }
 
     await clearActiveSession(surface);
@@ -256,7 +310,11 @@ class FeedSessionStore {
   }
 
   bool isResumeEligible(FeedSessionSnapshot snapshot, {DateTime? now}) {
-    return _isResumeEligible(snapshot, now ?? DateTime.now());
+    return _isResumeEligible(
+      snapshot.surface,
+      snapshot,
+      now ?? DateTime.now(),
+    );
   }
 
   bool isRemoteContinuationFresh(
@@ -264,11 +322,14 @@ class FeedSessionStore {
     FeedSessionSnapshot snapshot, {
     DateTime? now,
   }) {
-    if (surface == FeedSurface.reels) {
-      return true;
-    }
     final reference = now ?? DateTime.now();
-    return reference.difference(snapshot.lastActiveAt) <= kBackendSessionTtl;
+    final policy = _resumePolicy(surface);
+    final remoteWindow = surface == FeedSurface.reels
+        ? policy.remoteContinuationWindow
+        : (policy.remoteContinuationWindow <= kBackendSessionTtl
+            ? policy.remoteContinuationWindow
+            : kBackendSessionTtl);
+    return reference.difference(snapshot.lastActiveAt) <= remoteWindow;
   }
 
   Future<void> markExposed(
@@ -344,17 +405,34 @@ class FeedSessionStore {
     await _cache.setMeta(_kLocalHistoryKey, jsonEncode(history.toJson()));
   }
 
-  bool _isResumeEligible(FeedSessionSnapshot snapshot, DateTime now) {
-    return _isSameLocalDay(snapshot.lastActiveAt, now) &&
-        now.difference(snapshot.lastActiveAt) <= kFeedResumeWindow;
+  bool _isResumeEligible(
+    FeedSurface surface,
+    FeedSessionSnapshot snapshot,
+    DateTime now,
+  ) {
+    return now.difference(snapshot.lastActiveAt) <=
+        _resumePolicy(surface).softRestoreWindow;
   }
 
-  bool _isSameLocalDay(DateTime a, DateTime b) {
-    final localA = a.toLocal();
-    final localB = b.toLocal();
-    return localA.year == localB.year &&
-        localA.month == localB.month &&
-        localA.day == localB.day;
+  _FeedResumePolicy _resumePolicy(FeedSurface surface) {
+    return switch (surface) {
+      FeedSurface.articles => const _FeedResumePolicy(
+          exactRestoreWindow: kArticleExactRestoreWindow,
+          softRestoreWindow: kArticleSoftRestoreWindow,
+          remoteContinuationWindow: kBackendSessionTtl,
+        ),
+      FeedSurface.videos => const _FeedResumePolicy(
+          exactRestoreWindow: kVideoExactRestoreWindow,
+          softRestoreWindow: kVideoSoftRestoreWindow,
+          remoteContinuationWindow: kBackendSessionTtl,
+        ),
+      FeedSurface.reels => const _FeedResumePolicy(
+          exactRestoreWindow: kReelExactRestoreWindow,
+          softRestoreWindow: kReelSoftRestoreWindow,
+          remoteContinuationWindow: kReelContinuationFreshWindow,
+          preferLatestAfter: kReelNewestBiasThreshold,
+        ),
+    };
   }
 
   String _historyKey(FeedSurface surface, int contentId) {

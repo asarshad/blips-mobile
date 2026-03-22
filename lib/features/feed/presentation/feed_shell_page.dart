@@ -333,17 +333,24 @@ class FeedShellPage extends HookConsumerWidget {
   void _refreshArticlesManually(
     WidgetRef ref,
     BuildContext context,
-    PageController controller,
-  ) {
+    PageController controller, {
+    bool fromNewItems = false,
+  }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
       scope: 'feed.shell',
       action: 'manualRefresh',
       surface: 'articles',
-      data: <String, Object?>{'trigger': 'tabRetap'},
+      data: <String, Object?>{
+        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+      },
     );
+    final notifier = ref.read(articlesFeedProvider.notifier);
     unawaited(
-      ref.read(articlesFeedProvider.notifier).manualRefresh().then((ok) {
+      (fromNewItems
+              ? notifier.openPendingNewContent()
+              : notifier.manualRefresh())
+          .then((ok) {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
@@ -368,17 +375,24 @@ class FeedShellPage extends HookConsumerWidget {
   void _refreshVideosManually(
     WidgetRef ref,
     BuildContext context,
-    PageController controller,
-  ) {
+    PageController controller, {
+    bool fromNewItems = false,
+  }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
       scope: 'feed.shell',
       action: 'manualRefresh',
       surface: 'videos',
-      data: <String, Object?>{'trigger': 'tabRetap'},
+      data: <String, Object?>{
+        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+      },
     );
+    final notifier = ref.read(videosFeedProvider.notifier);
     unawaited(
-      ref.read(videosFeedProvider.notifier).manualRefresh().then((ok) {
+      (fromNewItems
+              ? notifier.openPendingNewContent()
+              : notifier.manualRefresh())
+          .then((ok) {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
@@ -403,17 +417,24 @@ class FeedShellPage extends HookConsumerWidget {
   void _refreshReelsManually(
     WidgetRef ref,
     BuildContext context,
-    PageController controller,
-  ) {
+    PageController controller, {
+    bool fromNewItems = false,
+  }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
       scope: 'feed.shell',
       action: 'manualRefresh',
       surface: 'reels',
-      data: <String, Object?>{'trigger': 'tabRetap'},
+      data: <String, Object?>{
+        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+      },
     );
+    final notifier = ref.read(reelsFeedProvider.notifier);
     unawaited(
-      ref.read(reelsFeedProvider.notifier).manualRefresh().then((ok) {
+      (fromNewItems
+              ? notifier.openPendingNewContent()
+              : notifier.manualRefresh())
+          .then((ok) {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
           controller.jumpToPage(0);
@@ -533,6 +554,7 @@ class FeedShellPage extends HookConsumerWidget {
                   ref,
                   context,
                   articleFeedController,
+                  fromNewItems: true,
                 )
             : null,
       ),
@@ -584,6 +606,7 @@ class FeedShellPage extends HookConsumerWidget {
                   ref,
                   context,
                   videoFeedController,
+                  fromNewItems: true,
                 )
             : null,
         isCaughtUp: ref.read(videosFeedProvider.notifier).isCaughtUp,
@@ -602,8 +625,14 @@ class FeedShellPage extends HookConsumerWidget {
       OptimizedReelsPage(
         isVisible: currentIndex.value == 2,
         controller: reelsFeedController,
-        onManualRefresh: () =>
-            _refreshReelsManually(ref, context, reelsFeedController),
+        onManualRefresh: () => _refreshReelsManually(
+          ref,
+          context,
+          reelsFeedController,
+          fromNewItems: ref
+              .read(feedSurfaceUiStateProvider(FeedSurface.reels))
+              .hasPendingNewItems,
+        ),
       ),
       // Chat tab
       const ChatPage(),

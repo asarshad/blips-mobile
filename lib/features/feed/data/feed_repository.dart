@@ -20,6 +20,9 @@ class FeedPageResult<T extends FeedEntry> {
     this.nextCursor,
     this.servedAt,
     this.sessionId,
+    this.feedVersion,
+    this.newestPublishedAt,
+    this.newestCreatedAt,
   });
 
   final List<T> items;
@@ -28,6 +31,9 @@ class FeedPageResult<T extends FeedEntry> {
   final String? nextCursor;
   final DateTime? servedAt;
   final String? sessionId;
+  final String? feedVersion;
+  final DateTime? newestPublishedAt;
+  final DateTime? newestCreatedAt;
 
   bool get isCaughtUp => inventoryState == FeedInventoryState.caughtUp;
 }
@@ -59,6 +65,7 @@ class FeedRepository {
   final AppDiagnosticsController? _diagnostics;
   static const String _sessionPlaylistPath = '/session/playlist';
   static const String _interactionPath = '/session/interactions';
+  static const String _freshnessEventPath = '/events/track';
 
   // Session snapshot state for cursor-based continuation.
   String? _articleSessionId;
@@ -191,6 +198,18 @@ class FeedRepository {
           itemCount: merged.length,
         ),
         servedAt: _latestServedAt(articleResult.servedAt, videoResult.servedAt),
+        feedVersion: _combineFeedVersion(
+          articleResult.feedVersion,
+          videoResult.feedVersion,
+        ),
+        newestPublishedAt: _latestServedAt(
+          articleResult.newestPublishedAt,
+          videoResult.newestPublishedAt,
+        ),
+        newestCreatedAt: _latestServedAt(
+          articleResult.newestCreatedAt,
+          videoResult.newestCreatedAt,
+        ),
       );
     } on DioException catch (e, stack) {
       throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
@@ -264,6 +283,10 @@ class FeedRepository {
             itemCount: parsed.length,
           ),
           sessionId: response['session_id'] as String?,
+          servedAt: _parseServedAt(response['served_at']),
+          feedVersion: response['feed_version'] as String?,
+          newestPublishedAt: _parseServedAt(response['newest_published_at']),
+          newestCreatedAt: _parseServedAt(response['newest_created_at']),
         );
       }
 
@@ -382,10 +405,14 @@ class FeedRepository {
       'summary': item['summary'],
       'image_url': item['image_url'],
       'published_at': item['published_at'],
-      'created_at': item['published_at'],
+      'created_at': item['created_at'] ?? item['published_at'],
       'published_date': item['published_at'],
       'read_time_minutes': item['read_time_minutes'],
       'tags': topics.map((topic) => {'name': topic}).toList(growable: false),
+      'freshness_tier': item['freshness_tier'],
+      'freshness_reason': item['freshness_reason'],
+      'published_age_seconds': item['published_age_seconds'],
+      'added_age_seconds': item['added_age_seconds'],
       'conversation_starters': item['conversation_starters'],
     });
   }
@@ -400,12 +427,16 @@ class FeedRepository {
       'video_url': item['video_url'] ?? item['source_url'] ?? '',
       'source_url': item['source_url'] ?? '',
       'summary': item['summary'],
-      'thumbnail_url': item['image_url'],
+      'thumbnail_url': item['thumbnail_url'] ?? item['image_url'],
       'source': item['source'],
       'category': topics.isNotEmpty ? topics.first : null,
-      'duration_seconds': item['duration'],
-      'created_at': item['published_at'],
+      'duration_seconds': item['duration_seconds'] ?? item['duration'],
+      'created_at': item['created_at'] ?? item['published_at'],
       'published_at': item['published_at'],
+      'freshness_tier': item['freshness_tier'],
+      'freshness_reason': item['freshness_reason'],
+      'published_age_seconds': item['published_age_seconds'],
+      'added_age_seconds': item['added_age_seconds'],
       'conversation_starters': item['conversation_starters'],
     });
   }
@@ -438,6 +469,10 @@ class FeedRepository {
           hasMore: hasMore,
           itemCount: items.length,
         ),
+        servedAt: _parseServedAt(response['served_at']),
+        feedVersion: response['feed_version'] as String?,
+        newestPublishedAt: _parseServedAt(response['newest_published_at']),
+        newestCreatedAt: _parseServedAt(response['newest_created_at']),
       );
     }
 
@@ -469,6 +504,9 @@ class FeedRepository {
       ),
       nextCursor: cursorValue,
       servedAt: _parseServedAt(response['served_at']),
+      feedVersion: response['feed_version'] as String?,
+      newestPublishedAt: _parseServedAt(response['newest_published_at']),
+      newestCreatedAt: _parseServedAt(response['newest_created_at']),
     );
   }
 
@@ -545,6 +583,9 @@ class FeedRepository {
         ),
         nextCursor: nextCursor,
         servedAt: _parseServedAt(response['served_at']),
+        feedVersion: response['feed_version'] as String?,
+        newestPublishedAt: _parseServedAt(response['newest_published_at']),
+        newestCreatedAt: _parseServedAt(response['newest_created_at']),
       );
     } on DioException catch (e, stack) {
       span?.failure(e, stackTrace: stack);
@@ -599,6 +640,48 @@ class FeedRepository {
     }
   }
 
+  Future<void> recordFreshnessEvent({
+    required String eventName,
+    required String surface,
+    String itemType = 'FEED',
+    int? contentItemId,
+    String? feedVersion,
+    String? freshnessTier,
+    int count = 1,
+    String? sessionId,
+  }) async {
+    try {
+      await _api.post(
+        _freshnessEventPath,
+        data: {
+          'item_type': itemType,
+          'surface': surface,
+          if (contentItemId != null) 'content_id': contentItemId,
+          'event_name': eventName,
+          'count': count,
+          if (feedVersion != null) 'feed_version': feedVersion,
+          if (freshnessTier != null) 'freshness_tier': freshnessTier,
+          if (sessionId != null) 'session_id': sessionId,
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        },
+      );
+    } on DioException catch (e, stack) {
+      logger.warning(
+        'Failed to record freshness event ($eventName)',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to record freshness event ($eventName)',
+        category: LogCategory.app,
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
   /// Parses a mixed JSON list that may contain both organic items and
   /// injected AD items (identified by `item_type == "AD"`).
   static List<FeedEntry> _parseMixedList(
@@ -644,6 +727,12 @@ class FeedRepository {
     if (a == null) return b;
     if (b == null) return a;
     return a.isAfter(b) ? a : b;
+  }
+
+  String? _combineFeedVersion(String? a, String? b) {
+    if (a == null || a.isEmpty) return b;
+    if (b == null || b.isEmpty) return a;
+    return '$a::$b';
   }
 
   String _surfaceLabelForType(String type) {
