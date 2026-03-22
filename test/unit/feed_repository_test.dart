@@ -10,7 +10,7 @@ import '../test_utils/fake_backend_api_client.dart';
 void main() {
   group('FeedRepository', () {
     test(
-      'fetchFeed reads session playlist and sorts by publishedAt desc',
+      'fetchArticlesPage and fetchVideosPage request per-surface session playlist data',
       () async {
         final api = FakeBackendApiClient(
           queuedResponses: {
@@ -58,7 +58,8 @@ void main() {
         );
 
         final repo = FeedRepository(api);
-        final items = await repo.fetchFeed();
+        final articlePage = await repo.fetchArticlesPage();
+        final videoPage = await repo.fetchVideosPage();
 
         expect(api.requests.length, 2);
         expect(api.requests[0].path, '/session/playlist');
@@ -66,10 +67,10 @@ void main() {
         expect(api.requests[0].queryParameters?['type'], 'ARTICLE');
         expect(api.requests[1].queryParameters?['type'], 'VIDEO');
 
-        expect(items, hasLength(2));
-        expect(items.first, isA<VideoFeedEntry>());
-        expect(items.last, isA<ArticleFeedEntry>());
-        expect(items.first.publishedAt.isAfter(items.last.publishedAt), isTrue);
+        expect(articlePage.items, hasLength(1));
+        expect(articlePage.items.single, isA<ArticleFeedEntry>());
+        expect(videoPage.items, hasLength(1));
+        expect(videoPage.items.single, isA<VideoFeedEntry>());
       },
     );
 
@@ -130,7 +131,7 @@ void main() {
     );
 
     test(
-      'fetchFeed page 2 reuses session_id and cursor continuation',
+      'fetchArticlesPage and fetchVideosPage page 2 reuse session continuation state',
       () async {
         final api = FakeBackendApiClient(
           queuedResponses: {
@@ -198,8 +199,10 @@ void main() {
         );
 
         final repo = FeedRepository(api);
-        await repo.fetchFeed();
-        await repo.fetchFeed(page: 2);
+        await repo.fetchArticlesPage();
+        await repo.fetchVideosPage();
+        await repo.fetchArticlesPage(page: 2);
+        await repo.fetchVideosPage(page: 2);
 
         expect(api.requests.length, 4);
         final articlePage2 = api.requests[2].queryParameters!;
@@ -212,6 +215,30 @@ void main() {
         expect(videoPage2['type'], 'VIDEO');
         expect(videoPage2['session_id'], 'video-session');
         expect(videoPage2['cursor'], 30);
+      },
+    );
+
+    test(
+      'fetchArticlesPage returns an empty page without calling legacy article endpoints',
+      () async {
+        final api = FakeBackendApiClient(
+          responses: {
+            '/session/playlist': const {
+              'items': <Map<String, dynamic>>[],
+              'has_more': false,
+              'inventory_state': 'caught_up',
+            },
+          },
+        );
+
+        final repo = FeedRepository(api);
+        final page = await repo.fetchArticlesPage();
+
+        expect(page.items, isEmpty);
+        expect(page.hasMore, isFalse);
+        expect(page.inventoryState, FeedInventoryState.caughtUp);
+        expect(api.requests, hasLength(1));
+        expect(api.requests.single.path, '/session/playlist');
       },
     );
 

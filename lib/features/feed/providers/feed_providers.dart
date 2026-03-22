@@ -37,18 +37,29 @@ final feedSessionStoreProvider = Provider<FeedSessionStore>((ref) {
 class FeedSurfaceUiState {
   const FeedSurfaceUiState({
     this.pendingNewCount = 0,
+    this.pendingActionKind = PendingFeedActionKind.newItems,
     this.restoreItemId,
     this.restoreApproximateIndex,
   });
 
   final int pendingNewCount;
+  final PendingFeedActionKind pendingActionKind;
   final int? restoreItemId;
   final int? restoreApproximateIndex;
 
   bool get hasPendingNewItems => pendingNewCount > 0;
 
+  String? get pendingActionLabel {
+    if (!hasPendingNewItems) return null;
+    if (pendingActionKind == PendingFeedActionKind.latestBias) {
+      return 'See latest';
+    }
+    return '$pendingNewCount new item${pendingNewCount == 1 ? '' : 's'}';
+  }
+
   FeedSurfaceUiState copyWith({
     int? pendingNewCount,
+    PendingFeedActionKind? pendingActionKind,
     int? restoreItemId,
     bool clearRestoreItemId = false,
     int? restoreApproximateIndex,
@@ -56,6 +67,7 @@ class FeedSurfaceUiState {
   }) {
     return FeedSurfaceUiState(
       pendingNewCount: pendingNewCount ?? this.pendingNewCount,
+      pendingActionKind: pendingActionKind ?? this.pendingActionKind,
       restoreItemId:
           clearRestoreItemId ? null : (restoreItemId ?? this.restoreItemId),
       restoreApproximateIndex: clearRestoreApproximateIndex
@@ -368,6 +380,7 @@ class ArticlesNotifier
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: pendingNewCount,
+          pendingActionKind: PendingFeedActionKind.newItems,
         ),
       );
       await _persistActiveSession(
@@ -483,6 +496,7 @@ class ArticlesNotifier
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
+          pendingActionKind: PendingFeedActionKind.newItems,
           clearRestoreItemId: true,
           clearRestoreApproximateIndex: true,
         ),
@@ -599,6 +613,7 @@ class ArticlesNotifier
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: snapshot.pendingNewCount,
+        pendingActionKind: snapshot.pendingActionKind,
         restoreItemId: snapshot.currentItemId,
         restoreApproximateIndex: _restoreApproximateIndex(
           snapshot.currentItemId,
@@ -630,6 +645,7 @@ class ArticlesNotifier
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
       ),
     );
   }
@@ -749,6 +765,7 @@ class ArticlesNotifier
         hasMore: _hasMore,
         inventoryState: _inventoryState,
         pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+        pendingActionKind: _uiState.pendingActionKind,
         lastFeedVersion: _currentFeedVersion,
       ),
     );
@@ -1088,6 +1105,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: pendingNewCount,
+          pendingActionKind: PendingFeedActionKind.newItems,
         ),
       );
       await _persistActiveSession(
@@ -1203,6 +1221,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
+          pendingActionKind: PendingFeedActionKind.newItems,
           clearRestoreItemId: true,
           clearRestoreApproximateIndex: true,
         ),
@@ -1326,6 +1345,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: snapshot.pendingNewCount,
+        pendingActionKind: snapshot.pendingActionKind,
         restoreItemId: snapshot.currentItemId,
         restoreApproximateIndex: _restoreApproximateIndex(
           snapshot.currentItemId,
@@ -1357,6 +1377,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
       ),
     );
   }
@@ -1431,6 +1452,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         hasMore: _hasMore,
         inventoryState: _inventoryState,
         pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+        pendingActionKind: _uiState.pendingActionKind,
         lastFeedVersion: _currentFeedVersion,
       ),
     );
@@ -1827,11 +1849,13 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
               freshHeadIds: freshHeadIds,
             )
           : 0;
+      var pendingActionKind = PendingFeedActionKind.newItems;
       if (_preferLatestOnRefresh &&
           hasPendingVersion &&
           pendingNewCount == 0 &&
           freshReels.isNotEmpty) {
         pendingNewCount = 1;
+        pendingActionKind = PendingFeedActionKind.latestBias;
       }
       if (hasPendingVersion && pendingNewCount > 0) {
         _pendingFeedVersion = freshFeedVersion;
@@ -1860,6 +1884,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: pendingNewCount,
+          pendingActionKind: pendingNewCount > 0
+              ? pendingActionKind
+              : PendingFeedActionKind.newItems,
         ),
       );
       await _persistActiveSession(
@@ -2032,6 +2059,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       _setUiState(
         _uiState.copyWith(
           pendingNewCount: 0,
+          pendingActionKind: PendingFeedActionKind.newItems,
           clearRestoreItemId: true,
           clearRestoreApproximateIndex: true,
         ),
@@ -2098,6 +2126,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: snapshot.pendingNewCount,
+        pendingActionKind: snapshot.pendingActionKind,
         restoreItemId: snapshot.currentItemId,
         restoreApproximateIndex: _restoreApproximateIndex(
           snapshot.currentItemId,
@@ -2129,6 +2158,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
       ),
     );
   }
@@ -2171,6 +2201,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         hasMore: _hasMore,
         inventoryState: _inventoryState,
         pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
+        pendingActionKind: _uiState.pendingActionKind,
         lastFeedVersion: _currentFeedVersion,
       ),
     );

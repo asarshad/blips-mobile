@@ -1,6 +1,7 @@
 /// Barrel file for feed presentation widgets.
 library;
 
+export 'article_image.dart';
 export 'feed_card_frame.dart';
 export 'feed_action_pill.dart';
 export 'feed_message_state.dart';

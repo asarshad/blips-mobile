@@ -466,9 +466,7 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final showCaughtUpBanner = isCaughtUp &&
         currentOrganicIndex != null &&
         currentOrganicIndex >= organicEntries.length - 1;
-    final topActionLabel = uiState.hasPendingNewItems
-        ? '${uiState.pendingNewCount} new item${uiState.pendingNewCount == 1 ? '' : 's'}'
-        : null;
+    final topActionLabel = uiState.pendingActionLabel;
 
     return Stack(
       children: [

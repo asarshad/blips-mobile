@@ -28,7 +28,7 @@ The current `paginatedFeedProvider` design is the main cause of slow-feeling art
   - `fetchArticlesPage(...)`
   - `fetchVideosPage(...)`
 - Keep `fetchReelsPage(...)` as the reels fetch entrypoint.
-- Delete `fetchFeed()` and `fetchFeedPage()` after all callers are migrated.
+- The legacy `fetchFeed()` and `fetchFeedPage()` path has been removed.
 - Replace the shared article/video chain in `feed_providers.dart`:
   - remove `FeedNotifier`
   - remove `paginatedFeedProvider`

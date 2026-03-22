@@ -164,7 +164,7 @@ class _ChatBubble extends StatelessWidget {
 
   Future<void> _navigateToChat(BuildContext context) async {
     final navigator = Navigator.of(context);
-    final articleEntry = _convertToArticleEntry(entry);
+    final articleEntry = _asChatArticleEntry(entry);
     onClose();
     unawaited(_recordChatStart(ref, entry));
 
@@ -179,27 +179,6 @@ class _ChatBubble extends StatelessWidget {
 
     // Safety net: ensure bubbles are closed after returning from chat.
     onClose();
-  }
-
-  /// Converts any FeedEntry to ArticleFeedEntry for the chat page.
-  /// Videos use negative IDs to distinguish from articles.
-  ArticleFeedEntry _convertToArticleEntry(FeedEntry entry) {
-    if (entry is ArticleFeedEntry) {
-      return entry;
-    }
-
-    final video = entry as VideoFeedEntry;
-    return ArticleFeedEntry(
-      id: -video.id, // Negative ID indicates video
-      title: video.title,
-      summary: video.summary,
-      source: video.source,
-      publishedAt: video.publishedAt,
-      url: video.link,
-      imageUrl: video.thumbnailUrl ?? '',
-      category: video.category,
-      readTime: video.readTime,
-    );
   }
 }
 
@@ -280,7 +259,7 @@ class _AskCustomBubble extends StatelessWidget {
 
   Future<void> _navigateToChat(BuildContext context) async {
     final navigator = Navigator.of(context);
-    final articleEntry = _convertToArticleEntry(entry);
+    final articleEntry = _asChatArticleEntry(entry);
     onClose();
     unawaited(_recordChatStart(ref, entry));
 
@@ -295,25 +274,25 @@ class _AskCustomBubble extends StatelessWidget {
     // Safety net: ensure bubbles are closed after returning from chat.
     onClose();
   }
+}
 
-  ArticleFeedEntry _convertToArticleEntry(FeedEntry entry) {
-    if (entry is ArticleFeedEntry) {
-      return entry;
-    }
-
-    final video = entry as VideoFeedEntry;
-    return ArticleFeedEntry(
-      id: -video.id,
-      title: video.title,
-      summary: video.summary,
-      source: video.source,
-      publishedAt: video.publishedAt,
-      url: video.link,
-      imageUrl: video.thumbnailUrl ?? '',
-      category: video.category,
-      readTime: video.readTime,
-    );
+ArticleFeedEntry _asChatArticleEntry(FeedEntry entry) {
+  if (entry is ArticleFeedEntry) {
+    return entry;
   }
+
+  final video = entry as VideoFeedEntry;
+  return ArticleFeedEntry(
+    id: -video.id,
+    title: video.title,
+    summary: video.summary,
+    source: video.source,
+    publishedAt: video.publishedAt,
+    url: video.link,
+    imageUrl: video.thumbnailUrl,
+    category: video.category,
+    readTime: video.readTime,
+  );
 }
 
 Future<void> _recordChatStart(WidgetRef ref, FeedEntry entry) async {

@@ -13,7 +13,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../test_utils/recording_chat_repository.dart';
 
 void main() {
-  ArticleFeedEntry buildArticle() {
+  ArticleFeedEntry buildArticle(
+      {String? imageUrl = 'https://example.com/article.jpg'}) {
     return ArticleFeedEntry(
       id: 1,
       title: 'Chat article',
@@ -21,7 +22,7 @@ void main() {
       source: 'Example News',
       publishedAt: DateTime.utc(2026, 3, 20),
       url: 'https://example.com/article',
-      imageUrl: 'https://example.com/article.jpg',
+      imageUrl: imageUrl,
       category: 'Technology',
       readTime: 4,
     );
@@ -109,5 +110,32 @@ void main() {
 
     expect(repository.deletedArticleIds, <int>[article.id]);
     expect(find.text('No conversations yet.'), findsOneWidget);
+  });
+
+  testWidgets('renders placeholder thumbnail when a chat article has no image',
+      (tester) async {
+    final article = buildArticle(imageUrl: null);
+    final repository = RecordingChatRepository(
+      conversations: [
+        ChatConversation(
+          articleId: article.id,
+          article: article,
+          messages: [
+            ChatMessage(
+              id: 'm1',
+              role: 'assistant',
+              content: 'Latest answer',
+              timestamp: DateTime.utc(2026, 3, 20, 8),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(buildTestWidget(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.devices_outlined), findsOneWidget);
+    expect(find.text('Chat article'), findsOneWidget);
   });
 }

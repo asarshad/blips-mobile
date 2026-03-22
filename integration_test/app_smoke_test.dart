@@ -19,12 +19,17 @@ import '../test/test_utils/fake_youtube_player_manager.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  ProviderScope _buildTestScope() {
+  ProviderScope buildTestScope() {
     final api = FakeBackendApiClient(
       responses: {
-        '/articles/recent': const {'articles': []},
-        '/videos/recent': const {'videos': []},
-        '/videos/reels': const {'videos': []},
+        '/session/playlist': const {
+          'items': <Map<String, dynamic>>[],
+          'has_more': false,
+          'inventory_state': 'warming_up',
+        },
+        '/videos/reels': const {
+          'videos': <Map<String, dynamic>>[],
+        },
       },
     );
     final repo = FeedRepository(api);
@@ -46,7 +51,7 @@ void main() {
   }
 
   testWidgets('launches and shows bottom nav', (tester) async {
-    await tester.pumpWidget(_buildTestScope());
+    await tester.pumpWidget(buildTestScope());
     await tester.pumpAndSettle(const Duration(seconds: 2));
 
     // Bottom nav is icon-only (labels are not rendered).
@@ -58,7 +63,7 @@ void main() {
   });
 
   testWidgets('navigates to Chat tab', (tester) async {
-    await tester.pumpWidget(_buildTestScope());
+    await tester.pumpWidget(buildTestScope());
     await tester.pumpAndSettle(const Duration(seconds: 2));
 
     await tester.tap(find.byIcon(Icons.chat_bubble_outline));
@@ -69,7 +74,7 @@ void main() {
   });
 
   testWidgets('navigates to Settings tab', (tester) async {
-    await tester.pumpWidget(_buildTestScope());
+    await tester.pumpWidget(buildTestScope());
     await tester.pumpAndSettle(const Duration(seconds: 2));
 
     await tester.tap(find.byIcon(Icons.settings_outlined));

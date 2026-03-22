@@ -3,6 +3,7 @@ import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/article_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -32,7 +33,6 @@ class ChatDetailPage extends HookConsumerWidget {
     final scrollController = useScrollController();
     final isHistoryLoaded = useState(existingConversation != null);
     final hasSentInitialPrompt = useRef(false);
-    final imageUrl = article.imageUrl?.trim();
 
     // Fetch initial quota
     useEffect(() {
@@ -189,29 +189,13 @@ class ChatDetailPage extends HookConsumerWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: imageUrl != null && imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        width: AppSizes.iconLg + 4,
-                        height: AppSizes.iconLg + 4,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: AppSizes.iconLg + 4,
-                          height: AppSizes.iconLg + 4,
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(Icons.article,
-                              size: AppSizes.iconXs,
-                              color: colorScheme.onSurfaceVariant),
-                        ),
-                      )
-                    : Container(
-                        width: AppSizes.iconLg + 4,
-                        height: AppSizes.iconLg + 4,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: Icon(Icons.article,
-                            size: AppSizes.iconXs,
-                            color: colorScheme.onSurfaceVariant),
-                      ),
+                child: ArticleImage.thumbnail(
+                  imageUrl: article.imageUrl,
+                  category: article.category,
+                  source: article.source,
+                  width: AppSizes.iconLg + 4,
+                  height: AppSizes.iconLg + 4,
+                ),
               ),
               SizedBox(width: AppSpacing.md),
               Expanded(

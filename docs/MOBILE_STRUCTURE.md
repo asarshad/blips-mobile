@@ -82,8 +82,12 @@ data/
 class FeedRepository {
   final Dio _dio;
   
-  Future<List<FeedEntry>> fetchFeed() async {
-    // Fetches both articles and videos, merges them
+  Future<FeedPageResult<FeedEntry>> fetchArticlesPage() async {
+    // Fetches article playlist rows for the Articles surface
+  }
+
+  Future<FeedPageResult<FeedEntry>> fetchVideosPage() async {
+    // Fetches video playlist rows for the Videos surface
   }
   
   Future<List<ReelFeedEntry>> fetchReels() async {
@@ -428,16 +432,16 @@ class SomeWidget extends ConsumerWidget {
 
 ```dart
 // Provider
-final feedProvider = FutureProvider<List<FeedEntry>>((ref) async {
+final articlesProvider = FutureProvider<List<FeedEntry>>((ref) async {
   final repo = ref.read(feedRepositoryProvider);
-  return repo.fetchFeed();
+  return (await repo.fetchArticlesPage()).items;
 });
 
 // Widget
-class FeedPage extends ConsumerWidget {
+class ArticlesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feedAsync = ref.watch(feedProvider);
+    final feedAsync = ref.watch(articlesProvider);
     
     return feedAsync.when(
       data: (entries) => FeedList(entries: entries),
@@ -452,12 +456,12 @@ class FeedPage extends ConsumerWidget {
 
 ```dart
 // Provider with pagination
-class FeedNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
+class ArticlesNotifier extends StateNotifier<AsyncValue<List<FeedEntry>>> {
   int _page = 1;
   
   Future<void> loadMore() async {
     _page++;
-    final newItems = await _repo.fetchFeed(page: _page);
+    final newItems = (await _repo.fetchArticlesPage(page: _page)).items;
     state = AsyncValue.data([...state.value!, ...newItems]);
   }
 }

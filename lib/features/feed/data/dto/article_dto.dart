@@ -167,7 +167,7 @@ extension ArticleDtoX on ArticleDto {
           resolvePublishedDate(publishedAt ?? publishedDate, createdAt),
       addedAt: createdAt != null ? DateTime.tryParse(createdAt!) : null,
       url: sourceUrl,
-      imageUrl: imageUrl ?? FeedFallbacks.imageForCategory(category),
+      imageUrl: imageUrl,
       category: category,
       readTime: readTimeMinutes ?? computeReadTime(summaryText),
       tags: tags.map((tag) => tag.name).toList(growable: false),

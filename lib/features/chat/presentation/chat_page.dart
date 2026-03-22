@@ -2,6 +2,7 @@ import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/article_image.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -94,7 +95,6 @@ class _ChatListItem extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final imageUrl = chat.article.imageUrl?.trim();
 
     return Dismissible(
       key: ValueKey(chat.articleId),
@@ -162,31 +162,13 @@ class _ChatListItem extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: AppRadius.borderMd,
-                child: imageUrl != null && imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        width: AppSizes.thumbnailSm,
-                        height: AppSizes.thumbnailSm,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: AppSizes.thumbnailSm,
-                          height: AppSizes.thumbnailSm,
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.article,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: AppSizes.thumbnailSm,
-                        height: AppSizes.thumbnailSm,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: Icon(
-                          Icons.article,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+                child: ArticleImage.thumbnail(
+                  imageUrl: chat.article.imageUrl,
+                  category: chat.article.category,
+                  source: chat.article.source,
+                  width: AppSizes.thumbnailSm,
+                  height: AppSizes.thumbnailSm,
+                ),
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(

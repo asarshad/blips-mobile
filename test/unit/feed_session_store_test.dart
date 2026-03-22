@@ -12,6 +12,7 @@ FeedSessionSnapshot _snapshot({
   required FeedSurface surface,
   required DateTime lastActiveAt,
   int currentItemId = 2,
+  PendingFeedActionKind pendingActionKind = PendingFeedActionKind.newItems,
 }) {
   final items = <FeedEntry>[
     ArticleFeedEntry(
@@ -50,6 +51,7 @@ FeedSessionSnapshot _snapshot({
     hasMore: true,
     inventoryState: FeedInventoryState.healthy,
     pendingNewCount: 3,
+    pendingActionKind: pendingActionKind,
     lastFeedVersion: 'feed-v1',
   );
 }
@@ -108,6 +110,10 @@ void main() {
     expect(decision.resumeSnapshot!.currentItemId, 2);
     expect(decision.resumeSnapshot!.lastViewedIndex, 1);
     expect(decision.resumeSnapshot!.lastFeedVersion, 'feed-v1');
+    expect(
+      decision.resumeSnapshot!.pendingActionKind,
+      PendingFeedActionKind.newItems,
+    );
   });
 
   test('prepareRestore expires article sessions after the soft restore window',
@@ -217,7 +223,7 @@ void main() {
     );
   });
 
-  test('active session restores stable fallback image URLs', () async {
+  test('active session preserves null article image URLs', () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
     final snapshot = FeedSessionSnapshot(
@@ -251,7 +257,24 @@ void main() {
 
     expect(restored, isNotNull);
     final article = restored!.items.single as ArticleFeedEntry;
-    expect(article.imageUrl, isNotNull);
-    expect(article.imageUrl, contains('unsplash'));
+    expect(article.imageUrl, isNull);
+  });
+
+  test('active session preserves latest-bias pending action kind', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+
+    await store.saveActiveSession(
+      _snapshot(
+        surface: FeedSurface.reels,
+        lastActiveAt: DateTime.parse('2026-03-18T18:00:00Z'),
+        pendingActionKind: PendingFeedActionKind.latestBias,
+      ),
+    );
+
+    final restored = await store.getActiveSession(FeedSurface.reels);
+
+    expect(restored, isNotNull);
+    expect(restored!.pendingActionKind, PendingFeedActionKind.latestBias);
   });
 }

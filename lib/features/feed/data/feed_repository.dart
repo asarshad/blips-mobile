@@ -148,78 +148,6 @@ class FeedRepository {
     }
   }
 
-  /// Fetches both recent articles and videos, merging them into one list.
-  @Deprecated('Use fetchArticlesPage / fetchVideosPage instead')
-  Future<List<FeedEntry>> fetchFeed({
-    int articleLimit = 15,
-    int videoLimit = 10,
-    int page = 1,
-  }) async {
-    final result = await fetchFeedPage(
-      articleLimit: articleLimit,
-      videoLimit: videoLimit,
-      page: page,
-    );
-    return result.items;
-  }
-
-  @Deprecated('Use fetchArticlesPage / fetchVideosPage instead')
-  Future<FeedPageResult<FeedEntry>> fetchFeedPage({
-    int articleLimit = 15,
-    int videoLimit = 10,
-    int page = 1,
-  }) async {
-    try {
-      if (page <= 1) {
-        _resetSessionSnapshots();
-      }
-
-      final articleResult = await _fetchSessionPlaylist(
-        type: 'ARTICLE',
-        page: page,
-        size: articleLimit,
-      );
-      final videoResult = await _fetchSessionPlaylist(
-        type: 'VIDEO',
-        page: page,
-        size: videoLimit,
-      );
-
-      final merged = <FeedEntry>[
-        ...articleResult.items.whereType<ArticleFeedEntry>(),
-        ...videoResult.items.whereType<VideoFeedEntry>(),
-      ]..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-      final hasMore = articleResult.hasMore || videoResult.hasMore;
-
-      return FeedPageResult(
-        items: merged,
-        hasMore: hasMore,
-        inventoryState: _parseInventoryState(
-          value: null,
-          hasMore: hasMore,
-          itemCount: merged.length,
-        ),
-        servedAt: _latestServedAt(articleResult.servedAt, videoResult.servedAt),
-        feedVersion: _combineFeedVersion(
-          articleResult.feedVersion,
-          videoResult.feedVersion,
-        ),
-        newestPublishedAt: _latestServedAt(
-          articleResult.newestPublishedAt,
-          videoResult.newestPublishedAt,
-        ),
-        newestCreatedAt: _latestServedAt(
-          articleResult.newestCreatedAt,
-          videoResult.newestCreatedAt,
-        ),
-      );
-    } on DioException catch (e, stack) {
-      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
-    } catch (e, stack) {
-      throw DataException.fromParseError(e, stack);
-    }
-  }
-
   Future<FeedPageResult<FeedEntry>> _fetchSessionPlaylist({
     required String type,
     required int page,
@@ -264,51 +192,31 @@ class FeedRepository {
       }
 
       final parsed = _parsePlaylistItems(items);
-      if (parsed.isNotEmpty) {
-        final hasMore = response['has_more'] as bool? ?? true;
-        span?.success(
-          data: <String, Object?>{
-            'itemCount': parsed.length,
-            'hasMore': hasMore,
-            'sessionId': response['session_id'] as String? ?? '',
-            'cursor': response['cursor'] as int?,
-            'inventoryState':
-                response['inventory_state'] as String? ?? 'unknown',
-          },
-        );
-        return FeedPageResult(
-          items: parsed,
-          hasMore: hasMore,
-          inventoryState: _parseInventoryState(
-            value: response['inventory_state'] as String?,
-            hasMore: hasMore,
-            itemCount: parsed.length,
-          ),
-          sessionId: response['session_id'] as String?,
-          sessionCursor: response['cursor'] as int?,
-          servedAt: _parseServedAt(response['served_at']),
-          feedVersion: response['feed_version'] as String?,
-          newestPublishedAt: _parseServedAt(response['newest_published_at']),
-          newestCreatedAt: _parseServedAt(response['newest_created_at']),
-        );
-      }
-
-      span?.step(
-        'legacyFallback',
-        level: AppDiagnosticsLevel.warning,
-        message: 'Session playlist empty; falling back to legacy endpoint',
-      );
-      // Backward-compatible fallback for environments without /session/playlist support.
-      final fallback =
-          await _fetchLegacyFeedPage(type: type, page: page, size: size);
+      final hasMore = response['has_more'] as bool? ?? true;
       span?.success(
-        stage: 'legacySuccess',
         data: <String, Object?>{
-          'itemCount': fallback.items.length,
-          'hasMore': fallback.hasMore,
+          'itemCount': parsed.length,
+          'hasMore': hasMore,
+          'sessionId': response['session_id'] as String? ?? '',
+          'cursor': response['cursor'] as int?,
+          'inventoryState': response['inventory_state'] as String? ?? 'unknown',
         },
       );
-      return fallback;
+      return FeedPageResult(
+        items: parsed,
+        hasMore: hasMore,
+        inventoryState: _parseInventoryState(
+          value: response['inventory_state'] as String?,
+          hasMore: hasMore,
+          itemCount: parsed.length,
+        ),
+        sessionId: response['session_id'] as String?,
+        sessionCursor: response['cursor'] as int?,
+        servedAt: _parseServedAt(response['served_at']),
+        feedVersion: response['feed_version'] as String?,
+        newestPublishedAt: _parseServedAt(response['newest_published_at']),
+        newestCreatedAt: _parseServedAt(response['newest_created_at']),
+      );
     } catch (error, stackTrace) {
       span?.failure(error, stackTrace: stackTrace);
       rethrow;
@@ -374,14 +282,6 @@ class FeedRepository {
     _videoCursor = cursor;
   }
 
-  void _resetSessionSnapshots() {
-    _articleSessionId = null;
-    _articleCursor = null;
-    _videoSessionId = null;
-    _videoCursor = null;
-    _reelsCursor = null;
-  }
-
   List<FeedEntry> _parsePlaylistItems(List<Map<String, dynamic>> items) {
     final parsed = <FeedEntry>[];
     for (final item in items) {
@@ -442,75 +342,6 @@ class FeedRepository {
       'added_age_seconds': item['added_age_seconds'],
       'conversation_starters': item['conversation_starters'],
     });
-  }
-
-  Future<FeedPageResult<FeedEntry>> _fetchLegacyFeedPage({
-    required String type,
-    required int page,
-    required int size,
-  }) async {
-    if (type == 'ARTICLE') {
-      final response = await _api.get(
-        '/articles/recent',
-        queryParameters: {
-          'limit': size,
-          'page': page,
-        },
-      );
-      final articlesJson = response['articles'] as List<dynamic>? ?? const [];
-      final items = _parseMixedList(
-        articlesJson.cast<Map<String, dynamic>>(),
-        (json) => ArticleDto.fromJson(json).toDomain(),
-      );
-      final hasMore =
-          response['has_more'] as bool? ?? articlesJson.length >= size;
-      return FeedPageResult(
-        items: items,
-        hasMore: hasMore,
-        inventoryState: _parseInventoryState(
-          value: response['inventory_state'] as String?,
-          hasMore: hasMore,
-          itemCount: items.length,
-        ),
-        servedAt: _parseServedAt(response['served_at']),
-        feedVersion: response['feed_version'] as String?,
-        newestPublishedAt: _parseServedAt(response['newest_published_at']),
-        newestCreatedAt: _parseServedAt(response['newest_created_at']),
-      );
-    }
-
-    final response = await _api.get(
-      '/videos/recent',
-      queryParameters: {
-        'limit': size,
-        'page': page,
-      },
-    );
-    final videosJson = (response['items'] as List<dynamic>? ??
-            response['videos'] as List<dynamic>? ??
-            const [])
-        .cast<Map<String, dynamic>>();
-    final items = _parseMixedList(
-      videosJson,
-      (json) => VideoDto.fromJson(json).toDomain(),
-    );
-    final hasMore = response['has_more'] as bool? ?? videosJson.length >= size;
-    final cursorValue = response['next_cursor'] as String? ??
-        (hasMore ? '${(page - 1) * size + size}' : null);
-    return FeedPageResult(
-      items: items,
-      hasMore: hasMore,
-      inventoryState: _parseInventoryState(
-        value: response['inventory_state'] as String?,
-        hasMore: hasMore,
-        itemCount: items.length,
-      ),
-      nextCursor: cursorValue,
-      servedAt: _parseServedAt(response['served_at']),
-      feedVersion: response['feed_version'] as String?,
-      newestPublishedAt: _parseServedAt(response['newest_published_at']),
-      newestCreatedAt: _parseServedAt(response['newest_created_at']),
-    );
   }
 
   /// Fetches recent reels (short videos).
@@ -685,20 +516,6 @@ class FeedRepository {
     }
   }
 
-  /// Parses a mixed JSON list that may contain both organic items and
-  /// injected AD items (identified by `item_type == "AD"`).
-  static List<FeedEntry> _parseMixedList(
-    List<Map<String, dynamic>> jsonList,
-    FeedEntry Function(Map<String, dynamic>) organicParser,
-  ) {
-    return jsonList.map((json) {
-      if (json['item_type'] == 'AD') {
-        return AdFeedEntry.fromJson(json);
-      }
-      return organicParser(json);
-    }).toList(growable: false);
-  }
-
   FeedInventoryState _parseInventoryState({
     required String? value,
     required bool hasMore,
@@ -724,18 +541,6 @@ class FeedRepository {
       return null;
     }
     return DateTime.tryParse(value);
-  }
-
-  DateTime? _latestServedAt(DateTime? a, DateTime? b) {
-    if (a == null) return b;
-    if (b == null) return a;
-    return a.isAfter(b) ? a : b;
-  }
-
-  String? _combineFeedVersion(String? a, String? b) {
-    if (a == null || a.isEmpty) return b;
-    if (b == null || b.isEmpty) return a;
-    return '$a::$b';
   }
 
   String _surfaceLabelForType(String type) {

@@ -3,7 +3,6 @@ library image_starters_regression_test;
 
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
 import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
-import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Regression tests for two production incidents:
@@ -62,7 +61,7 @@ void main() {
       expect(dto.imageUrl, equals('https://example.com/img.jpg'));
     });
 
-    test('ArticleDto.toDomain() uses category fallback when image_url is null',
+    test('ArticleDto.toDomain() preserves null image_url for the UI renderer',
         () {
       final dto = ArticleDto.fromJson(const {
         'id': 5,
@@ -75,9 +74,9 @@ void main() {
       });
 
       final entry = dto.toDomain();
-      expect(entry.imageUrl, FeedFallbacks.imageForCategory('Technology'),
+      expect(entry.imageUrl, isNull,
           reason:
-              'Null imageUrl should trigger FeedFallbacks.imageForCategory()');
+              'Missing article images should stay null until the UI decides how to render them.');
     });
 
     test('empty string thumbnail_url becomes null in VideoDto', () {

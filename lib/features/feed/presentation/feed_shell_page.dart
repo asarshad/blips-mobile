@@ -570,9 +570,7 @@ class FeedShellPage extends HookConsumerWidget {
         restoreApproximateIndex: articleUiState.restoreApproximateIndex,
         onRestoreApplied:
             ref.read(articlesFeedProvider.notifier).consumeRestoreTarget,
-        topActionLabel: articleUiState.hasPendingNewItems
-            ? '${articleUiState.pendingNewCount} new item${articleUiState.pendingNewCount == 1 ? '' : 's'}'
-            : null,
+        topActionLabel: articleUiState.pendingActionLabel,
         onTopAction: articleUiState.hasPendingNewItems
             ? () => _refreshArticlesManually(
                   ref,
@@ -622,9 +620,7 @@ class FeedShellPage extends HookConsumerWidget {
         restoreApproximateIndex: videoUiState.restoreApproximateIndex,
         onRestoreApplied:
             ref.read(videosFeedProvider.notifier).consumeRestoreTarget,
-        topActionLabel: videoUiState.hasPendingNewItems
-            ? '${videoUiState.pendingNewCount} new item${videoUiState.pendingNewCount == 1 ? '' : 's'}'
-            : null,
+        topActionLabel: videoUiState.pendingActionLabel,
         onTopAction: videoUiState.hasPendingNewItems
             ? () => _refreshVideosManually(
                   ref,

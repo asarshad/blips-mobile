@@ -1,8 +1,7 @@
 import 'dart:convert';
 
-import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
-import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
+import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -26,7 +25,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -144,6 +143,22 @@ class FeedCache implements FeedCacheInterface {
         whereArgs: ['feed_session:articles'],
       );
     }
+    if (oldVersion < 6) {
+      // v6: Preserve null article images instead of caching synthetic URLs.
+      await db.execute('DROP TABLE IF EXISTS articles');
+      await _createArticlesTable(db);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)',
+      );
+      await db.delete(
+        'cache_meta',
+        where: 'key = ?',
+        whereArgs: ['feed_session:articles'],
+      );
+    }
   }
 
   Future<void> _createArticlesTable(DatabaseExecutor db) async {
@@ -234,8 +249,7 @@ class FeedCache implements FeedCacheInterface {
             'source': article.source,
             'published_at': article.publishedAt.toIso8601String(),
             'url': article.url,
-            'image_url': article.imageUrl ??
-                FeedFallbacks.imageForCategory(article.category),
+            'image_url': article.imageUrl,
             'category': article.category,
             'read_time': article.readTime,
             'tags': jsonEncode(article.tags),
@@ -263,7 +277,6 @@ class FeedCache implements FeedCacheInterface {
   }
 
   ArticleFeedEntry _articleFromRow(Map<String, dynamic> row) {
-    final category = row['category'] as String;
     return ArticleFeedEntry(
       id: row['id'] as int,
       title: row['title'] as String,
@@ -271,9 +284,8 @@ class FeedCache implements FeedCacheInterface {
       source: row['source'] as String,
       publishedAt: DateTime.parse(row['published_at'] as String),
       url: row['url'] as String,
-      imageUrl: _nullIfBlankString(row['image_url']) ??
-          FeedFallbacks.imageForCategory(category),
-      category: category,
+      imageUrl: _nullIfBlankString(row['image_url']),
+      category: row['category'] as String,
       readTime: row['read_time'] as int,
       tags: (jsonDecode(row['tags'] as String) as List<dynamic>)
           .cast<String>()

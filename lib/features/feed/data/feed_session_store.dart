@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
@@ -21,6 +20,18 @@ const Duration kReelExactRestoreWindow = Duration(hours: 2);
 const Duration kReelSoftRestoreWindow = Duration(hours: 24);
 const Duration kReelNewestBiasThreshold = Duration(hours: 6);
 const Duration kReelContinuationFreshWindow = Duration(hours: 6);
+
+enum PendingFeedActionKind {
+  newItems,
+  latestBias;
+
+  static PendingFeedActionKind fromJsonValue(String? value) {
+    return PendingFeedActionKind.values.firstWhere(
+      (candidate) => candidate.name == value,
+      orElse: () => PendingFeedActionKind.newItems,
+    );
+  }
+}
 
 enum FeedSurface {
   articles,
@@ -86,6 +97,7 @@ class FeedSessionSnapshot {
     this.sessionId,
     this.continuationCursor,
     this.pendingNewCount = 0,
+    this.pendingActionKind = PendingFeedActionKind.newItems,
     this.lastFeedVersion,
   });
 
@@ -100,6 +112,7 @@ class FeedSessionSnapshot {
   final bool hasMore;
   final FeedInventoryState inventoryState;
   final int pendingNewCount;
+  final PendingFeedActionKind pendingActionKind;
   final String? lastFeedVersion;
 
   Map<String, dynamic> toJson() {
@@ -117,6 +130,7 @@ class FeedSessionSnapshot {
       'has_more': hasMore,
       'inventory_state': inventoryState.name,
       'pending_new_count': pendingNewCount,
+      'pending_action_kind': pendingActionKind.name,
       'last_feed_version': lastFeedVersion,
     };
   }
@@ -147,6 +161,8 @@ class FeedSessionSnapshot {
         orElse: () => FeedInventoryState.healthy,
       ),
       pendingNewCount: json['pending_new_count'] as int? ?? 0,
+      pendingActionKind: PendingFeedActionKind.fromJsonValue(
+          json['pending_action_kind'] as String?),
       lastFeedVersion: json['last_feed_version'] as String?,
     );
   }
@@ -166,6 +182,7 @@ class FeedSessionSnapshot {
     bool? hasMore,
     FeedInventoryState? inventoryState,
     int? pendingNewCount,
+    PendingFeedActionKind? pendingActionKind,
     String? lastFeedVersion,
     bool clearLastFeedVersion = false,
   }) {
@@ -186,6 +203,7 @@ class FeedSessionSnapshot {
       hasMore: hasMore ?? this.hasMore,
       inventoryState: inventoryState ?? this.inventoryState,
       pendingNewCount: pendingNewCount ?? this.pendingNewCount,
+      pendingActionKind: pendingActionKind ?? this.pendingActionKind,
       lastFeedVersion: clearLastFeedVersion
           ? null
           : (lastFeedVersion ?? this.lastFeedVersion),
@@ -465,8 +483,7 @@ Map<String, dynamic> _serializeEntry(FeedEntry entry) {
         'freshness_reason': entry.freshnessReason,
         'conversation_starters': entry.conversationStarters,
         'url': entry.url,
-        'image_url':
-            entry.imageUrl ?? FeedFallbacks.imageForCategory(entry.category),
+        'image_url': entry.imageUrl,
         'category': entry.category,
         'read_time': entry.readTime,
         'tags': entry.tags,
@@ -524,7 +541,6 @@ FeedEntry _deserializeEntry(Map<String, dynamic> json) {
 
   switch (json['entry_type'] as String? ?? '') {
     case 'article':
-      final category = json['category'] as String? ?? '';
       return ArticleFeedEntry(
         id: json['id'] as int,
         title: json['title'] as String,
@@ -532,9 +548,8 @@ FeedEntry _deserializeEntry(Map<String, dynamic> json) {
         source: json['source'] as String? ?? '',
         publishedAt: publishedAt,
         url: json['url'] as String? ?? '',
-        imageUrl: _nullIfBlankString(json['image_url']) ??
-            FeedFallbacks.imageForCategory(category),
-        category: category,
+        imageUrl: _nullIfBlankString(json['image_url']),
+        category: json['category'] as String? ?? '',
         readTime: json['read_time'] as int? ?? 1,
         tags: (json['tags'] as List<dynamic>? ?? const [])
             .whereType<String>()

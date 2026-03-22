@@ -179,5 +179,26 @@ void main() {
 
       expect(find.textContaining('word86'), findsOneWidget);
     });
+
+    testWidgets('renders category-aware placeholder when image is missing',
+        (tester) async {
+      final noImageEntry = ArticleFeedEntry(
+        id: 6,
+        title: 'No Image Article',
+        summary: 'This article should render a placeholder.',
+        source: 'Placeholder Source',
+        publishedAt: DateTime(2025, 2, 10),
+        url: 'https://example.com/no-image',
+        imageUrl: null,
+        category: 'Technology',
+        readTime: 4,
+      );
+
+      await tester.pumpWidget(buildTestWidget(noImageEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.devices_outlined), findsNWidgets(2));
+      expect(find.text('No Image Article'), findsOneWidget);
+    });
   });
 }
