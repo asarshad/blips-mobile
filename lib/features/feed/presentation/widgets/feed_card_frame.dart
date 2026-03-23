@@ -366,22 +366,11 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use ShaderMask for smooth gradient fade at bottom
-    return ShaderMask(
-      shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Colors.white, Colors.white, Colors.white.withValues(alpha: 0)],
-        stops: const [0.0, 0.8, 1.0],
-      ).createShader(bounds),
-      blendMode: BlendMode.dstIn,
-      child: Text(
-        summary.trim(),
-        style: textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          height: AppTypography.lineHeightNormal,
-        ),
-        // No maxLines - flows naturally, fades at bottom
+    return Text(
+      summary.trim(),
+      style: textTheme.bodySmall?.copyWith(
+        color: colorScheme.onSurfaceVariant,
+        height: AppTypography.lineHeightNormal,
       ),
     );
   }
