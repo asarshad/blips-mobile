@@ -20,6 +20,9 @@ import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
+import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
+import 'package:blips_mobile/features/notifications/domain/notification_target.dart';
+import 'package:blips_mobile/features/notifications/providers/push_notification_providers.dart';
 import 'package:blips_mobile/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +65,45 @@ class FeedShellPage extends HookConsumerWidget {
         ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
     final videoUiState =
         ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
+    final pushController = ref.watch(pushNotificationsControllerProvider);
+
+    ref.listen<NotificationTarget?>(pendingNotificationTargetProvider,
+        (previous, next) {
+      if (next == null || next == previous) return;
+      Future.microtask(() async {
+        final handled = await _handleNotificationTarget(
+          target: next,
+          ref: ref,
+          currentIndex: currentIndex,
+        );
+        if (!handled) {
+          logger.info(
+            'Notification target fell back to surface head',
+            category: LogCategory.lifecycle,
+          );
+        }
+        pushController.consumePendingTarget(next);
+      });
+    });
+
+    ref.listen<FeedSurfaceUiState>(
+      feedSurfaceUiStateProvider(FeedSurface.articles),
+      (_, next) {
+        final message = next.unavailableTargetMessage;
+        if (message == null || !context.mounted) return;
+        _showInfoSnackbar(context, message);
+        ref.read(articlesFeedProvider.notifier).clearUnavailableTargetMessage();
+      },
+    );
+    ref.listen<FeedSurfaceUiState>(
+      feedSurfaceUiStateProvider(FeedSurface.videos),
+      (_, next) {
+        final message = next.unavailableTargetMessage;
+        if (message == null || !context.mounted) return;
+        _showInfoSnackbar(context, message);
+        ref.read(videosFeedProvider.notifier).clearUnavailableTargetMessage();
+      },
+    );
 
     // Warm reels data in background (controller warm-up is owned by Reels page).
     _useBackgroundReelsWarmup(ref);
@@ -76,7 +118,13 @@ class FeedShellPage extends HookConsumerWidget {
     _usePageControllerSync(pageController, currentIndex.value);
 
     // Refresh the current surface when the app returns to foreground.
-    _useResumeRefresh(ref, currentIndex.value);
+    _useResumeRefresh(ref, currentIndex.value, pushController);
+
+    useEffect(() {
+      unawaited(pushController.ensureStarted());
+      unawaited(pushController.onEligibleShellEntered());
+      return null;
+    }, const []);
 
     useEffect(() {
       Future.microtask(() async {
@@ -239,7 +287,11 @@ class FeedShellPage extends HookConsumerWidget {
     }, [currentIndex]);
   }
 
-  void _useResumeRefresh(WidgetRef ref, int currentIndex) {
+  void _useResumeRefresh(
+    WidgetRef ref,
+    int currentIndex,
+    PushNotificationsController pushController,
+  ) {
     final lastRefreshAt = useRef<DateTime?>(null);
     useEffect(() {
       final listener = AppLifecycleListener(
@@ -264,8 +316,9 @@ class FeedShellPage extends HookConsumerWidget {
           lastRefreshAt.value = now;
 
           if (ref.read(appConfigRepositoryProvider).isCacheStale) {
-            ref.invalidate(adsConfigProvider);
+            ref.invalidate(remoteAppConfigProvider);
           }
+          unawaited(pushController.handleAppResume());
 
           diagnostics.record(
             scope: 'feed.shell',
@@ -299,6 +352,25 @@ class FeedShellPage extends HookConsumerWidget {
     }, [currentIndex]);
   }
 
+  Future<bool> _handleNotificationTarget({
+    required NotificationTarget target,
+    required WidgetRef ref,
+    required ValueNotifier<int> currentIndex,
+  }) async {
+    currentIndex.value = target.surface.tabIndex;
+
+    switch (target.surface) {
+      case NotificationSurface.articles:
+        return ref
+            .read(articlesFeedProvider.notifier)
+            .ensureNotificationTargetLoaded(target.contentId);
+      case NotificationSurface.videos:
+        return ref
+            .read(videosFeedProvider.notifier)
+            .ensureNotificationTargetLoaded(target.contentId);
+    }
+  }
+
   void _refreshTabOnRetap(
     int index,
     WidgetRef ref,
@@ -310,15 +382,30 @@ class FeedShellPage extends HookConsumerWidget {
     switch (index) {
       case 0:
         _showRetapRefreshFeedback(context, index);
-        _refreshArticlesManually(ref, context, articleFeedController);
+        _refreshArticlesManually(
+          ref,
+          context,
+          articleFeedController,
+          fromTabRetap: true,
+        );
         break;
       case 1:
         _showRetapRefreshFeedback(context, index);
-        _refreshVideosManually(ref, context, videoFeedController);
+        _refreshVideosManually(
+          ref,
+          context,
+          videoFeedController,
+          fromTabRetap: true,
+        );
         break;
       case 2:
         _showRetapRefreshFeedback(context, index);
-        _refreshReelsManually(ref, context, reelsFeedController);
+        _refreshReelsManually(
+          ref,
+          context,
+          reelsFeedController,
+          fromTabRetap: true,
+        );
         break;
       case 3:
         _showRetapRefreshFeedback(context, index);
@@ -335,6 +422,7 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller, {
     bool fromNewItems = false,
+    bool fromTabRetap = false,
   }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
@@ -342,26 +430,42 @@ class FeedShellPage extends HookConsumerWidget {
       action: 'manualRefresh',
       surface: 'articles',
       data: <String, Object?>{
-        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+        'trigger': fromNewItems
+            ? 'newContentPill'
+            : (fromTabRetap ? 'tabRetap' : 'manualRefresh'),
       },
     );
     final notifier = ref.read(articlesFeedProvider.notifier);
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
-              : notifier.manualRefresh())
+              : (fromTabRetap
+                  ? notifier.refreshForRetap()
+                  : notifier.manualRefresh()))
           .then((ok) async {
+        if (fromTabRetap) {
+          if (ok) {
+            span.success(data: <String, Object?>{'jumpedToTop': false});
+          } else {
+            span.step(
+              'uiFailure',
+              level: AppDiagnosticsLevel.warning,
+              message: 'Showing retry snackbar',
+            );
+            _showRetrySnackbar(context, 'Articles refresh failed.', () {
+              _refreshArticlesManually(
+                ref,
+                context,
+                controller,
+                fromTabRetap: true,
+              );
+            });
+          }
+          return;
+        }
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          if (fromNewItems) {
-            await controller.animateToPage(
-              0,
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-            );
-          } else {
-            controller.jumpToPage(0);
-          }
+          await _animateFeedToTop(controller);
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -385,6 +489,7 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller, {
     bool fromNewItems = false,
+    bool fromTabRetap = false,
   }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
@@ -392,26 +497,42 @@ class FeedShellPage extends HookConsumerWidget {
       action: 'manualRefresh',
       surface: 'videos',
       data: <String, Object?>{
-        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+        'trigger': fromNewItems
+            ? 'newContentPill'
+            : (fromTabRetap ? 'tabRetap' : 'manualRefresh'),
       },
     );
     final notifier = ref.read(videosFeedProvider.notifier);
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
-              : notifier.manualRefresh())
+              : (fromTabRetap
+                  ? notifier.refreshForRetap()
+                  : notifier.manualRefresh()))
           .then((ok) async {
+        if (fromTabRetap) {
+          if (ok) {
+            span.success(data: <String, Object?>{'jumpedToTop': false});
+          } else {
+            span.step(
+              'uiFailure',
+              level: AppDiagnosticsLevel.warning,
+              message: 'Showing retry snackbar',
+            );
+            _showRetrySnackbar(context, 'Videos refresh failed.', () {
+              _refreshVideosManually(
+                ref,
+                context,
+                controller,
+                fromTabRetap: true,
+              );
+            });
+          }
+          return;
+        }
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          if (fromNewItems) {
-            await controller.animateToPage(
-              0,
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-            );
-          } else {
-            controller.jumpToPage(0);
-          }
+          await _animateFeedToTop(controller);
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -435,6 +556,7 @@ class FeedShellPage extends HookConsumerWidget {
     BuildContext context,
     PageController controller, {
     bool fromNewItems = false,
+    bool fromTabRetap = false,
   }) {
     final diagnostics = ref.read(appDiagnosticsProvider);
     final span = diagnostics.startSpan(
@@ -442,26 +564,42 @@ class FeedShellPage extends HookConsumerWidget {
       action: 'manualRefresh',
       surface: 'reels',
       data: <String, Object?>{
-        'trigger': fromNewItems ? 'newContentPill' : 'tabRetap',
+        'trigger': fromNewItems
+            ? 'newContentPill'
+            : (fromTabRetap ? 'tabRetap' : 'manualRefresh'),
       },
     );
     final notifier = ref.read(reelsFeedProvider.notifier);
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
-              : notifier.manualRefresh())
+              : (fromTabRetap
+                  ? notifier.refreshForRetap()
+                  : notifier.manualRefresh()))
           .then((ok) async {
+        if (fromTabRetap) {
+          if (ok) {
+            span.success(data: <String, Object?>{'jumpedToTop': false});
+          } else {
+            span.step(
+              'uiFailure',
+              level: AppDiagnosticsLevel.warning,
+              message: 'Showing retry snackbar',
+            );
+            _showRetrySnackbar(context, 'Reels refresh failed.', () {
+              _refreshReelsManually(
+                ref,
+                context,
+                controller,
+                fromTabRetap: true,
+              );
+            });
+          }
+          return;
+        }
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
-          if (fromNewItems) {
-            await controller.animateToPage(
-              0,
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-            );
-          } else {
-            controller.jumpToPage(0);
-          }
+          await _animateFeedToTop(controller);
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -480,6 +618,20 @@ class FeedShellPage extends HookConsumerWidget {
     );
   }
 
+  Future<void> _animateFeedToTop(PageController controller) async {
+    await controller.animateToPage(
+      0,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+    if (!controller.hasClients) return;
+    final page = controller.page;
+    if (page == null || (page - 0).abs() <= 0.001) {
+      return;
+    }
+    controller.jumpToPage(0);
+  }
+
   void _showRetrySnackbar(
       BuildContext context, String message, VoidCallback onRetry) {
     final messenger = ScaffoldMessenger.of(context);
@@ -491,6 +643,19 @@ class FeedShellPage extends HookConsumerWidget {
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(label: 'Retry', onPressed: onRetry),
           duration: const Duration(seconds: 4),
+        ),
+      );
+  }
+
+  void _showInfoSnackbar(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ),
       );
   }
@@ -571,7 +736,7 @@ class FeedShellPage extends HookConsumerWidget {
         onRestoreApplied:
             ref.read(articlesFeedProvider.notifier).consumeRestoreTarget,
         topActionLabel: articleUiState.pendingActionLabel,
-        onTopAction: articleUiState.hasPendingNewItems
+        onTopAction: articleUiState.hasPendingAction
             ? () => _refreshArticlesManually(
                   ref,
                   context,
@@ -621,7 +786,7 @@ class FeedShellPage extends HookConsumerWidget {
         onRestoreApplied:
             ref.read(videosFeedProvider.notifier).consumeRestoreTarget,
         topActionLabel: videoUiState.pendingActionLabel,
-        onTopAction: videoUiState.hasPendingNewItems
+        onTopAction: videoUiState.hasPendingAction
             ? () => _refreshVideosManually(
                   ref,
                   context,
@@ -651,7 +816,7 @@ class FeedShellPage extends HookConsumerWidget {
           reelsFeedController,
           fromNewItems: ref
               .read(feedSurfaceUiStateProvider(FeedSurface.reels))
-              .hasPendingNewItems,
+              .hasPendingAction,
         ),
       ),
       // Chat tab

@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/config/remote_app_config.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
 import 'package:blips_mobile/core/services/device_id_service.dart';
@@ -13,6 +14,15 @@ final appConfigRepositoryProvider = Provider<AppConfigRepository>((ref) {
   return AppConfigRepository(DioBackendApiClient(dio));
 });
 
+/// Fetches the top-level remote app config from the backend.
+final remoteAppConfigProvider = FutureProvider<RemoteAppConfig>((ref) async {
+  final deviceId = await ref.watch(deviceIdProvider.future);
+  final dio = ref.read(dioProvider);
+  dio.options.headers['X-Device-ID'] = deviceId;
+  final repo = ref.watch(appConfigRepositoryProvider);
+  return repo.fetchAppConfig();
+});
+
 /// Build-time ad runtime config used for local testing and SDK mode switching.
 final adsRuntimeConfigProvider = Provider<AdsRuntimeConfig>((ref) {
   return AdsRuntimeConfig.fromEnvironment();
@@ -24,17 +34,20 @@ final adsRuntimeConfigProvider = Provider<AdsRuntimeConfig>((ref) {
 /// On failure, returns a safe default with everything disabled.
 final adsConfigProvider = FutureProvider<AdsConfig>((ref) async {
   final runtimeConfig = ref.watch(adsRuntimeConfigProvider);
-  final deviceId = await ref.watch(deviceIdProvider.future);
-  final dio = ref.read(dioProvider);
-  dio.options.headers['X-Device-ID'] = deviceId;
-  final repo = ref.watch(appConfigRepositoryProvider);
-  final config = await repo.fetchAdsConfig();
+  final appConfig = await ref.watch(remoteAppConfigProvider.future);
+  final config = appConfig.ads;
   if (!runtimeConfig.shouldForceFeedAds) {
     return config;
   }
   return config.forceEnableFeedAds(
     provider: runtimeConfig.usesMockAds ? 'mock_native' : config.provider,
   );
+});
+
+/// Push config fetched from the shared `GET /config` response.
+final pushConfigProvider = FutureProvider<PushConfig>((ref) async {
+  final appConfig = await ref.watch(remoteAppConfigProvider.future);
+  return appConfig.push;
 });
 
 /// Provides a fire-and-forget [EventService] for impression / click tracking.

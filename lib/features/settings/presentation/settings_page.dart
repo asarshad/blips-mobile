@@ -6,6 +6,7 @@ import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/settings/providers/theme_provider.dart';
+import 'package:blips_mobile/features/notifications/providers/push_notification_providers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -382,6 +383,10 @@ class SettingsPage extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
+      await ref
+          .read(pushNotificationsControllerProvider)
+          .unregisterCurrentSubscription();
+
       // 1. Call the server deletion endpoint
       final dio = ref.read(dioProvider);
       await dio.delete<void>('/session/data');

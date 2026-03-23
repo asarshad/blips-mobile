@@ -20,6 +20,43 @@ void main() {
             widget is PageView && widget.scrollDirection == Axis.horizontal,
       );
 
+  Finder findVerticalFeedPageView() => find.byWidgetPredicate(
+        (widget) =>
+            widget is PageView && widget.scrollDirection == Axis.vertical,
+      );
+
+  Map<String, dynamic> buildArticlePlaylistResponseForIds(
+    List<int> ids, {
+    String feedVersion = 'article-v1',
+  }) {
+    return {
+      'items': ids
+          .map(
+            (id) => {
+              'id': id,
+              'type': 'ARTICLE',
+              'title': 'App shell article $id',
+              'source': 'Example News',
+              'source_url': 'https://example.com/article/$id',
+              'summary':
+                  'Article summary for shell navigation testing item $id.',
+              'image_url': 'https://example.com/article_$id.jpg',
+              'published_at': '2026-03-20T12:00:00Z',
+              'created_at': '2026-03-20T12:05:00Z',
+              'topics': ['Technology'],
+              'conversation_starters': {
+                'starters': ['Summarize this article.'],
+              },
+            },
+          )
+          .toList(growable: false),
+      'session_id': 'articles-session',
+      'cursor': ids.length,
+      'has_more': true,
+      'feed_version': feedVersion,
+    };
+  }
+
   FakeBackendApiClient buildApi() {
     return FakeBackendApiClient(
       responseResolver: (method, path, queryParameters, body) {
@@ -103,5 +140,66 @@ void main() {
     expect(find.text('Refreshing feed...'), findsOneWidget);
 
     await pumpUi(tester, const Duration(milliseconds: 700));
+  });
+
+  testWidgets(
+      're-tapping the current feed tab keeps position and surfaces View latest until tapped',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = FakeBackendApiClient(
+      responseResolver: (method, path, queryParameters, body) {
+        if (method == 'GET' && path == '/session/playlist') {
+          final type = queryParameters?['type'] as String?;
+          return switch (type) {
+            'ARTICLE' => buildArticlePlaylistResponseForIds(
+                List<int>.generate(15, (index) => index + 1),
+              ),
+            'VIDEO' => buildVideoPlaylistResponse(),
+            _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
+          };
+        }
+        if (method == 'GET' && path == '/videos/reels') {
+          return buildReelsResponse();
+        }
+        if (method == 'POST' && path == '/session/interactions') {
+          return const <String, dynamic>{};
+        }
+        return const <String, dynamic>{};
+      },
+    );
+
+    await tester.pumpWidget(
+      buildAppUiHarness(
+        api: api,
+        onboardingDone: true,
+      ),
+    );
+    await pumpUi(tester, const Duration(seconds: 2));
+
+    expect(find.text('ART 1/15+'), findsOneWidget);
+
+    await tester.drag(findVerticalFeedPageView().first, const Offset(0, -850));
+    await pumpUi(tester, const Duration(milliseconds: 500));
+    await tester.drag(findVerticalFeedPageView().first, const Offset(0, -850));
+    await pumpUi(tester, const Duration(milliseconds: 500));
+
+    expect(find.text('ART 3/15+'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.article));
+    await pumpUi(tester, const Duration(milliseconds: 900));
+
+    expect(find.text('ART 3/15+'), findsOneWidget);
+    expect(find.text('View latest'), findsOneWidget);
+
+    await tester.tap(find.text('View latest'));
+    await tester.pump();
+    await pumpUi(tester, const Duration(milliseconds: 400));
+
+    expect(find.text('ART 1/15+'), findsOneWidget);
+    expect(find.text('View latest'), findsNothing);
   });
 }

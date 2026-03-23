@@ -9,6 +9,7 @@ class VideoDto {
     required this.title,
     required this.videoUrl,
     required this.sourceUrl,
+    this.type = 'VIDEO',
     this.summary,
     this.thumbnailUrl,
     this.source,
@@ -29,6 +30,7 @@ class VideoDto {
         title: json['title'] as String,
         videoUrl: json['video_url'] as String,
         sourceUrl: json['source_url'] as String,
+        type: (json['type'] as String? ?? 'VIDEO').toUpperCase(),
         summary: json['summary'] as String?,
         thumbnailUrl: _nullIfBlank(json['thumbnail_url'] as String?),
         source: json['source'] as String?,
@@ -49,6 +51,7 @@ class VideoDto {
         'title': title,
         'video_url': videoUrl,
         'source_url': sourceUrl,
+        'type': type,
         'summary': summary,
         'thumbnail_url': thumbnailUrl,
         'source': source,
@@ -76,6 +79,9 @@ class VideoDto {
 
   /// Source permalink for the video.
   final String sourceUrl;
+
+  /// Backend item type discriminator.
+  final String type;
 
   /// Optional backend-provided summary transcript.
   final String? summary;
@@ -194,4 +200,8 @@ extension VideoDtoX on VideoDto {
       conversationStarters: conversationStarters,
     );
   }
+
+  bool get isVideo => type == 'VIDEO';
+
+  bool get isReel => type == 'REEL';
 }

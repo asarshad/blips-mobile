@@ -4,8 +4,10 @@ library videos_notifier_cache_test;
 import 'dart:async';
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -29,6 +31,23 @@ Map<String, dynamic> _videoJson(int id) {
   };
 }
 
+VideoFeedEntry _videoEntry(int id) {
+  final json = _videoJson(id);
+  return VideoFeedEntry(
+    id: id,
+    title: json['title']! as String,
+    summary: json['summary']! as String,
+    videoUrl: json['video_url']! as String,
+    link: json['source_url']! as String,
+    source: json['source']! as String,
+    category: 'Technology',
+    publishedAt: DateTime.parse(json['published_at']! as String),
+    readTime: 2,
+    durationSeconds: json['duration_seconds']! as int,
+    thumbnailUrl: json['image_url']! as String,
+  );
+}
+
 Map<String, dynamic> _videosResponse(List<int> ids) {
   return {
     'items': ids.map(_videoJson).toList(growable: false),
@@ -46,6 +65,158 @@ Future<void> _settle() async {
 }
 
 void main() {
+  test(
+    'ensureNotificationTargetLoaded fetches missing video and renders temporary overlay first',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          if (method == 'GET' && path == '/videos/99') {
+            return _videoJson(99);
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final success = await container
+          .read(videosFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(99);
+      await _settle();
+
+      expect(success, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.videos));
+      expect(uiState.restoreItemId, 99);
+      expect(uiState.restoreApproximateIndex, 0);
+      expect(uiState.notificationOverlayEntry, isA<VideoFeedEntry>());
+
+      final pageItems = container.read(videoFeedWithAdsProvider).valueOrNull!;
+      final organic = pageItems
+          .whereType<OrganicFeedPageItem>()
+          .map((item) => item.entry.id)
+          .toList(growable: false);
+      expect(organic.first, 99);
+      expect(organic.where((id) => id == 99), hasLength(1));
+      expect(organic, contains(1));
+    },
+  );
+
+  test(
+    'ensureNotificationTargetLoaded rejects reel payload and surfaces unavailable message',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _videosResponse(
+                List<int>.generate(10, (index) => index + 1));
+          }
+          if (method == 'GET' && path == '/videos/404') {
+            return {
+              'id': 404,
+              'type': 'REEL',
+              'title': 'Reel',
+              'video_url': 'https://youtube.com/watch?v=reel404',
+              'source_url': 'https://youtube.com/watch?v=reel404',
+              'source': 'YouTube',
+              'published_at': '2026-03-20T00:00:00Z',
+            };
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final success = await container
+          .read(videosFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(404);
+
+      expect(success, isFalse);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.videos));
+      expect(uiState.notificationOverlayEntry, isNull);
+      expect(uiState.restoreItemId, isNull);
+      expect(uiState.restoreApproximateIndex, isNull);
+      expect(uiState.unavailableTargetMessage, 'That video is unavailable.');
+    },
+  );
+
+  test(
+    'ensureNotificationTargetLoaded keeps resolved overlay when recovery fetch fails later',
+    () async {
+      final delayedTarget = Completer<Map<String, dynamic>>();
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _videosResponse(
+              List<int>.generate(10, (index) => index + 1),
+            );
+          }
+          if (method == 'GET' && path == '/videos/99') {
+            return delayedTarget.future;
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(videosFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final loadFuture = container
+          .read(videosFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(99);
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+
+      container
+          .read(feedSurfaceUiStateProvider(FeedSurface.videos).notifier)
+          .state = FeedSurfaceUiState(
+        notificationOverlayEntry: _videoEntry(99),
+      );
+
+      delayedTarget.completeError(Exception('temporary failure'));
+      final success = await loadFuture;
+
+      expect(success, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.videos));
+      expect(uiState.notificationOverlayEntry, isA<VideoFeedEntry>());
+      expect(uiState.restoreItemId, 99);
+      expect(uiState.restoreApproximateIndex, 0);
+      expect(uiState.unavailableTargetMessage, isNull);
+    },
+  );
+
   test(
     'VideosNotifier keeps cached items visible while fresh session loads',
     () async {

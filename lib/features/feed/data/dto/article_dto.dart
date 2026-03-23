@@ -8,6 +8,7 @@ class ArticleDto {
     required this.id,
     required this.title,
     required this.sourceUrl,
+    this.type = 'ARTICLE',
     this.summary,
     this.imageUrl,
     this.publishedDate,
@@ -28,6 +29,7 @@ class ArticleDto {
       id: json['id'] as int,
       title: json['title'] as String,
       sourceUrl: json['source_url'] as String,
+      type: (json['type'] as String? ?? 'ARTICLE').toUpperCase(),
       summary: json['summary'] as String?,
       imageUrl: _nullIfBlank(json['image_url'] as String?),
       publishedDate: json['published_date'] as String?,
@@ -54,6 +56,7 @@ class ArticleDto {
         'id': id,
         'title': title,
         'source_url': sourceUrl,
+        'type': type,
         'summary': summary,
         'image_url': imageUrl,
         'published_date': publishedDate,
@@ -78,6 +81,9 @@ class ArticleDto {
 
   /// Canonical URL of the article.
   final String sourceUrl;
+
+  /// Backend item type discriminator.
+  final String type;
 
   /// Optional summary body from the backend.
   final String? summary;
@@ -176,6 +182,8 @@ extension ArticleDtoX on ArticleDto {
       conversationStarters: conversationStarters,
     );
   }
+
+  bool get isArticle => type == 'ARTICLE';
 
   /// Parse freshness tier from string.
   FreshnessTier _parseFreshnessTier(String? tier) {

@@ -40,19 +40,24 @@ class FeedSurfaceUiState {
     this.pendingActionKind = PendingFeedActionKind.newItems,
     this.restoreItemId,
     this.restoreApproximateIndex,
+    this.notificationOverlayEntry,
+    this.unavailableTargetMessage,
   });
 
   final int pendingNewCount;
   final PendingFeedActionKind pendingActionKind;
   final int? restoreItemId;
   final int? restoreApproximateIndex;
+  final FeedEntry? notificationOverlayEntry;
+  final String? unavailableTargetMessage;
 
   bool get hasPendingNewItems => pendingNewCount > 0;
+  bool get hasPendingAction => pendingActionLabel != null;
 
   String? get pendingActionLabel {
     if (!hasPendingNewItems) return null;
     if (pendingActionKind == PendingFeedActionKind.latestBias) {
-      return 'See latest';
+      return 'View latest';
     }
     return '$pendingNewCount new item${pendingNewCount == 1 ? '' : 's'}';
   }
@@ -64,6 +69,10 @@ class FeedSurfaceUiState {
     bool clearRestoreItemId = false,
     int? restoreApproximateIndex,
     bool clearRestoreApproximateIndex = false,
+    FeedEntry? notificationOverlayEntry,
+    bool clearNotificationOverlayEntry = false,
+    String? unavailableTargetMessage,
+    bool clearUnavailableTargetMessage = false,
   }) {
     return FeedSurfaceUiState(
       pendingNewCount: pendingNewCount ?? this.pendingNewCount,
@@ -73,6 +82,12 @@ class FeedSurfaceUiState {
       restoreApproximateIndex: clearRestoreApproximateIndex
           ? null
           : (restoreApproximateIndex ?? this.restoreApproximateIndex),
+      notificationOverlayEntry: clearNotificationOverlayEntry
+          ? null
+          : (notificationOverlayEntry ?? this.notificationOverlayEntry),
+      unavailableTargetMessage: clearUnavailableTargetMessage
+          ? null
+          : (unavailableTargetMessage ?? this.unavailableTargetMessage),
     );
   }
 }
@@ -152,6 +167,9 @@ class ArticlesNotifier
   void setCurrentViewPosition(int index, ArticleFeedEntry? entry) {
     _currentItemId = entry?.id;
     _currentItemIndex = index;
+    if (index == 0) {
+      _clearLatestBiasAction();
+    }
     unawaited(_persistActiveSession());
   }
 
@@ -170,6 +188,85 @@ class ArticlesNotifier
         clearRestoreApproximateIndex: true,
       ),
     );
+  }
+
+  void clearUnavailableTargetMessage() {
+    _setUiState(
+      _uiState.copyWith(
+        clearUnavailableTargetMessage: true,
+      ),
+    );
+  }
+
+  bool _restoreResolvedNotificationTarget(int contentId) {
+    final currentItems = state.valueOrNull ?? const <ArticleFeedEntry>[];
+    final existingIndex =
+        currentItems.indexWhere((entry) => entry.id == contentId);
+    if (existingIndex >= 0) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: existingIndex,
+          clearNotificationOverlayEntry: true,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is ArticleFeedEntry && overlayEntry.id == contentId) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<bool> ensureNotificationTargetLoaded(int contentId) async {
+    if (_restoreResolvedNotificationTarget(contentId)) {
+      return true;
+    }
+
+    try {
+      final article = await _repository.fetchArticleById(contentId);
+      if (!mounted) return false;
+      _setUiState(
+        _uiState.copyWith(
+          notificationOverlayEntry: article,
+          restoreItemId: article.id,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to recover article notification target',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+      if (!mounted) return false;
+      if (_restoreResolvedNotificationTarget(contentId)) {
+        return true;
+      }
+      _setUiState(
+        _uiState.copyWith(
+          clearNotificationOverlayEntry: true,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+          unavailableTargetMessage: 'That article is unavailable.',
+        ),
+      );
+      return false;
+    }
   }
 
   bool isEntryNewSinceLastSeen(int entryId) {
@@ -316,11 +413,11 @@ class ArticlesNotifier
     }
   }
 
-  Future<void> _refreshInBackground() async {
+  Future<bool> _refreshInBackground() async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null) {
-      return;
+      return false;
     }
     _isRefreshing = true;
     final span = _startDiagnosticsSpan(
@@ -334,7 +431,7 @@ class ArticlesNotifier
       final freshPage = await _repository.previewArticlesHead(size: _limit);
       final freshItems =
           freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
-      if (!mounted) return;
+      if (!mounted) return false;
       if (freshItems.isNotEmpty) {
         _cacheInBackground(freshItems);
         _mergeFreshArticleMetadata(freshItems);
@@ -392,10 +489,12 @@ class ArticlesNotifier
           'pendingNewCount': pendingNewCount,
         },
       );
+      return true;
     } catch (e, st) {
       logger.warning('Background articles refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
       span?.failure(e, stackTrace: st);
+      return false;
     } finally {
       _isRefreshing = false;
     }
@@ -499,6 +598,8 @@ class ArticlesNotifier
           pendingActionKind: PendingFeedActionKind.newItems,
           clearRestoreItemId: true,
           clearRestoreApproximateIndex: true,
+          clearNotificationOverlayEntry: true,
+          clearUnavailableTargetMessage: true,
         ),
       );
       final ok = await _fetchFreshSessionFromNetwork(
@@ -526,6 +627,26 @@ class ArticlesNotifier
   /// Background refresh without spinners or index reset.
   Future<void> refreshSilently() async {
     await _refreshInBackground();
+  }
+
+  Future<bool> refreshForRetap() async {
+    final ok = await _refreshInBackground();
+    if (!ok || !mounted) return ok;
+    if (_uiState.hasPendingNewItems) return true;
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
+      return true;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 1,
+        pendingActionKind: PendingFeedActionKind.latestBias,
+      ),
+    );
+    await _persistActiveSession(
+      pendingNewCount: 1,
+    );
+    return true;
   }
 
   // -- polling -------------------------------------------------------------
@@ -773,6 +894,7 @@ class ArticlesNotifier
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
+    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -784,11 +906,24 @@ class ArticlesNotifier
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingActionKind == PendingFeedActionKind.latestBias &&
+        prefetchedPage == null) {
+      _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
+      _clearLatestBiasAction();
+      return true;
+    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final articles = prefetchedPage.items
           .whereType<ArticleFeedEntry>()
           .toList(growable: false);
       if (articles.isNotEmpty) {
+        _setUiState(
+          _uiState.copyWith(
+            clearNotificationOverlayEntry: true,
+            clearUnavailableTargetMessage: true,
+          ),
+        );
         _repository.restoreArticleSession(
           sessionId: prefetchedPage.sessionId,
           cursor: prefetchedPage.sessionCursor,
@@ -813,6 +948,20 @@ class ArticlesNotifier
   void dispose() {
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  void _clearLatestBiasAction() {
+    if (_uiState.pendingActionKind != PendingFeedActionKind.latestBias ||
+        !_uiState.hasPendingNewItems) {
+      return;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    unawaited(_persistActiveSession(pendingNewCount: 0));
   }
 }
 
@@ -880,6 +1029,9 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   void setCurrentViewPosition(int index, VideoFeedEntry? entry) {
     _currentItemId = entry?.id;
     _currentItemIndex = index;
+    if (index == 0) {
+      _clearLatestBiasAction();
+    }
     unawaited(_persistActiveSession());
   }
 
@@ -898,6 +1050,85 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         clearRestoreApproximateIndex: true,
       ),
     );
+  }
+
+  void clearUnavailableTargetMessage() {
+    _setUiState(
+      _uiState.copyWith(
+        clearUnavailableTargetMessage: true,
+      ),
+    );
+  }
+
+  bool _restoreResolvedNotificationTarget(int contentId) {
+    final currentItems = state.valueOrNull ?? const <VideoFeedEntry>[];
+    final existingIndex =
+        currentItems.indexWhere((entry) => entry.id == contentId);
+    if (existingIndex >= 0) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: existingIndex,
+          clearNotificationOverlayEntry: true,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is VideoFeedEntry && overlayEntry.id == contentId) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<bool> ensureNotificationTargetLoaded(int contentId) async {
+    if (_restoreResolvedNotificationTarget(contentId)) {
+      return true;
+    }
+
+    try {
+      final video = await _repository.fetchVideoById(contentId);
+      if (!mounted) return false;
+      _setUiState(
+        _uiState.copyWith(
+          notificationOverlayEntry: video,
+          restoreItemId: video.id,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to recover video notification target',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+      if (!mounted) return false;
+      if (_restoreResolvedNotificationTarget(contentId)) {
+        return true;
+      }
+      _setUiState(
+        _uiState.copyWith(
+          clearNotificationOverlayEntry: true,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+          unavailableTargetMessage: 'That video is unavailable.',
+        ),
+      );
+      return false;
+    }
   }
 
   bool isEntryNewSinceLastSeen(int entryId) {
@@ -1041,12 +1272,12 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     }
   }
 
-  Future<void> _refreshInBackground() async {
+  Future<bool> _refreshInBackground() async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null ||
         _isLoadingMore) {
-      return;
+      return false;
     }
     _isRefreshing = true;
     final span = _startDiagnosticsSpan(
@@ -1060,7 +1291,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       final freshPage = await _repository.previewVideosHead(size: _limit);
       final freshItems =
           freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
-      if (!mounted) return;
+      if (!mounted) return false;
 
       if (freshItems.isNotEmpty) {
         _replaceCacheSnapshotInBackground(freshItems);
@@ -1117,10 +1348,12 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           'pendingNewCount': pendingNewCount,
         },
       );
+      return true;
     } catch (e, st) {
       logger.warning('Background videos refresh failed',
           category: LogCategory.network, error: e, stackTrace: st);
       span?.failure(e, stackTrace: st);
+      return false;
     } finally {
       _isRefreshing = false;
     }
@@ -1224,6 +1457,8 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           pendingActionKind: PendingFeedActionKind.newItems,
           clearRestoreItemId: true,
           clearRestoreApproximateIndex: true,
+          clearNotificationOverlayEntry: true,
+          clearUnavailableTargetMessage: true,
         ),
       );
       final ok = await _fetchFreshSessionFromNetwork(
@@ -1251,6 +1486,26 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   /// Background refresh without spinners or index reset.
   Future<void> refreshSilently() async {
     await _refreshInBackground();
+  }
+
+  Future<bool> refreshForRetap() async {
+    final ok = await _refreshInBackground();
+    if (!ok || !mounted) return ok;
+    if (_uiState.hasPendingNewItems) return true;
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
+      return true;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 1,
+        pendingActionKind: PendingFeedActionKind.latestBias,
+      ),
+    );
+    await _persistActiveSession(
+      pendingNewCount: 1,
+    );
+    return true;
   }
 
   // -- polling -------------------------------------------------------------
@@ -1460,6 +1715,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
+    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -1471,11 +1727,24 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingActionKind == PendingFeedActionKind.latestBias &&
+        prefetchedPage == null) {
+      _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
+      _clearLatestBiasAction();
+      return true;
+    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final videos = prefetchedPage.items
           .whereType<VideoFeedEntry>()
           .toList(growable: false);
       if (videos.isNotEmpty) {
+        _setUiState(
+          _uiState.copyWith(
+            clearNotificationOverlayEntry: true,
+            clearUnavailableTargetMessage: true,
+          ),
+        );
         _repository.restoreVideoSession(
           sessionId: prefetchedPage.sessionId,
           cursor: prefetchedPage.sessionCursor,
@@ -1502,11 +1771,81 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _pollTimer?.cancel();
     super.dispose();
   }
+
+  void _clearLatestBiasAction() {
+    if (_uiState.pendingActionKind != PendingFeedActionKind.latestBias ||
+        !_uiState.hasPendingNewItems) {
+      return;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    unawaited(_persistActiveSession(pendingNewCount: 0));
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Provider definitions (articles + videos)
 // ---------------------------------------------------------------------------
+
+AsyncValue<List<FeedPageItem>>
+    _buildFeedItemsWithOptionalOverlay<T extends FeedEntry>({
+  required AsyncValue<List<T>> feedState,
+  required T? overlayEntry,
+  required AdsConfig adsConfig,
+  required AdSurface surface,
+  String? sessionId,
+}) {
+  List<FeedEntry> visibleEntries(List<T> entries) {
+    if (overlayEntry == null) {
+      return entries;
+    }
+    return <FeedEntry>[
+      overlayEntry,
+      ...entries.where((entry) => entry.id != overlayEntry.id),
+    ];
+  }
+
+  return feedState.when(
+    data: (items) => AsyncValue.data(
+      buildFeedPageItems(
+        entries: visibleEntries(items),
+        adsConfig: adsConfig,
+        surface: surface,
+        sessionId: sessionId,
+      ),
+    ),
+    error: (err, stack) {
+      if (overlayEntry == null) {
+        return AsyncValue.error(err, stack);
+      }
+      return AsyncValue.data(
+        buildFeedPageItems(
+          entries: <FeedEntry>[overlayEntry],
+          adsConfig: adsConfig,
+          surface: surface,
+          sessionId: sessionId,
+        ),
+      );
+    },
+    loading: () {
+      if (overlayEntry == null) {
+        return const AsyncValue.loading();
+      }
+      return AsyncValue.data(
+        buildFeedPageItems(
+          entries: <FeedEntry>[overlayEntry],
+          adsConfig: adsConfig,
+          surface: surface,
+          sessionId: sessionId,
+        ),
+      );
+    },
+  );
+}
 
 /// Loads the articles feed.
 final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
@@ -1539,18 +1878,16 @@ final articleFeedWithAdsProvider =
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
   final repository = ref.watch(feedRepositoryProvider);
+  final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
 
-  return feedState.when(
-    data: (items) => AsyncValue.data(
-      buildFeedPageItems(
-        entries: items,
-        adsConfig: adsConfig,
-        surface: AdSurface.articles,
-        sessionId: repository.articleSessionId,
-      ),
-    ),
-    error: (err, stack) => AsyncValue.error(err, stack),
-    loading: () => const AsyncValue.loading(),
+  return _buildFeedItemsWithOptionalOverlay<ArticleFeedEntry>(
+    feedState: feedState,
+    overlayEntry: uiState.notificationOverlayEntry is ArticleFeedEntry
+        ? uiState.notificationOverlayEntry as ArticleFeedEntry
+        : null,
+    adsConfig: adsConfig,
+    surface: AdSurface.articles,
+    sessionId: repository.articleSessionId,
   );
 });
 
@@ -1561,18 +1898,16 @@ final videoFeedWithAdsProvider =
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
   final repository = ref.watch(feedRepositoryProvider);
+  final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
-  return feedState.when(
-    data: (items) => AsyncValue.data(
-      buildFeedPageItems(
-        entries: items,
-        adsConfig: adsConfig,
-        surface: AdSurface.videos,
-        sessionId: repository.videoSessionId,
-      ),
-    ),
-    error: (err, stack) => AsyncValue.error(err, stack),
-    loading: () => const AsyncValue.loading(),
+  return _buildFeedItemsWithOptionalOverlay<VideoFeedEntry>(
+    feedState: feedState,
+    overlayEntry: uiState.notificationOverlayEntry is VideoFeedEntry
+        ? uiState.notificationOverlayEntry as VideoFeedEntry
+        : null,
+    adsConfig: adsConfig,
+    surface: AdSurface.videos,
+    sessionId: repository.videoSessionId,
   );
 });
 
@@ -1649,6 +1984,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   void setCurrentViewPosition(int index, ReelFeedEntry? entry) {
     _currentItemId = entry?.id;
     _currentItemIndex = index;
+    if (index == 0) {
+      _clearLatestBiasAction();
+    }
     unawaited(_persistActiveSession());
   }
 
@@ -1815,12 +2153,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     }
   }
 
-  Future<void> _refreshInBackground() async {
+  Future<bool> _refreshInBackground() async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null ||
         _isLoadingMore) {
-      return;
+      return false;
     }
     _isRefreshing = true;
     final span = _startDiagnosticsSpan(
@@ -1833,7 +2171,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     try {
       final freshPage = await _repository.previewReelsHead(limit: _limit);
       final freshReels = freshPage.items;
-      if (!mounted) return;
+      if (!mounted) return false;
       if (freshReels.isNotEmpty) {
         _replaceCacheSnapshotInBackground(freshReels);
       }
@@ -1898,6 +2236,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
           'pendingNewCount': pendingNewCount,
         },
       );
+      return true;
     } catch (e, st) {
       logger.warning(
         'Background reels refresh failed',
@@ -1906,6 +2245,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         stackTrace: st,
       );
       span?.failure(e, stackTrace: st);
+      return false;
     } finally {
       _isRefreshing = false;
     }
@@ -2091,6 +2431,26 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     await _refreshInBackground();
   }
 
+  Future<bool> refreshForRetap() async {
+    final ok = await _refreshInBackground();
+    if (!ok || !mounted) return ok;
+    if (_uiState.hasPendingNewItems) return true;
+    final items = state.valueOrNull;
+    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
+      return true;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 1,
+        pendingActionKind: PendingFeedActionKind.latestBias,
+      ),
+    );
+    await _persistActiveSession(
+      pendingNewCount: 1,
+    );
+    return true;
+  }
+
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(_pollInterval, (_) {
@@ -2209,6 +2569,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
+    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -2220,6 +2581,14 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
+    if (pendingActionKind == PendingFeedActionKind.latestBias &&
+        prefetchedPage == null) {
+      _pendingFeedVersion = null;
+      _preferLatestOnRefresh = false;
+      _pendingPrefetchedPage = null;
+      _clearLatestBiasAction();
+      return true;
+    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final reels = prefetchedPage.items;
       if (reels.isNotEmpty) {
@@ -2245,6 +2614,20 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   void dispose() {
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  void _clearLatestBiasAction() {
+    if (_uiState.pendingActionKind != PendingFeedActionKind.latestBias ||
+        !_uiState.hasPendingNewItems) {
+      return;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: 0,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    unawaited(_persistActiveSession(pendingNewCount: 0));
   }
 }
 

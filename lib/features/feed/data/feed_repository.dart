@@ -326,6 +326,7 @@ class FeedRepository {
         .toList(growable: false);
     return VideoDto.fromJson({
       'id': item['id'],
+      'type': item['type'],
       'title': item['title'],
       'video_url': item['video_url'] ?? item['source_url'] ?? '',
       'source_url': item['source_url'] ?? '',
@@ -342,6 +343,41 @@ class FeedRepository {
       'added_age_seconds': item['added_age_seconds'],
       'conversation_starters': item['conversation_starters'],
     });
+  }
+
+  /// Fetches a single article for notification-target recovery.
+  Future<ArticleFeedEntry> fetchArticleById(int id) async {
+    try {
+      final response = await _api.get('/articles/$id');
+      final dto = ArticleDto.fromJson(response);
+      if (!dto.isArticle) {
+        throw const FormatException('Notification target is not an article');
+      }
+      return dto.toDomain();
+    } on DioException catch (e, stack) {
+      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
+    } catch (e, stack) {
+      throw DataException.fromParseError(e, stack);
+    }
+  }
+
+  /// Fetches a single video for notification-target recovery.
+  Future<VideoFeedEntry> fetchVideoById(int id) async {
+    try {
+      final response = await _api.get('/videos/$id');
+      final dto = VideoDto.fromJson(response);
+      if (dto.isReel) {
+        throw const FormatException('Notification target resolved to a reel');
+      }
+      if (!dto.isVideo) {
+        throw const FormatException('Notification target is not a video');
+      }
+      return dto.toDomain() as VideoFeedEntry;
+    } on DioException catch (e, stack) {
+      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
+    } catch (e, stack) {
+      throw DataException.fromParseError(e, stack);
+    }
   }
 
   /// Fetches recent reels (short videos).

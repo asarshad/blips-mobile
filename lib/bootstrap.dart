@@ -1,7 +1,9 @@
 import 'package:blips_mobile/app.dart';
+import 'package:blips_mobile/core/config/firebase_bootstrap_options.dart';
 import 'package:blips_mobile/core/error/error.dart';
-import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
+import 'package:blips_mobile/features/feed/data/feed_cache.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -29,6 +31,7 @@ Future<void> bootstrap() async {
 
     logger.info('App starting...', category: LogCategory.lifecycle);
 
+    await _initializeFirebase();
     await _initializeAdMob();
 
     // Clean up very old cache on app start (older than 7 days)
@@ -80,6 +83,7 @@ Future<void> bootstrapWithOverrides({
     final binding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: binding);
 
+    await _initializeFirebase();
     await _initializeAdMob();
 
     runApp(
@@ -115,6 +119,32 @@ Future<void> _initializeAdMob() async {
   } catch (e, stackTrace) {
     logger.warning(
       'AdMob initialization failed',
+      category: LogCategory.app,
+      error: e,
+      stackTrace: stackTrace,
+    );
+  }
+}
+
+Future<void> _initializeFirebase() async {
+  final options = FirebaseBootstrapOptions.currentPlatform;
+  try {
+    if (Firebase.apps.isEmpty) {
+      if (options != null) {
+        await Firebase.initializeApp(options: options);
+      } else {
+        // Fall back to native Firebase config files when present.
+        await Firebase.initializeApp();
+      }
+    }
+    logger.info('Firebase initialized', category: LogCategory.lifecycle);
+  } catch (e, stackTrace) {
+    final message = options == null
+        ? 'Firebase initialization failed: '
+            'no build-time config or native app config found'
+        : 'Firebase initialization failed';
+    logger.warning(
+      message,
       category: LogCategory.app,
       error: e,
       stackTrace: stackTrace,

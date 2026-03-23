@@ -3,6 +3,7 @@ library feed_repository_test;
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/core/error/error.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
@@ -73,6 +74,29 @@ void main() {
         expect(videoPage.items.single, isA<VideoFeedEntry>());
       },
     );
+
+    test('fetchVideoById rejects reel payloads for notification recovery',
+        () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/videos/77': {
+            'id': 77,
+            'type': 'REEL',
+            'title': 'Reel 77',
+            'video_url': 'https://youtube.com/watch?v=reel77',
+            'source_url': 'https://youtube.com/watch?v=reel77',
+            'source': 'YouTube',
+            'published_at': '2026-03-01T00:00:00Z',
+          },
+        },
+      );
+      final repo = FeedRepository(api);
+
+      expect(
+        () => repo.fetchVideoById(77),
+        throwsA(isA<DataException>()),
+      );
+    });
 
     test(
       'fetchArticlesPage preserves feed version and freshness metadata from session playlist',

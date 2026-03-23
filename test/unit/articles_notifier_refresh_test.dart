@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
+import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +50,132 @@ Future<void> _settle() async {
 }
 
 void main() {
+  test(
+    'ensureNotificationTargetLoaded jumps to existing article without overlay',
+    () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': _articlesResponse(
+            List<int>.generate(15, (index) => index + 1),
+          ),
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final success = await container
+          .read(articlesFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(3);
+
+      expect(success, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.restoreItemId, 3);
+      expect(uiState.restoreApproximateIndex, 2);
+      expect(uiState.notificationOverlayEntry, isNull);
+      expect(uiState.unavailableTargetMessage, isNull);
+    },
+  );
+
+  test(
+    'ensureNotificationTargetLoaded fetches missing article and renders temporary overlay first',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _articlesResponse(
+              List<int>.generate(15, (index) => index + 1),
+            );
+          }
+          if (method == 'GET' && path == '/articles/99') {
+            return _articleJson(99);
+          }
+          return const <String, dynamic>{};
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final success = await container
+          .read(articlesFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(99);
+      await _settle();
+
+      expect(success, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.restoreItemId, 99);
+      expect(uiState.restoreApproximateIndex, 0);
+      expect(uiState.notificationOverlayEntry, isA<ArticleFeedEntry>());
+
+      final pageItems = container.read(articleFeedWithAdsProvider).valueOrNull!;
+      final organic = pageItems
+          .whereType<OrganicFeedPageItem>()
+          .map((item) => item.entry.id)
+          .toList(growable: false);
+      expect(organic.first, 99);
+      expect(organic.where((id) => id == 99), hasLength(1));
+      expect(organic, contains(1));
+    },
+  );
+
+  test(
+    'ensureNotificationTargetLoaded surfaces unavailable message when fetch fails',
+    () async {
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _articlesResponse(
+              List<int>.generate(15, (index) => index + 1),
+            );
+          }
+          if (method == 'GET' && path == '/articles/404') {
+            throw Exception('not found');
+          }
+          return const <String, dynamic>{};
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+      await _settle();
+
+      final success = await container
+          .read(articlesFeedProvider.notifier)
+          .ensureNotificationTargetLoaded(404);
+
+      expect(success, isFalse);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.notificationOverlayEntry, isNull);
+      expect(uiState.restoreItemId, isNull);
+      expect(uiState.restoreApproximateIndex, isNull);
+      expect(uiState.unavailableTargetMessage, 'That article is unavailable.');
+    },
+  );
+
   test(
     'ArticlesNotifier manualRefresh keeps current items visible until replacement arrives',
     () async {
@@ -379,6 +506,107 @@ void main() {
         0,
       );
       expect(playlistCallCount, 2);
+    },
+  );
+
+  test(
+    'ArticlesNotifier refreshForRetap surfaces View latest when refreshed away from the top with no head changes',
+    () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': _articlesResponse(
+            List<int>.generate(15, (index) => index + 1),
+          ),
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final notifier = container.read(articlesFeedProvider.notifier);
+      final entries = container.read(articlesFeedProvider).value!;
+      notifier.setCurrentViewPosition(3, entries[3]);
+
+      final ok = await notifier.refreshForRetap();
+      await _settle();
+
+      expect(ok, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.pendingActionKind, PendingFeedActionKind.latestBias);
+      expect(uiState.pendingNewCount, 1);
+      expect(uiState.pendingActionLabel, 'View latest');
+
+      final opened = await notifier.openPendingNewContent();
+      await _settle();
+
+      expect(opened, isTrue);
+      expect(
+        container
+            .read(feedSurfaceUiStateProvider(FeedSurface.articles))
+            .pendingNewCount,
+        0,
+      );
+    },
+  );
+
+  test(
+    'ArticlesNotifier refreshForRetap preserves new-items pill when the head changes',
+    () async {
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET' || path != '/session/playlist') {
+            return const <String, dynamic>{};
+          }
+          playlistCallCount += 1;
+          if (playlistCallCount == 1) {
+            return _articlesResponse(
+              List<int>.generate(15, (index) => index + 1),
+              feedVersion: 'article-v1',
+            );
+          }
+          return _articlesResponse(
+            [101, ...List<int>.generate(14, (index) => index + 1)],
+            feedVersion: 'article-v2',
+          );
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final notifier = container.read(articlesFeedProvider.notifier);
+      final entries = container.read(articlesFeedProvider).value!;
+      notifier.setCurrentViewPosition(4, entries[4]);
+
+      final ok = await notifier.refreshForRetap();
+      await _settle();
+
+      expect(ok, isTrue);
+      final uiState =
+          container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
+      expect(uiState.pendingActionKind, PendingFeedActionKind.newItems);
+      expect(uiState.pendingNewCount, 1);
+      expect(uiState.pendingActionLabel, '1 new item');
     },
   );
 }
