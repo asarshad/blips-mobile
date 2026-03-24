@@ -5,21 +5,36 @@ import 'package:flutter/material.dart';
 /// Keep this small and transparent so it does not obstruct content while still
 /// surfacing the current position and a small amount of feed state.
 class FeedStatusOverlay extends StatelessWidget {
+  /// Creates the compact feed diagnostics overlay.
   const FeedStatusOverlay({
-    super.key,
     required this.title,
     this.subtitle,
     this.dark = false,
     this.topInset = 0,
+    super.key,
   });
 
+  /// Set to `true` from integration/screenshot tests to hide the overlay.
+  static bool suppress = false;
+
+  /// Primary overlay text, usually the current position summary.
   final String title;
+
+  /// Secondary overlay text, such as freshness or state details.
   final String? subtitle;
+
+  /// Whether the overlay should use a dark-on-dark presentation.
   final bool dark;
+
+  /// Extra top spacing when another top bar is already occupying the safe area.
   final double topInset;
 
   @override
   Widget build(BuildContext context) {
+    if (suppress) {
+      return const SizedBox.shrink();
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
     final background = dark
         ? Colors.black.withValues(alpha: 0.56)

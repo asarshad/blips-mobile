@@ -22,6 +22,7 @@ Widget buildAppUiHarness({
   FakeFeedCache? cache,
   ChatRepository? chatRepository,
   YoutubePlayerManagerBase? youtubeManager,
+  List<Override> overrides = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -34,6 +35,7 @@ Widget buildAppUiHarness({
       youtubePlayerManagerProvider.overrideWith(
         (ref) => youtubeManager ?? FakeYoutubePlayerManager(),
       ),
+      ...overrides,
     ],
     child: const BlipsApp(),
   );
