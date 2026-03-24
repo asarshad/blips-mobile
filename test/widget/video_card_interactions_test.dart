@@ -15,6 +15,7 @@ import '../test_utils/recording_platforms.dart';
 
 void main() {
   late VideoFeedEntry video;
+  late FakeBackendApiClient api;
   late UrlLauncherPlatform originalUrlLauncher;
   late RecordingUrlLauncherPlatform recordingUrlLauncher;
   late RecordingSharePlatform recordingSharePlatform;
@@ -31,6 +32,7 @@ void main() {
   }
 
   setUp(() {
+    api = delayedInteractionApi();
     video = VideoFeedEntry(
       id: 10,
       title: 'Video interaction contract',
@@ -82,7 +84,7 @@ void main() {
   Future<void> pumpHarness(WidgetTester tester) async {
     await tester.pumpWidget(
       buildFeedInteractionHarness(
-        api: delayedInteractionApi(),
+        api: api,
         child: VideoCard(
           entry: video,
           isVisible: false,
@@ -118,6 +120,24 @@ void main() {
     expect(params.subject, video.title);
     expect(params.text, contains(video.link));
     expect(params.text, contains('Shared via Blips News'));
+
+    await settleDelayedInteraction(tester);
+  });
+
+  testWidgets('bookmark toggle fills immediately and records save signal',
+      (tester) async {
+    await pumpHarness(tester);
+
+    await tester.tap(find.byIcon(Icons.bookmark_border_rounded));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
+
+    final body = api.requests
+        .lastWhere((request) => request.method == 'POST')
+        .body as Map<String, dynamic>?;
+    expect(body, isNotNull);
+    expect(body!['event_type'], 'VIDEO_SAVE');
 
     await settleDelayedInteraction(tester);
   });

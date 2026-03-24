@@ -43,7 +43,7 @@ void main() {
     );
   });
 
-  testWidgets('long press and save video records save interaction',
+  testWidgets('long press sheet no longer shows save video action',
       (tester) async {
     await tester.pumpWidget(buildTestWidget());
     await tester.pumpAndSettle();
@@ -51,17 +51,8 @@ void main() {
     await tester.longPress(find.byType(VideoCard));
     await tester.pumpAndSettle();
 
-    expect(find.text('Save video'), findsOneWidget);
-
-    await tester.tap(find.text('Save video'));
-    await tester.pumpAndSettle();
-
-    final body = api.requests
-        .lastWhere((request) => request.method == 'POST')
-        .body as Map<String, dynamic>?;
-    expect(body, isNotNull);
-    expect(body!['event_type'], 'VIDEO_SAVE');
-    expect(find.text('Saved for future ranking.'), findsOneWidget);
+    expect(find.text('Save video'), findsNothing);
+    expect(find.text('Less from Creator Name'), findsOneWidget);
   });
 
   testWidgets('long press and choose less from creator records interaction',

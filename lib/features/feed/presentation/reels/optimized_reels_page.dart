@@ -53,6 +53,39 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final reelsNotifier = ref.read(reelsFeedProvider.notifier);
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.reels));
     final isMounted = useIsMounted();
+    final autoRetryInProgress = useState(false);
+    final autoRetryAttempts = useRef(0);
+
+    useEffect(() {
+      if (reelsFeed.hasValue) {
+        autoRetryAttempts.value = 0;
+        autoRetryInProgress.value = false;
+      }
+      return null;
+    }, [reelsFeed.valueOrNull]);
+
+    useEffect(() {
+      if (!reelsFeed.hasError || !isVisible) {
+        autoRetryInProgress.value = false;
+        return null;
+      }
+      if (autoRetryInProgress.value || autoRetryAttempts.value >= 1) {
+        return null;
+      }
+
+      autoRetryInProgress.value = true;
+      final timer = Timer(const Duration(milliseconds: 900), () async {
+        if (!isMounted()) return;
+        autoRetryAttempts.value += 1;
+        final ok = await reelsNotifier.manualRefresh();
+        if (!isMounted()) return;
+        autoRetryInProgress.value = false;
+        if (ok) {
+          autoRetryAttempts.value = 0;
+        }
+      });
+      return timer.cancel;
+    }, [reelsFeed.hasError, isVisible, autoRetryInProgress.value]);
 
     _useInitialPreload(reelsFeed, videoManager, isVisible);
     _useViewportWarmup(
@@ -107,13 +140,16 @@ class OptimizedReelsPage extends HookConsumerWidget {
           ref: ref,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Theme(
-          data: ThemeData.dark(),
-          child: ErrorView(
-            error: error,
-            onRetry: onManualRefresh ?? () => ref.invalidate(reelsFeedProvider),
-          ),
-        ),
+        error: (error, stack) => autoRetryInProgress.value
+            ? const Center(child: CircularProgressIndicator())
+            : Theme(
+                data: ThemeData.dark(),
+                child: ErrorView(
+                  error: error,
+                  onRetry: onManualRefresh ??
+                      () => ref.invalidate(reelsFeedProvider),
+                ),
+              ),
       ),
     );
   }

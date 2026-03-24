@@ -15,6 +15,7 @@ import '../test_utils/recording_platforms.dart';
 
 void main() {
   late ArticleFeedEntry article;
+  late FakeBackendApiClient api;
   late UrlLauncherPlatform originalUrlLauncher;
   late RecordingUrlLauncherPlatform recordingUrlLauncher;
   late RecordingSharePlatform recordingSharePlatform;
@@ -31,6 +32,7 @@ void main() {
   }
 
   setUp(() {
+    api = delayedInteractionApi();
     article = ArticleFeedEntry(
       id: 1,
       title: 'Test Article Title',
@@ -80,7 +82,7 @@ void main() {
   Future<void> pumpHarness(WidgetTester tester) async {
     await tester.pumpWidget(
       buildFeedInteractionHarness(
-        api: delayedInteractionApi(),
+        api: api,
         child: ArticleCard(entry: article),
       ),
     );
@@ -122,6 +124,24 @@ void main() {
     expect(params.subject, article.title);
     expect(params.text, contains(article.url));
     expect(params.text, contains('Shared via Blips News'));
+
+    await settleDelayedInteraction(tester);
+  });
+
+  testWidgets('bookmark toggle fills immediately and records save signal',
+      (tester) async {
+    await pumpHarness(tester);
+
+    await tester.tap(find.byIcon(Icons.bookmark_border_rounded));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
+
+    final body = api.requests
+        .lastWhere((request) => request.method == 'POST')
+        .body as Map<String, dynamic>?;
+    expect(body, isNotNull);
+    expect(body!['event_type'], 'SAVE');
 
     await settleDelayedInteraction(tester);
   });

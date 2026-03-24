@@ -6,6 +6,7 @@ import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -30,6 +31,7 @@ class ArticleCard extends HookConsumerWidget {
     final showBubbles = useState(false);
     final repository = ref.read(feedRepositoryProvider);
     final sessionStore = ref.read(feedSessionStoreProvider);
+    final isSaved = ref.watch(savedArticleIdsProvider).contains(entry.id);
 
     // Collapse bubbles when card scrolls out of view or outer tab changes
     useEffect(() {
@@ -61,6 +63,10 @@ class ArticleCard extends HookConsumerWidget {
           onOpenLink: () => _openInBrowser(entry.url, repository, sessionStore),
           onChat: () => showBubbles.value = !showBubbles.value,
           onShare: () => _shareArticle(context, repository, sessionStore),
+          onSaveToggle: () => unawaited(
+            ref.read(savedArticlesProvider.notifier).toggle(entry),
+          ),
+          isSaved: isSaved,
         ),
         if (showBubbles.value)
           Positioned(

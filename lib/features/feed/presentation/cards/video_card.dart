@@ -7,6 +7,7 @@ import 'package:blips_mobile/features/feed/domain/external_video_url.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
@@ -20,10 +21,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 const _videoFallbackImage =
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800';
 
-enum _VideoCardAction {
-  save,
-  lessFromCreator,
-}
+enum _VideoCardAction { lessFromCreator }
 
 /// Card widget for displaying video feed entries.
 /// Includes inline video playback with thumbnail fallback.
@@ -47,6 +45,7 @@ class VideoCard extends HookConsumerWidget {
     final feedRepository = ref.read(feedRepositoryProvider);
     final sessionStore = ref.read(feedSessionStoreProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
+    final isSaved = ref.watch(savedVideoIdsProvider).contains(entry.id);
     final playbackUrl = _resolvePlaybackUrl(videoManager);
     final controller = videoManager.getController(playbackUrl);
     final playerState = videoManager.getState(playbackUrl);
@@ -59,6 +58,7 @@ class VideoCard extends HookConsumerWidget {
     final sentSkip = useRef(false);
     final startedAt = useRef<DateTime?>(null);
     final lastPositionMs = useRef(0);
+    final loadingRecoveryArmed = useRef(false);
 
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
@@ -104,6 +104,24 @@ class VideoCard extends HookConsumerWidget {
       }
       return null;
     }, [isVisible, playbackUrl]);
+
+    useEffect(() {
+      if (!isVisible || !isLoading) {
+        loadingRecoveryArmed.value = false;
+        return null;
+      }
+      if (loadingRecoveryArmed.value) {
+        return null;
+      }
+      loadingRecoveryArmed.value = true;
+      final timer = Timer(const Duration(milliseconds: 900), () {
+        final state = videoManager.getState(playbackUrl);
+        if (state == YTPlayerState.loading || state == YTPlayerState.idle) {
+          unawaited(videoManager.retryVideo(playbackUrl));
+        }
+      });
+      return timer.cancel;
+    }, [isVisible, isLoading, playbackUrl]);
 
     useEffect(() {
       if (isVisible && !sentImpression.value) {
@@ -255,8 +273,7 @@ class VideoCard extends HookConsumerWidget {
             playbackUrl: playbackUrl,
             playerState: playerState,
           ),
-          onLongPress: () =>
-              _showActionsSheet(context, feedRepository, sessionStore),
+          onLongPress: () => _showActionsSheet(context, feedRepository),
           onOpenLink: () => _openInBrowser(
             repository: feedRepository,
             sessionStore: sessionStore,
@@ -267,6 +284,10 @@ class VideoCard extends HookConsumerWidget {
             feedRepository,
             sessionStore,
           ),
+          onSaveToggle: () => unawaited(
+            ref.read(savedVideosProvider.notifier).toggle(entry),
+          ),
+          isSaved: isSaved,
         ),
         if (showBubbles.value)
           Positioned(
@@ -419,7 +440,6 @@ class VideoCard extends HookConsumerWidget {
   Future<void> _showActionsSheet(
     BuildContext context,
     FeedRepository repository,
-    FeedSessionStore sessionStore,
   ) async {
     final action = await showModalBottomSheet<_VideoCardAction>(
       context: context,
@@ -428,13 +448,6 @@ class VideoCard extends HookConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
-              title: const Text('Save video'),
-              subtitle:
-                  const Text('Adds a strong positive signal for this source.'),
-              onTap: () => Navigator.of(context).pop(_VideoCardAction.save),
-            ),
             ListTile(
               leading: const Icon(Icons.visibility_off_outlined),
               title: Text('Less from ${entry.source}'),
@@ -451,18 +464,6 @@ class VideoCard extends HookConsumerWidget {
     if (action == null || !context.mounted) return;
 
     switch (action) {
-      case _VideoCardAction.save:
-        await repository.recordInteraction(
-          contentItemId: entry.id,
-          eventType: FeedInteractionEvent.videoSave,
-          extraData: {
-            'surface': 'videos',
-            'source': entry.source,
-          },
-        );
-        await sessionStore.markConsumed(FeedSurface.videos, entry.id);
-        _showFeedback(context, 'Saved for future ranking.');
-        break;
       case _VideoCardAction.lessFromCreator:
         await repository.recordInteraction(
           contentItemId: entry.id,

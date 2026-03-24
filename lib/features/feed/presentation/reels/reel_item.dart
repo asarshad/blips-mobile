@@ -58,6 +58,7 @@ class ReelItem extends HookConsumerWidget {
     final sentSkip = useRef(false);
     final startedAt = useRef<DateTime?>(null);
     final lastPositionMs = useRef(0);
+    final loadingRecoveryArmed = useRef(false);
 
     // Track when video is actually playing to hide thumbnail
     _useThumbnailVisibility(
@@ -209,6 +210,24 @@ class ReelItem extends HookConsumerWidget {
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
     final isError = playerState == YTPlayerState.error;
+
+    useEffect(() {
+      if (!isActive || !isVisible || !isLoading) {
+        loadingRecoveryArmed.value = false;
+        return null;
+      }
+      if (loadingRecoveryArmed.value) {
+        return null;
+      }
+      loadingRecoveryArmed.value = true;
+      final timer = Timer(const Duration(milliseconds: 900), () {
+        final state = videoManager.getState(entry.link);
+        if (state == YTPlayerState.loading || state == YTPlayerState.idle) {
+          unawaited(videoManager.retryVideo(entry.link));
+        }
+      });
+      return timer.cancel;
+    }, [entry.link, isActive, isVisible, isLoading]);
 
     // Mount the player whenever a controller exists so iframe initialization
     // can progress while state is still loading. Thumbnail/spinner overlays

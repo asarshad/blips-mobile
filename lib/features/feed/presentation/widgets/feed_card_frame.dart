@@ -44,6 +44,8 @@ class FeedCardFrame extends StatelessWidget {
     this.onShare,
     this.onChat,
     this.onOpenLink,
+    this.onSaveToggle,
+    this.isSaved = false,
     this.showActions = true,
     this.mediaAspectRatio,
   });
@@ -71,6 +73,8 @@ class FeedCardFrame extends StatelessWidget {
   final VoidCallback? onShare;
   final VoidCallback? onChat;
   final VoidCallback? onOpenLink;
+  final VoidCallback? onSaveToggle;
+  final bool isSaved;
   final bool showActions;
 
   /// Max text scale factor for card content.
@@ -131,6 +135,8 @@ class FeedCardFrame extends StatelessWidget {
         onShare: onShare,
         onChat: onChat,
         onOpenLink: onOpenLink,
+        onSaveToggle: onSaveToggle,
+        isSaved: isSaved,
         colorScheme: colorScheme,
         textTheme: textTheme,
       ),
@@ -204,6 +210,8 @@ class _ContentSection extends StatelessWidget {
     this.onShare,
     this.onChat,
     this.onOpenLink,
+    this.onSaveToggle,
+    required this.isSaved,
   });
 
   final String category;
@@ -220,6 +228,8 @@ class _ContentSection extends StatelessWidget {
   final VoidCallback? onShare;
   final VoidCallback? onChat;
   final VoidCallback? onOpenLink;
+  final VoidCallback? onSaveToggle;
+  final bool isSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -239,6 +249,8 @@ class _ContentSection extends StatelessWidget {
             showActions: showActions,
             onShare: onShare,
             onOpenLink: onOpenLink,
+            onSaveToggle: onSaveToggle,
+            isSaved: isSaved,
             colorScheme: colorScheme,
             textTheme: textTheme,
           ),
@@ -285,6 +297,8 @@ class _Header extends StatelessWidget {
     required this.textTheme,
     this.onShare,
     this.onOpenLink,
+    this.onSaveToggle,
+    required this.isSaved,
   });
 
   final String category;
@@ -294,6 +308,8 @@ class _Header extends StatelessWidget {
   final TextTheme textTheme;
   final VoidCallback? onShare;
   final VoidCallback? onOpenLink;
+  final VoidCallback? onSaveToggle;
+  final bool isSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -318,6 +334,8 @@ class _Header extends StatelessWidget {
             colorScheme: colorScheme,
             onOpenLink: onOpenLink,
             onShare: onShare,
+            onSaveToggle: onSaveToggle,
+            isSaved: isSaved,
           ),
         ],
       ],
@@ -519,11 +537,15 @@ class _HeaderActions extends StatelessWidget {
     required this.colorScheme,
     this.onOpenLink,
     this.onShare,
+    this.onSaveToggle,
+    required this.isSaved,
   });
 
   final ColorScheme colorScheme;
   final VoidCallback? onOpenLink;
   final VoidCallback? onShare;
+  final VoidCallback? onSaveToggle;
+  final bool isSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -542,6 +564,13 @@ class _HeaderActions extends StatelessWidget {
           _ActionIcon(Icons.open_in_new, onOpenLink, colorScheme),
           const SizedBox(width: AppSpacing.xs),
           _ActionIcon(Icons.share_outlined, onShare, colorScheme),
+          const SizedBox(width: AppSpacing.xs),
+          _ActionIcon(
+            isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+            onSaveToggle,
+            colorScheme,
+            isActive: isSaved,
+          ),
         ],
       ),
     );
@@ -549,11 +578,17 @@ class _HeaderActions extends StatelessWidget {
 }
 
 class _ActionIcon extends StatelessWidget {
-  const _ActionIcon(this.icon, this.onTap, this.colorScheme);
+  const _ActionIcon(
+    this.icon,
+    this.onTap,
+    this.colorScheme, {
+    this.isActive = false,
+  });
 
   final IconData icon;
   final VoidCallback? onTap;
   final ColorScheme colorScheme;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
@@ -566,13 +601,16 @@ class _ActionIcon extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: colorScheme.surface.withValues(alpha: 0.92),
+            color: isActive
+                ? colorScheme.primary.withValues(alpha: 0.14)
+                : colorScheme.surface.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Icon(
             icon,
-            color: colorScheme.onSurfaceVariant,
+            color:
+                isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
             size: AppSizes.iconSm,
           ),
         ),

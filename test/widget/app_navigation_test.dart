@@ -114,6 +114,10 @@ void main() {
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
     await pumpUi(tester);
+    expect(find.text('No saved articles yet'), findsOneWidget);
+
+    await tester.drag(findShellPageView(), const Offset(-500, 0));
+    await pumpUi(tester);
     expect(find.text('Settings'), findsWidgets);
 
     await pumpUi(tester, const Duration(milliseconds: 700));

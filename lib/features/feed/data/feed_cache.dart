@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/domain/saved_item.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -25,7 +26,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -91,6 +92,9 @@ class FeedCache implements FeedCacheInterface {
         value TEXT NOT NULL
       )
     ''');
+
+    await _createSavedArticlesTable(db);
+    await _createSavedVideosTable(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -159,6 +163,10 @@ class FeedCache implements FeedCacheInterface {
         whereArgs: ['feed_session:articles'],
       );
     }
+    if (oldVersion < 7) {
+      await _createSavedArticlesTable(db);
+      await _createSavedVideosTable(db);
+    }
   }
 
   Future<void> _createArticlesTable(DatabaseExecutor db) async {
@@ -178,6 +186,44 @@ class FeedCache implements FeedCacheInterface {
         cached_at TEXT NOT NULL
       )
     ''');
+  }
+
+  Future<void> _createSavedArticlesTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS saved_articles (
+        content_id INTEGER PRIMARY KEY,
+        type TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL,
+        image_url TEXT,
+        category TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        saved_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_saved_articles_saved_at ON saved_articles(saved_at DESC)',
+    );
+  }
+
+  Future<void> _createSavedVideosTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS saved_videos (
+        content_id INTEGER PRIMARY KEY,
+        type TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL,
+        thumbnail_url TEXT,
+        category TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        saved_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_saved_videos_saved_at ON saved_videos(saved_at DESC)',
+    );
   }
 
   @override
@@ -447,6 +493,122 @@ class FeedCache implements FeedCacheInterface {
           },
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Saved Articles
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @override
+  Future<List<SavedArticleItem>> getSavedArticles() async {
+    final db = await database;
+    final results = await db.query(
+      'saved_articles',
+      orderBy: 'saved_at DESC',
+    );
+
+    return results
+        .map(
+          (row) => SavedArticleItem(
+            contentId: row['content_id'] as int,
+            sourceUrl: row['source_url'] as String,
+            title: row['title'] as String,
+            source: row['source'] as String,
+            imageUrl: _nullIfBlankString(row['image_url']),
+            category: row['category'] as String,
+            publishedAt: DateTime.parse(row['published_at'] as String),
+            savedAt: DateTime.parse(row['saved_at'] as String),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> saveArticleBookmark(SavedArticleItem article) async {
+    final db = await database;
+    await db.insert(
+      'saved_articles',
+      {
+        'content_id': article.contentId,
+        'type': 'ARTICLE',
+        'source_url': article.sourceUrl,
+        'title': article.title,
+        'source': article.source,
+        'image_url': article.imageUrl,
+        'category': article.category,
+        'published_at': article.publishedAt.toIso8601String(),
+        'saved_at': article.savedAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> removeSavedArticleBookmark(int contentId) async {
+    final db = await database;
+    await db.delete(
+      'saved_articles',
+      where: 'content_id = ?',
+      whereArgs: [contentId],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Saved Videos
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @override
+  Future<List<SavedVideoItem>> getSavedVideos() async {
+    final db = await database;
+    final results = await db.query(
+      'saved_videos',
+      orderBy: 'saved_at DESC',
+    );
+
+    return results
+        .map(
+          (row) => SavedVideoItem(
+            contentId: row['content_id'] as int,
+            sourceUrl: row['source_url'] as String,
+            title: row['title'] as String,
+            source: row['source'] as String,
+            thumbnailUrl: _nullIfBlankString(row['thumbnail_url']),
+            category: row['category'] as String,
+            publishedAt: DateTime.parse(row['published_at'] as String),
+            savedAt: DateTime.parse(row['saved_at'] as String),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> saveVideoBookmark(SavedVideoItem video) async {
+    final db = await database;
+    await db.insert(
+      'saved_videos',
+      {
+        'content_id': video.contentId,
+        'type': 'VIDEO',
+        'source_url': video.sourceUrl,
+        'title': video.title,
+        'source': video.source,
+        'thumbnail_url': video.thumbnailUrl,
+        'category': video.category,
+        'published_at': video.publishedAt.toIso8601String(),
+        'saved_at': video.savedAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> removeSavedVideoBookmark(int contentId) async {
+    final db = await database;
+    await db.delete(
+      'saved_videos',
+      where: 'content_id = ?',
+      whereArgs: [contentId],
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
+import '../test_utils/fake_feed_cache.dart';
 
 class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   final Map<String, YTPlayerState> _states = {};
@@ -86,9 +87,11 @@ void main() {
   group('VideoCard', () {
     late MockYoutubePlayerManager mockManager;
     late VideoFeedEntry videoEntry;
+    late FakeFeedCache cache;
 
     setUp(() {
       mockManager = MockYoutubePlayerManager();
+      cache = FakeFeedCache();
       videoEntry = VideoFeedEntry(
         id: 10,
         title: 'Video playback contract test',
@@ -119,6 +122,7 @@ void main() {
               ),
             ),
           ),
+          feedCacheProvider.overrideWithValue(cache),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -257,6 +261,15 @@ void main() {
 
       expect(find.text('Watch video'), findsOneWidget);
       expect(find.text('1 min watch'), findsNothing);
+    });
+
+    testWidgets('has bookmark toggle button', (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
     });
   });
 }

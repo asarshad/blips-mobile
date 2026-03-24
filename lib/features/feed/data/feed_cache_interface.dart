@@ -1,4 +1,5 @@
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/domain/saved_item.dart';
 
 /// Cache abstraction so unit/widget tests can run without SQLite.
 abstract interface class FeedCacheInterface {
@@ -41,4 +42,16 @@ abstract interface class FeedCacheInterface {
 
   /// Delete a metadata value.
   Future<void> deleteMeta(String key);
+
+  Future<List<SavedArticleItem>> getSavedArticles();
+
+  Future<void> saveArticleBookmark(SavedArticleItem article);
+
+  Future<void> removeSavedArticleBookmark(int contentId);
+
+  Future<List<SavedVideoItem>> getSavedVideos();
+
+  Future<void> saveVideoBookmark(SavedVideoItem video);
+
+  Future<void> removeSavedVideoBookmark(int contentId);
 }

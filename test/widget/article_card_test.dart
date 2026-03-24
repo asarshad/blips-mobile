@@ -3,15 +3,22 @@ library article_card_test;
 
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/article_card.dart';
+import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../test_utils/fake_backend_api_client.dart';
+import '../test_utils/fake_feed_cache.dart';
+
 void main() {
   group('ArticleCard', () {
     late ArticleFeedEntry testEntry;
+    late FakeFeedCache cache;
 
     setUp(() {
+      cache = FakeFeedCache();
       testEntry = ArticleFeedEntry(
         id: 1,
         title: 'Test Article Title',
@@ -31,6 +38,12 @@ void main() {
 
     Widget buildTestWidget(ArticleFeedEntry entry) {
       return ProviderScope(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(
+            FeedRepository(FakeBackendApiClient()),
+          ),
+          feedCacheProvider.overrideWithValue(cache),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: SizedBox(
@@ -105,6 +118,13 @@ void main() {
         find.byIcon(Icons.share_outlined),
         findsWidgets,
       );
+    });
+
+    testWidgets('has bookmark toggle button', (tester) async {
+      await tester.pumpWidget(buildTestWidget(testEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
     });
 
     testWidgets('chat bubbles hidden by default', (tester) async {

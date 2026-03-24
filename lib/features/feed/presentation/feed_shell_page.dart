@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/offline_banner.dart';
@@ -15,6 +16,7 @@ import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/cards.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reels.dart';
+import 'package:blips_mobile/features/feed/presentation/saved/saved_items_page.dart';
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
@@ -37,7 +39,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 /// - Videos feed (index 1)
 /// - Reels feed (index 2)
 /// - Chat (index 3)
-/// - Settings (index 4)
+/// - Saved (index 4)
+/// - Settings (index 5)
 ///
 /// All tabs are swipeable horizontally for quick navigation.
 class FeedShellPage extends HookConsumerWidget {
@@ -412,6 +415,9 @@ class FeedShellPage extends HookConsumerWidget {
         ref.invalidate(chatListProvider);
         break;
       case 4:
+        // No-op for saved.
+        break;
+      case 5:
         // No-op for settings.
         break;
     }
@@ -445,6 +451,9 @@ class FeedShellPage extends HookConsumerWidget {
           .then((ok) async {
         if (fromTabRetap) {
           if (ok) {
+            if (_isControllerAtTop(controller)) {
+              await _rearmFirstReelPlayback(ref);
+            }
             span.success(data: <String, Object?>{'jumpedToTop': false});
           } else {
             span.step(
@@ -466,6 +475,7 @@ class FeedShellPage extends HookConsumerWidget {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
           await _animateFeedToTop(controller);
+          await _rearmFirstReelPlayback(ref);
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -512,6 +522,9 @@ class FeedShellPage extends HookConsumerWidget {
           .then((ok) async {
         if (fromTabRetap) {
           if (ok) {
+            if (_isControllerAtTop(controller)) {
+              await _rearmFirstVideoPlayback(ref);
+            }
             span.success(data: <String, Object?>{'jumpedToTop': false});
           } else {
             span.step(
@@ -533,6 +546,7 @@ class FeedShellPage extends HookConsumerWidget {
         if (ok && controller.hasClients) {
           span.success(data: <String, Object?>{'jumpedToTop': true});
           await _animateFeedToTop(controller);
+          await _rearmFirstVideoPlayback(ref);
         } else if (!ok) {
           span.step(
             'uiFailure',
@@ -630,6 +644,76 @@ class FeedShellPage extends HookConsumerWidget {
       return;
     }
     controller.jumpToPage(0);
+  }
+
+  bool _isControllerAtTop(PageController controller) {
+    if (!controller.hasClients) return true;
+    final page = controller.page;
+    if (page == null) return controller.initialPage == 0;
+    return (page - 0).abs() <= 0.001;
+  }
+
+  Future<void> _rearmFirstVideoPlayback(WidgetRef ref) async {
+    final entries = ref.read(videosFeedProvider).valueOrNull;
+    if (entries == null || entries.isEmpty) return;
+
+    final videoManager = ref.read(youtubePlayerManagerProvider);
+    final urls = entries
+        .map((entry) => _resolveVideoPlaybackUrl(entry, videoManager))
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    if (urls.isEmpty) return;
+
+    final firstUrl = urls.first;
+    videoManager.onPageChanged(
+      currentIndex: 0,
+      videoUrls: urls,
+      preloadAhead: MemoryConfig.videoPreloadCount,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    final state = videoManager.getState(firstUrl);
+    if (state == YTPlayerState.loading ||
+        state == YTPlayerState.idle ||
+        state == YTPlayerState.error) {
+      await videoManager.retryVideo(firstUrl);
+      return;
+    }
+    await videoManager.playVideo(firstUrl);
+  }
+
+  Future<void> _rearmFirstReelPlayback(WidgetRef ref) async {
+    final entries = ref.read(reelsFeedProvider).valueOrNull;
+    if (entries == null || entries.isEmpty) return;
+
+    final videoManager = ref.read(youtubePlayerManagerProvider);
+    final urls = entries.map((entry) => entry.link).toList(growable: false);
+    final firstUrl = urls.first;
+    videoManager.onPageChanged(
+      currentIndex: 0,
+      videoUrls: urls,
+      preloadAhead: MemoryConfig.reelPreloadCount,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    final state = videoManager.getState(firstUrl);
+    if (state == YTPlayerState.loading ||
+        state == YTPlayerState.idle ||
+        state == YTPlayerState.error) {
+      await videoManager.retryVideo(firstUrl);
+      return;
+    }
+    await videoManager.playVideo(firstUrl);
+  }
+
+  String _resolveVideoPlaybackUrl(
+    VideoFeedEntry entry,
+    YoutubePlayerManagerBase videoManager,
+  ) {
+    final preferred = entry.videoUrl.trim();
+    if (preferred.isNotEmpty &&
+        videoManager.extractVideoId(preferred) != null) {
+      return preferred;
+    }
+    return entry.link.trim();
   }
 
   void _showRetrySnackbar(
@@ -821,6 +905,8 @@ class FeedShellPage extends HookConsumerWidget {
       ),
       // Chat tab
       const ChatPage(),
+      // Saved tab
+      const SavedItemsPage(),
       // Settings tab
       const SettingsPage(),
     ];
@@ -926,11 +1012,18 @@ class _BottomNavBar extends StatelessWidget {
                   onTap: () => onIndexChanged(3),
                 ),
                 NavBarIcon(
+                  icon: Icons.bookmark_border_rounded,
+                  selectedIcon: Icons.bookmark_rounded,
+                  label: 'Saved',
+                  isSelected: currentIndex == 4,
+                  onTap: () => onIndexChanged(4),
+                ),
+                NavBarIcon(
                   icon: Icons.settings_outlined,
                   selectedIcon: Icons.settings,
                   label: 'Settings',
-                  isSelected: currentIndex == 4,
-                  onTap: () => onIndexChanged(4),
+                  isSelected: currentIndex == 5,
+                  onTap: () => onIndexChanged(5),
                 ),
               ],
             ),
