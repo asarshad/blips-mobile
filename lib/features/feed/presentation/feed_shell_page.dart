@@ -20,6 +20,7 @@ import 'package:blips_mobile/features/feed/presentation/saved/saved_items_page.d
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
@@ -670,7 +671,7 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.videoPreloadCount,
     );
-    await _nudgePrimaryPlayback(videoManager, firstUrl);
+    await nudgePrimaryPlayback(videoManager, firstUrl);
   }
 
   Future<void> _rearmFirstReelPlayback(WidgetRef ref) async {
@@ -685,32 +686,7 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.reelPreloadCount,
     );
-    await _nudgePrimaryPlayback(videoManager, firstUrl);
-  }
-
-  Future<void> _nudgePrimaryPlayback(
-    YoutubePlayerManagerBase videoManager,
-    String primaryUrl,
-  ) async {
-    await videoManager.initController(primaryUrl);
-    await WidgetsBinding.instance.endOfFrame;
-
-    for (final delay in const [
-      Duration(milliseconds: 180),
-      Duration(milliseconds: 420),
-      Duration(milliseconds: 900),
-    ]) {
-      await Future<void>.delayed(delay);
-      final state = videoManager.getState(primaryUrl);
-      if (state == YTPlayerState.playing) {
-        return;
-      }
-      if (state == YTPlayerState.error) {
-        await videoManager.retryVideo(primaryUrl);
-        continue;
-      }
-      await videoManager.playVideo(primaryUrl);
-    }
+    await nudgePrimaryPlayback(videoManager, firstUrl);
   }
 
   String _resolveVideoPlaybackUrl(

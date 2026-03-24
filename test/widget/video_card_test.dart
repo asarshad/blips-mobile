@@ -270,13 +270,49 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
 
-      final titleRect =
-          tester.getRect(find.text('Video playback contract test'));
+      final summaryRect =
+          tester.getRect(find.byKey(const Key('feed-card-summary-text')));
       final sourceRect =
           tester.getRect(find.byKey(const Key('feed-card-source-label')));
 
       expect(find.byKey(const Key('feed-card-source-label')), findsOneWidget);
-      expect(sourceRect.top, greaterThan(titleRect.bottom));
+      expect(sourceRect.top, greaterThan(summaryRect.bottom));
+    });
+
+    testWidgets('video summary text is not line-clamped in the UI',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final summaryText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-summary-text')),
+      );
+
+      expect(summaryText.maxLines, isNull);
+      expect(summaryText.overflow, isNull);
+    });
+
+    testWidgets('video source style is smaller and lighter than summary',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final summaryText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-summary-text')),
+      );
+      final sourceText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-source-label')),
+      );
+      final summaryStyle = summaryText.style!;
+      final sourceStyle = sourceText.style!;
+
+      expect(sourceStyle.fontSize, lessThan(summaryStyle.fontSize!));
+      expect(sourceStyle.color!.opacity, lessThan(summaryStyle.color!.opacity));
+      expect(sourceStyle.color!.opacity, lessThan(0.45));
     });
 
     testWidgets('has bookmark toggle button', (tester) async {

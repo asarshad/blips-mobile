@@ -70,6 +70,27 @@ We **do not** test video playback internals (WebView / YouTube player / `video_p
 
 Any platform-dependent video lifecycle tests should be tagged `manual` and run locally on a real device/simulator.
 
+### Manual simulator playback probe
+
+For the real iOS simulator/WebView playback path, run:
+
+```bash
+./tool/run_ios_playback_probe.sh
+```
+
+This boots an iPhone simulator, runs the app with:
+- the real `YoutubePlayerManager`
+- fake backend/feed data
+- diagnostics enabled in release mode
+
+The probe currently verifies:
+- first open to Videos
+- repeated upward swipes through multiple videos
+- tab switch away/back
+- jump-to-latest after retap refresh
+
+If playback stalls, the test fails with the exported diagnostics trace.
+
 ## CI
 
 Workflows live in `.github/workflows/`:

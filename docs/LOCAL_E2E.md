@@ -79,6 +79,18 @@ Golden tests compare screenshots against baseline images to detect visual regres
 flutter test integration_test/ --dart-define=BLIPS_BACKEND_URL=http://localhost:8001/api/v1
 ```
 
+### 5. Manual iOS Playback Probe (No Backend Required)
+
+For the real iOS simulator + YouTube iframe path, use the built-in playback
+probe instead of manual swiping:
+
+```bash
+./tool/run_ios_playback_probe.sh
+```
+
+This uses fake feed data, the real player manager, and release diagnostics to
+exercise repeated video swipes, tab switches, and jump-to-latest recovery.
+
 ## Configuration Details
 
 ### Backend URL Override

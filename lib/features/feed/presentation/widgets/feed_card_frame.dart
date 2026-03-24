@@ -427,69 +427,45 @@ class _Summary extends StatelessWidget {
   final ColorScheme colorScheme;
   final TextTheme textTheme;
 
+  static const Key _summaryKey = Key('feed-card-summary-text');
   static const Key _sourceKey = Key('feed-card-source-label');
 
   @override
   Widget build(BuildContext context) {
     final summaryText = summary.trim();
     final sourceText = source.trim();
-    final baseStyle = textTheme.bodySmall?.copyWith(
+    final summaryStyle = textTheme.bodySmall?.copyWith(
       color: colorScheme.onSurfaceVariant,
       height: AppTypography.lineHeightNormal,
     );
+    final sourceStyle = textTheme.labelSmall?.copyWith(
+      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.38),
+      fontWeight: FontWeight.w400,
+      height: AppTypography.lineHeightNormal,
+    );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final canPinSource =
-            sourceText.isNotEmpty && constraints.maxHeight >= 34;
-        if (!canPinSource) {
-          return Text.rich(
-            TextSpan(
-              style: baseStyle,
-              children: [
-                if (summaryText.isNotEmpty) TextSpan(text: summaryText),
-                if (summaryText.isNotEmpty && sourceText.isNotEmpty)
-                  const TextSpan(text: '  '),
-                if (sourceText.isNotEmpty)
-                  TextSpan(
-                    text: sourceText,
-                    style: textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (summaryText.isNotEmpty)
+            Text(
+              summaryText,
+              key: _summaryKey,
+              style: summaryStyle,
             ),
-            maxLines: 5,
-            overflow: TextOverflow.ellipsis,
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                summaryText,
-                style: baseStyle,
-                maxLines: 5,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+          if (summaryText.isNotEmpty && sourceText.isNotEmpty)
             const SizedBox(height: AppSpacing.xs),
+          if (sourceText.isNotEmpty)
             Text(
               sourceText,
               key: _sourceKey,
-              style: textTheme.labelMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              style: sourceStyle,
             ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 }

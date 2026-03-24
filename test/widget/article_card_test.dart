@@ -85,14 +85,46 @@ void main() {
       await tester.pumpWidget(buildTestWidget(testEntry));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final titleRect = tester.getRect(find.text('Test Article Title'));
+      final summaryRect =
+          tester.getRect(find.byKey(const Key('feed-card-summary-text')));
       final sourceRect =
           tester.getRect(find.byKey(const Key('feed-card-source-label')));
 
       expect(
         sourceRect.top,
-        greaterThan(titleRect.bottom),
+        greaterThan(summaryRect.bottom),
       );
+    });
+
+    testWidgets('summary text is not line-clamped in the UI', (tester) async {
+      await tester.pumpWidget(buildTestWidget(testEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final summaryText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-summary-text')),
+      );
+
+      expect(summaryText.maxLines, isNull);
+      expect(summaryText.overflow, isNull);
+    });
+
+    testWidgets('source style is smaller and lighter than summary',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget(testEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final summaryText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-summary-text')),
+      );
+      final sourceText = tester.widget<Text>(
+        find.byKey(const Key('feed-card-source-label')),
+      );
+      final summaryStyle = summaryText.style!;
+      final sourceStyle = sourceText.style!;
+
+      expect(sourceStyle.fontSize, lessThan(summaryStyle.fontSize!));
+      expect(sourceStyle.color!.opacity, lessThan(summaryStyle.color!.opacity));
+      expect(sourceStyle.color!.opacity, lessThan(0.45));
     });
 
     testWidgets('renders category badge', (tester) async {
@@ -206,7 +238,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget(longEntry));
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.textContaining('word86'), findsOneWidget);
+      expect(find.textContaining('word91'), findsOneWidget);
     });
 
     testWidgets('renders category-aware placeholder when image is missing',

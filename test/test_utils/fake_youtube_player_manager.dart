@@ -52,7 +52,13 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   @override
   Future<YoutubePlayerController?> initController(String url) async {
     // No-op: do not create controllers in tests.
-    _states[url] = YTPlayerState.ready;
+    final existing = _states[url];
+    _states[url] = switch (existing) {
+      YTPlayerState.playing => YTPlayerState.playing,
+      YTPlayerState.paused => YTPlayerState.paused,
+      YTPlayerState.ready => YTPlayerState.ready,
+      _ => YTPlayerState.ready,
+    };
     _notifySafe();
     return null;
   }

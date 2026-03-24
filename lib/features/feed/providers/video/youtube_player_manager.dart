@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blips_mobile/core/config/memory_config.dart';
+import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/features/feed/providers/video/reel_autoplay_recovery.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +14,9 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 /// when YouTube changes their backend.
 final youtubePlayerManagerProvider =
     ChangeNotifierProvider<YoutubePlayerManagerBase>(
-  (ref) => YoutubePlayerManager(),
+  (ref) => YoutubePlayerManager(
+    diagnostics: ref.watch(appDiagnosticsProvider),
+  ),
 );
 
 /// Manages YouTube video players using iframe-based playback.
@@ -30,7 +33,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   static const Duration _recoveryInterval = Duration(milliseconds: 700);
   static const int _maxRecoveryAttempts = 4;
 
-  YoutubePlayerManager() {
+  YoutubePlayerManager({AppDiagnosticsController? diagnostics})
+      : _diagnostics = diagnostics {
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -44,6 +48,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   final Map<String, YTPlayerError?> _errors = {};
   final Set<String> _pendingInit = {};
   Timer? _recoveryTimer;
+  final AppDiagnosticsController? _diagnostics;
 
   /// The single URL that is currently intended to be playing.
   ///
@@ -57,6 +62,31 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   /// correct video can be resumed when the app returns to the foreground.
   String? _currentActiveUrl;
   bool _isDisposed = false;
+
+  void _recordDiagnostics({
+    required String action,
+    required String stage,
+    String? url,
+    AppDiagnosticsLevel level = AppDiagnosticsLevel.info,
+    String? message,
+    Map<String, Object?> data = const <String, Object?>{},
+  }) {
+    _diagnostics?.record(
+      scope: 'video.player',
+      action: action,
+      stage: stage,
+      surface: 'shared',
+      level: level,
+      message: message,
+      data: <String, Object?>{
+        if (url != null) 'videoId': extractVideoId(url) ?? url,
+        if (_currentActiveUrl != null)
+          'activeVideoId':
+              extractVideoId(_currentActiveUrl!) ?? _currentActiveUrl!,
+        ...data,
+      },
+    );
+  }
 
   /// Gets the controller for a URL if available.
   @override
@@ -118,6 +148,15 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
     _pendingInit.add(url);
     _states[url] = YTPlayerState.loading;
+    _recordDiagnostics(
+      action: 'initController',
+      stage: 'start',
+      url: url,
+      data: <String, Object?>{
+        'controllerExists': _controllers.containsKey(url),
+        'pendingInit': _pendingInit.length,
+      },
+    );
     _notifySafe();
 
     try {
@@ -158,6 +197,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       // Process the initial controller snapshot immediately so we don't wait
       // for a later listener tick to update state/autoplay intent.
       _handleControllerUpdate(url, controller);
+      _recordDiagnostics(
+        action: 'initController',
+        stage: 'success',
+        url: url,
+        data: <String, Object?>{
+          'state': _states[url]?.name,
+          'isReady': controller.value.isReady,
+          'controllerCount': _controllers.length,
+        },
+      );
 
       if (kDebugMode) {
         debugPrint('YoutubePlayerManager: initController complete for $videoId'
@@ -173,6 +222,13 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       debugPrint('YoutubePlayerManager: Error initializing $url: $e');
       _states[url] = YTPlayerState.error;
       _errors[url] = YTPlayerError(code: -1, message: e.toString());
+      _recordDiagnostics(
+        action: 'initController',
+        stage: 'failure',
+        url: url,
+        level: AppDiagnosticsLevel.error,
+        message: e.toString(),
+      );
       _notifySafe();
       return null;
     } finally {
@@ -193,6 +249,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       );
       debugPrint(
         'YoutubePlayerManager: Error $error for $url: ${_errors[url]?.message}',
+      );
+      _recordDiagnostics(
+        action: 'state',
+        stage: 'error',
+        url: url,
+        level: AppDiagnosticsLevel.error,
+        message: _errors[url]?.message,
+        data: <String, Object?>{
+          'errorCode': error,
+        },
       );
       _notifySafe();
       return;
@@ -223,6 +289,17 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
     if (previousState != newState) {
       _states[url] = newState;
+      _recordDiagnostics(
+        action: 'state',
+        stage: 'transition',
+        url: url,
+        data: <String, Object?>{
+          'from': previousState?.name,
+          'to': newState.name,
+          'playerState': playerState.name,
+          'isReady': controller.value.isReady,
+        },
+      );
       _notifySafe();
     }
 
@@ -276,6 +353,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
           ' — ready=${_controllers[url]?.value.isReady}');
     }
     _currentActiveUrl = url;
+    _recordDiagnostics(
+      action: 'playVideo',
+      stage: 'start',
+      url: url,
+      data: <String, Object?>{
+        'controllerExists': _controllers.containsKey(url),
+        'pendingInit': _pendingInit.contains(url),
+        'state': _states[url]?.name,
+      },
+    );
 
     var controller = _controllers[url];
 
@@ -303,16 +390,36 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       // a useful nudge and then settles once iframe finishes mounting.
       try {
         controller.play();
+        _recordDiagnostics(
+          action: 'playVideo',
+          stage: 'issued',
+          url: url,
+          data: <String, Object?>{
+            'isReady': controller.value.isReady,
+          },
+        );
       } catch (e) {
         if (kDebugMode) {
           debugPrint('YoutubePlayerManager: [play] play() threw for $url: $e');
         }
+        _recordDiagnostics(
+          action: 'playVideo',
+          stage: 'failure',
+          url: url,
+          level: AppDiagnosticsLevel.error,
+          message: e.toString(),
+        );
       }
     } else {
       if (kDebugMode) {
         debugPrint(
             'YoutubePlayerManager: [play] no controller yet → armed for $url');
       }
+      _recordDiagnostics(
+        action: 'playVideo',
+        stage: 'armed',
+        url: url,
+      );
     }
   }
 
@@ -341,6 +448,13 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (kDebugMode) debugPrint('YoutubePlayerManager: pauseAll()');
     _cancelRecovery();
     _currentActiveUrl = null;
+    _recordDiagnostics(
+      action: 'pauseAll',
+      stage: 'issued',
+      data: <String, Object?>{
+        'controllerCount': _controllers.length,
+      },
+    );
     for (final entry in _controllers.entries) {
       entry.value.pause();
       _states[entry.key] = YTPlayerState.paused;
@@ -396,6 +510,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
 
     final currentUrl = videoUrls[currentIndex];
+    _recordDiagnostics(
+      action: 'onPageChanged',
+      stage: 'start',
+      url: currentUrl,
+      data: <String, Object?>{
+        'currentIndex': currentIndex,
+        'videoCount': videoUrls.length,
+        'preloadAhead': preloadAhead,
+      },
+    );
 
     if (kDebugMode) {
       debugPrint(
@@ -555,6 +679,15 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   /// Retries a failed video.
   @override
   Future<void> retryVideo(String url) async {
+    _recordDiagnostics(
+      action: 'retryVideo',
+      stage: 'start',
+      url: url,
+      data: <String, Object?>{
+        'state': _states[url]?.name,
+        'controllerExists': _controllers.containsKey(url),
+      },
+    );
     releaseVideo(url);
     await playVideo(url);
   }
