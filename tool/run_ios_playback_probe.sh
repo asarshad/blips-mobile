@@ -31,4 +31,5 @@ flutter test integration_test/video_playback_probe_test.dart \
   -d "${DEVICE_ID}" \
   --dart-define=BLIPS_DIAGNOSTICS=true \
   --dart-define=BLIPS_DIAGNOSTICS_CONSOLE=true \
+  --dart-define=BLIPS_PLAYBACK_PROBE_ACCEPT_READY=true \
   --dart-define=BLIPS_DIAGNOSTICS_MAX_ENTRIES=400

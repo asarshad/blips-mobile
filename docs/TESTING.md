@@ -89,7 +89,17 @@ The probe currently verifies:
 - tab switch away/back
 - jump-to-latest after retap refresh
 
-If playback stalls, the test fails with the exported diagnostics trace.
+On the iOS simulator, the probe treats `ready` as success once the app has
+issued a real `playVideo` command for that URL. This is intentional: simulator
+WebView/YouTube iframe autoplay is not the same contract as a real iPhone.
+
+For a real-device autoplay proof, use the device runner:
+
+```bash
+./tool/run_ios_playback_probe_device.sh <device-id>
+```
+
+That path stays strict about the player reaching `playing`.
 
 ## CI
 

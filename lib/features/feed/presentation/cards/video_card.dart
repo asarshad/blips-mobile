@@ -8,6 +8,7 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
+import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
@@ -58,7 +59,7 @@ class VideoCard extends HookConsumerWidget {
     final sentSkip = useRef(false);
     final startedAt = useRef<DateTime?>(null);
     final lastPositionMs = useRef(0);
-    final loadingRecoveryArmed = useRef(false);
+    final resumeRecoveryArmed = useRef(false);
 
     final isLoading = playerState == YTPlayerState.loading ||
         playerState == YTPlayerState.idle;
@@ -75,7 +76,14 @@ class VideoCard extends HookConsumerWidget {
     useEffect(() {
       if (!isVisible) return null;
       final listener = AppLifecycleListener(
-        onResume: () => unawaited(videoManager.playVideo(playbackUrl)),
+        onInactive: () => resumeRecoveryArmed.value = true,
+        onPause: () => resumeRecoveryArmed.value = true,
+        onDetach: () => resumeRecoveryArmed.value = true,
+        onResume: () {
+          if (!resumeRecoveryArmed.value) return;
+          resumeRecoveryArmed.value = false;
+          unawaited(nudgePrimaryPlayback(videoManager, playbackUrl));
+        },
       );
       return listener.dispose;
     }, [isVisible, playbackUrl]);
@@ -96,32 +104,9 @@ class VideoCard extends HookConsumerWidget {
         });
         videoManager.pauseVideo(playbackUrl);
         showBubbles.value = false;
-      } else {
-        // Auto-play when this card becomes the visible current page.
-        // isVisible is true only when the Videos tab is active AND this
-        // card is the current page in the FeedTab PageView.
-        unawaited(videoManager.playVideo(playbackUrl));
       }
       return null;
     }, [isVisible, playbackUrl]);
-
-    useEffect(() {
-      if (!isVisible || !isLoading) {
-        loadingRecoveryArmed.value = false;
-        return null;
-      }
-      if (loadingRecoveryArmed.value) {
-        return null;
-      }
-      loadingRecoveryArmed.value = true;
-      final timer = Timer(const Duration(milliseconds: 900), () {
-        final state = videoManager.getState(playbackUrl);
-        if (state == YTPlayerState.loading || state == YTPlayerState.idle) {
-          unawaited(videoManager.retryVideo(playbackUrl));
-        }
-      });
-      return timer.cancel;
-    }, [isVisible, isLoading, playbackUrl]);
 
     useEffect(() {
       if (isVisible && !sentImpression.value) {

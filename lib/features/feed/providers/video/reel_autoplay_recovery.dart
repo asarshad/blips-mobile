@@ -37,15 +37,28 @@ ReelAutoplayRecoveryAction resolveReelAutoplayRecoveryAction({
       if (isPendingInit) {
         return ReelAutoplayRecoveryAction.wait;
       }
-      return controllerExists
-          ? ReelAutoplayRecoveryAction.retry
-          : ReelAutoplayRecoveryAction.play;
+      if (!controllerExists) {
+        return ReelAutoplayRecoveryAction.play;
+      }
+      return attempt < 3
+          ? ReelAutoplayRecoveryAction.wait
+          : ReelAutoplayRecoveryAction.retry;
     case YTPlayerState.ready:
-    case YTPlayerState.paused:
-      return ReelAutoplayRecoveryAction.play;
-    case YTPlayerState.idle:
-      return controllerExists
+      return attempt == 0
           ? ReelAutoplayRecoveryAction.play
           : ReelAutoplayRecoveryAction.wait;
+    case YTPlayerState.paused:
+      return attempt < 2
+          ? ReelAutoplayRecoveryAction.play
+          : ReelAutoplayRecoveryAction.retry;
+    case YTPlayerState.idle:
+      if (!controllerExists) {
+        return isPendingInit
+            ? ReelAutoplayRecoveryAction.wait
+            : ReelAutoplayRecoveryAction.play;
+      }
+      return attempt < 2
+          ? ReelAutoplayRecoveryAction.play
+          : ReelAutoplayRecoveryAction.retry;
   }
 }

@@ -317,6 +317,15 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
         playerState != PlayerState.playing &&
         playerState != PlayerState.buffering;
     if (shouldAutoplay) {
+      _recordDiagnostics(
+        action: 'autoPlay',
+        stage: 'issued',
+        url: url,
+        data: <String, Object?>{
+          'playerState': playerState.name,
+          'isReady': controller.value.isReady,
+        },
+      );
       if (kDebugMode) {
         debugPrint(
           'YoutubePlayerManager: [auto-play] ready callback → $url (state=$playerState)',

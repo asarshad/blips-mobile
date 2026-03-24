@@ -47,7 +47,7 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   }
 
   @override
-  String? extractVideoId(String url) => null;
+  String? extractVideoId(String url) => YoutubePlayer.convertUrlToId(url);
 
   @override
   Future<YoutubePlayerController?> initController(String url) async {

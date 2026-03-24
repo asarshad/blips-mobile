@@ -671,7 +671,9 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.videoPreloadCount,
     );
-    await nudgePrimaryPlayback(videoManager, firstUrl);
+    if (videoManager.getState(firstUrl) != YTPlayerState.loading) {
+      await nudgePrimaryPlayback(videoManager, firstUrl);
+    }
   }
 
   Future<void> _rearmFirstReelPlayback(WidgetRef ref) async {
@@ -686,7 +688,9 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.reelPreloadCount,
     );
-    await nudgePrimaryPlayback(videoManager, firstUrl);
+    if (videoManager.getState(firstUrl) != YTPlayerState.loading) {
+      await nudgePrimaryPlayback(videoManager, firstUrl);
+    }
   }
 
   String _resolveVideoPlaybackUrl(

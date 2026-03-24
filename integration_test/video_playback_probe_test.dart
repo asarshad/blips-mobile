@@ -22,12 +22,19 @@ import '../test/test_utils/fake_feed_cache.dart';
 const _videoUrls = <String>[
   'https://www.youtube.com/watch?v=M7lc1UVf-VE',
   'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-  'https://www.youtube.com/watch?v=ysz5S6PUM-U',
   'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+  'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
 ];
+
+final RegExp _latestPillPattern =
+    RegExp(r'^(View latest|[0-9]+ new item[s]?)$');
+const bool _acceptReadyAsSuccess = bool.fromEnvironment(
+  'BLIPS_PLAYBACK_PROBE_ACCEPT_READY',
+);
 
 ProviderScope _buildProbeScope() {
   var articlePlaylistRequests = 0;
+  var videoPlaylistRequests = 0;
   final api = FakeBackendApiClient(
     responseResolver: (method, path, queryParameters, body) {
       if (method == 'GET' && path == '/config') {
@@ -67,7 +74,9 @@ ProviderScope _buildProbeScope() {
           'ARTICLE' => _buildArticlePlaylist(
               requestCount: ++articlePlaylistRequests,
             ),
-          'VIDEO' => _buildVideoPlaylist(),
+          'VIDEO' => _buildVideoPlaylist(
+              requestCount: ++videoPlaylistRequests,
+            ),
           _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
         };
       }
@@ -123,12 +132,17 @@ Map<String, dynamic> _buildArticlePlaylist({
         .toList(growable: false),
     'session_id': 'probe-articles-session',
     'cursor': ids.length,
-    'has_more': true,
+    'has_more': false,
   };
 }
 
-Map<String, dynamic> _buildVideoPlaylist() {
-  final ids = <int>[202, 203, 204, 205];
+Map<String, dynamic> _buildVideoPlaylist({
+  required int requestCount,
+}) {
+  final ids = switch (requestCount) {
+    1 => <int>[202, 203, 204, 205, 206, 207, 208],
+    _ => <int>[209, 202, 203, 204, 205, 206, 207, 208],
+  };
   return {
     'items': ids.asMap().entries.map((entry) {
       final index = entry.key;
@@ -154,7 +168,7 @@ Map<String, dynamic> _buildVideoPlaylist() {
     }).toList(growable: false),
     'session_id': 'probe-videos-session',
     'cursor': ids.length,
-    'has_more': true,
+    'has_more': false,
   };
 }
 
@@ -182,6 +196,7 @@ Map<String, dynamic> _buildReelsResponse() {
 Finder _findVerticalFeedPageView() => find.byWidgetPredicate(
       (widget) => widget is PageView && widget.scrollDirection == Axis.vertical,
     );
+Finder _findNavTab(String label) => find.byKey(ValueKey<String>('nav-$label'));
 
 ProviderContainer _containerOf(WidgetTester tester) {
   return ProviderScope.containerOf(tester.element(find.byType(BlipsApp)));
@@ -195,7 +210,22 @@ Future<void> _pumpUi(
   await tester.pump();
 }
 
-Future<void> _waitForVideoPlaying(
+bool _hasPlayIssuedForUrl(
+  AppDiagnosticsController diagnostics,
+  YoutubePlayerManagerBase manager,
+  String url,
+) {
+  final videoId = manager.extractVideoId(url) ?? url;
+  return diagnostics.events.any(
+    (event) =>
+        event.scope == 'video.player' &&
+        (event.action == 'playVideo' || event.action == 'autoPlay') &&
+        event.stage == 'issued' &&
+        event.data['videoId'] == videoId,
+  );
+}
+
+Future<void> _waitForPlaybackReadyOrPlaying(
   WidgetTester tester,
   ProviderContainer container,
   String url,
@@ -204,14 +234,21 @@ Future<void> _waitForVideoPlaying(
   for (var attempt = 0; attempt < 28; attempt += 1) {
     await tester.pump(const Duration(milliseconds: 700));
     final manager = container.read(youtubePlayerManagerProvider);
-    if (manager.getState(url) == YTPlayerState.playing) {
+    final state = manager.getState(url);
+    if (state == YTPlayerState.playing) {
+      return;
+    }
+    if (_acceptReadyAsSuccess &&
+        state == YTPlayerState.ready &&
+        _hasPlayIssuedForUrl(diagnostics, manager, url)) {
       return;
     }
   }
 
   final manager = container.read(youtubePlayerManagerProvider);
   fail(
-    'Video never reached playing for $url.\n'
+    'Video never reached '
+    '${_acceptReadyAsSuccess ? 'ready/playing' : 'playing'} for $url.\n'
     'Final state: ${manager.getState(url).name}\n'
     'Diagnostics:\n${diagnostics.exportText(limit: 160)}',
   );
@@ -238,7 +275,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.play_circle_outline));
       await _pumpUi(tester, const Duration(seconds: 2));
 
-      await _waitForVideoPlaying(tester, container, _videoUrls[0]);
+      await _waitForPlaybackReadyOrPlaying(tester, container, _videoUrls[0]);
 
       for (final url in _videoUrls.skip(1).take(2)) {
         await tester.drag(
@@ -246,24 +283,30 @@ void main() {
           const Offset(0, -820),
         );
         await _pumpUi(tester, const Duration(seconds: 2));
-        await _waitForVideoPlaying(tester, container, url);
+        await _waitForPlaybackReadyOrPlaying(tester, container, url);
       }
 
-      await tester.tap(find.byIcon(Icons.article));
+      await tester.tap(_findNavTab('Feed'));
       await _pumpUi(tester);
-      await tester.tap(find.byIcon(Icons.play_circle_outline));
+      await tester.tap(_findNavTab('Videos'));
       await _pumpUi(tester, const Duration(seconds: 2));
 
-      await _waitForVideoPlaying(tester, container, _videoUrls[2]);
+      await _waitForPlaybackReadyOrPlaying(tester, container, _videoUrls[2]);
 
-      await tester.tap(find.byIcon(Icons.play_circle_outline));
+      await tester.tap(_findNavTab('Videos'));
       await _pumpUi(tester, const Duration(milliseconds: 900));
-      expect(find.text('View latest'), findsOneWidget);
+      final latestPill = find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.data != null &&
+            _latestPillPattern.hasMatch(widget.data!),
+      );
+      expect(latestPill, findsOneWidget);
 
-      await tester.tap(find.text('View latest'));
+      await tester.tap(latestPill);
       await _pumpUi(tester, const Duration(seconds: 2));
 
-      await _waitForVideoPlaying(tester, container, _videoUrls[0]);
+      await _waitForPlaybackReadyOrPlaying(tester, container, _videoUrls[0]);
 
       final diagnostics = container.read(appDiagnosticsProvider);
       expect(

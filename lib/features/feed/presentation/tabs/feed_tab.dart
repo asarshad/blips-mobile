@@ -5,7 +5,6 @@ import 'package:blips_mobile/core/config/memory_config.dart';
 import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
-import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/gestures.dart';
@@ -243,17 +242,9 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
           entries,
           videoManager,
         );
-        final activeVideoEntry = entries[activeIndex].videoEntry;
-        if (activeVideoEntry != null) {
-          final activeUrl =
-              _resolvePlaybackUrl(activeVideoEntry, videoManager).trim();
-          if (activeUrl.isNotEmpty) {
-            unawaited(nudgePrimaryPlayback(videoManager, activeUrl));
-          }
-        }
       });
       return null;
-    }, [isActive, hasVideos, feed.valueOrNull, currentPage.value]);
+    }, [isActive, hasVideos, feed.valueOrNull]);
 
     useEffect(() {
       final entries = feed.valueOrNull;
@@ -428,13 +419,11 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
     // Video preloading logic
     if (hasVideos) {
-      _handleVideoPreloading(index, entries, videoManager);
       final activeVideoEntry = entries[index].videoEntry;
-      if (activeVideoEntry != null) {
-        final activeUrl = _resolvePlaybackUrl(activeVideoEntry, videoManager);
-        if (activeUrl.isNotEmpty) {
-          unawaited(nudgePrimaryPlayback(videoManager, activeUrl));
-        }
+      if (activeVideoEntry == null) {
+        videoManager.pauseAll();
+      } else {
+        _handleVideoPreloading(index, entries, videoManager);
       }
     }
 

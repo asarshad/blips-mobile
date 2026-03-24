@@ -4,7 +4,6 @@ library video_card_test;
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/video_card.dart';
-import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
@@ -139,18 +138,18 @@ void main() {
       );
     }
 
-    testWidgets('visible card arms autoplay using videoUrl', (tester) async {
+    testWidgets('visible card does not independently arm autoplay',
+        (tester) async {
       await tester
           .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
-        mockManager.calls,
-        contains('play:${videoEntry.videoUrl}'),
-        reason:
-            'Videos tab playback should use videoUrl when it is YouTube-playable',
+        mockManager.calls.where((call) => call.startsWith('play:')),
+        isEmpty,
+        reason: 'FeedTab should own autoplay so cards do not issue duplicate '
+            'play requests on every visibility change.',
       );
-      expect(mockManager.calls, isNot(contains('play:${videoEntry.link}')));
     });
 
     testWidgets('invisible card pauses using videoUrl', (tester) async {
@@ -189,7 +188,7 @@ void main() {
       );
     });
 
-    testWidgets('falls back to source link when videoUrl is not YouTube',
+    testWidgets('falls back to source link when pausing a non-YouTube videoUrl',
         (tester) async {
       final fallbackEntry = VideoFeedEntry(
         id: 11,
@@ -205,13 +204,13 @@ void main() {
       );
 
       await tester.pumpWidget(
-        buildTestWidget(entry: fallbackEntry, isVisible: true),
+        buildTestWidget(entry: fallbackEntry, isVisible: false),
       );
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
         mockManager.calls,
-        contains('play:${fallbackEntry.link}'),
+        contains('pause:${fallbackEntry.link}'),
         reason:
             'Source link should be used when videoUrl is not YouTube-playable',
       );
@@ -331,6 +330,34 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.byIcon(Icons.open_in_new), findsNothing);
+    });
+
+    testWidgets(
+        'resume rearm only happens after a real background foreground cycle',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: true),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 700));
+
+      expect(
+        mockManager.calls.where((call) => call.startsWith('play:')),
+        isEmpty,
+        reason: 'Initial resumed lifecycle should not trigger playback rearm.',
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(
+        mockManager.calls.where((call) => call.startsWith('play:')),
+        isNotEmpty,
+        reason: 'A real foreground resume should rearm playback.',
+      );
     });
   });
 }
