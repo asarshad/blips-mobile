@@ -26,12 +26,12 @@ class PushNotificationsController {
     this._ref, {
     FirebaseMessaging? messaging,
     FlutterLocalNotificationsPlugin? localNotifications,
-  })  : _messaging = messaging ?? FirebaseMessaging.instance,
+  })  : _messagingOverride = messaging,
         _localNotifications =
             localNotifications ?? FlutterLocalNotificationsPlugin();
 
   final Ref _ref;
-  final FirebaseMessaging _messaging;
+  final FirebaseMessaging? _messagingOverride;
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   StreamSubscription<RemoteMessage>? _onMessageSubscription;
@@ -55,7 +55,8 @@ class PushNotificationsController {
 
   Future<void> onEligibleShellEntered() async {
     await ensureStarted();
-    if (Firebase.apps.isEmpty) return;
+    final messaging = _resolveMessaging();
+    if (messaging == null) return;
 
     final config = await _fetchPushConfig();
     if (!config.enabled) {
@@ -63,7 +64,7 @@ class PushNotificationsController {
       return;
     }
 
-    final settings = await _messaging.requestPermission(
+    final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -77,7 +78,8 @@ class PushNotificationsController {
 
   Future<void> handleAppResume() async {
     await ensureStarted();
-    if (Firebase.apps.isEmpty) return;
+    final messaging = _resolveMessaging();
+    if (messaging == null) return;
 
     final config = await _fetchPushConfig();
     if (!config.enabled) {
@@ -85,7 +87,7 @@ class PushNotificationsController {
       return;
     }
 
-    final settings = await _messaging.getNotificationSettings();
+    final settings = await messaging.getNotificationSettings();
     await _syncPermissionAndToken(
       settings: settings,
       config: config,
@@ -138,7 +140,8 @@ class PushNotificationsController {
   }
 
   Future<void> _start() async {
-    if (Firebase.apps.isEmpty) {
+    final messaging = _resolveMessaging();
+    if (messaging == null) {
       logger.info(
         'Push notifications skipped: Firebase is not configured',
         category: LogCategory.lifecycle,
@@ -147,7 +150,7 @@ class PushNotificationsController {
     }
 
     await _initializeLocalNotifications();
-    await _messaging.setForegroundNotificationPresentationOptions(
+    await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
@@ -158,9 +161,9 @@ class PushNotificationsController {
     _onMessageOpenedSubscription ??=
         FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpened);
     _onTokenRefreshSubscription ??=
-        _messaging.onTokenRefresh.listen(_handleTokenRefresh);
+        messaging.onTokenRefresh.listen(_handleTokenRefresh);
 
-    final initialMessage = await _messaging.getInitialMessage();
+    final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
       _handleMessageOpened(initialMessage);
     }
@@ -225,7 +228,10 @@ class PushNotificationsController {
       return;
     }
 
-    final token = refreshedToken ?? await _messaging.getToken();
+    final messaging = _resolveMessaging();
+    if (messaging == null) return;
+
+    final token = refreshedToken ?? await messaging.getToken();
     if (token == null || token.isEmpty) {
       return;
     }
@@ -313,8 +319,11 @@ class PushNotificationsController {
   }
 
   Future<void> _handleTokenRefresh(String token) async {
+    final messaging = _resolveMessaging();
+    if (messaging == null) return;
+
     final config = await _fetchPushConfig();
-    final settings = await _messaging.getNotificationSettings();
+    final settings = await messaging.getNotificationSettings();
     await _syncPermissionAndToken(
       settings: settings,
       config: config,
@@ -343,6 +352,16 @@ class PushNotificationsController {
       TargetPlatform.iOS => 'ios',
       _ => 'android',
     };
+  }
+
+  FirebaseMessaging? _resolveMessaging() {
+    if (_messagingOverride != null) {
+      return _messagingOverride;
+    }
+    if (Firebase.apps.isEmpty) {
+      return null;
+    }
+    return FirebaseMessaging.instance;
   }
 }
 
