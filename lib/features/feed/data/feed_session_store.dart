@@ -11,6 +11,7 @@ const _kLocalHistoryKey = 'feed_local_history';
 const Duration kBackendSessionTtl = Duration(hours: 1);
 const Duration kConsumedSuppressionWindow = Duration(hours: 24);
 const Duration kExposedDemotionWindow = Duration(hours: 6);
+const Duration kLastSurfaceRestoreWindow = Duration(minutes: 30);
 const Duration kFeedResumeWindow = Duration(hours: 2);
 const Duration kArticleExactRestoreWindow = Duration(hours: 24);
 const Duration kArticleSoftRestoreWindow = Duration(hours: 72);
@@ -319,12 +320,53 @@ class FeedSessionStore {
     await _cache.deleteMeta('$_kActiveSessionPrefix${surface.storageKey}');
   }
 
-  Future<FeedSurface?> getLastSurface() async {
-    return FeedSurface.tryParse(await _cache.getMeta(_kLastSurfaceKey));
+  Future<FeedSurface?> getLastSurface({
+    DateTime? now,
+    Duration maxAge = kLastSurfaceRestoreWindow,
+  }) async {
+    final raw = await _cache.getMeta(_kLastSurfaceKey);
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final surface = FeedSurface.tryParse(decoded['surface'] as String?);
+        final updatedAt = DateTime.tryParse(
+          decoded['updated_at'] as String? ?? '',
+        );
+        if (surface == null || updatedAt == null) {
+          await _cache.deleteMeta(_kLastSurfaceKey);
+          return null;
+        }
+        final reference = now ?? DateTime.now();
+        if (reference.difference(updatedAt) > maxAge) {
+          await _cache.deleteMeta(_kLastSurfaceKey);
+          return null;
+        }
+        return surface;
+      }
+    } on FormatException {
+      // Legacy plain-string values had no age semantics. Drop them so the app
+      // can fall back to the default articles surface after upgrading.
+    }
+
+    await _cache.deleteMeta(_kLastSurfaceKey);
+    return null;
   }
 
-  Future<void> setLastSurface(FeedSurface surface) async {
-    await _cache.setMeta(_kLastSurfaceKey, surface.storageKey);
+  Future<void> setLastSurface(
+    FeedSurface surface, {
+    DateTime? at,
+  }) async {
+    await _cache.setMeta(
+      _kLastSurfaceKey,
+      jsonEncode({
+        'surface': surface.storageKey,
+        'updated_at': (at ?? DateTime.now()).toIso8601String(),
+      }),
+    );
   }
 
   bool isResumeEligible(FeedSessionSnapshot snapshot, {DateTime? now}) {

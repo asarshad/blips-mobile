@@ -18,7 +18,7 @@ class IOSVideoOptimizations {
       await _channel.invokeMethod('configureAudioSession', {
         'category': 'playback',
         'mode': 'moviePlayback',
-        'options': ['mixWithOthers', 'duckOthers'],
+        'options': const <String>[],
       });
     } catch (e) {
       // Channel not implemented - this is expected until native code is added

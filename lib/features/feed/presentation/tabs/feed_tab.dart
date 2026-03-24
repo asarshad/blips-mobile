@@ -200,6 +200,22 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
     useEffect(() {
       final entries = feed.valueOrNull;
+      if (!isActive || !hasVideos || entries == null || entries.isEmpty) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleVideoPreloading(
+          currentPage.value.clamp(0, entries.length - 1),
+          entries,
+          videoManager,
+        );
+      });
+      return null;
+    }, [isActive, hasVideos, feed.valueOrNull, currentPage.value]);
+
+    useEffect(() {
+      final entries = feed.valueOrNull;
       if (entries == null || entries.isEmpty || onLoadMore == null) {
         return null;
       }

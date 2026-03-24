@@ -273,11 +273,12 @@ final class PaddingLabel: UILabel {
     do {
       let audioSession = AVAudioSession.sharedInstance()
       
-      // Configure for video playback with optimal settings
+      // Take a normal foreground media playback session so in-app
+      // video volume matches native media apps more closely.
       try audioSession.setCategory(
         .playback,
         mode: .moviePlayback,
-        options: [.mixWithOthers, .duckOthers]
+        options: []
       )
       
       // Activate the session

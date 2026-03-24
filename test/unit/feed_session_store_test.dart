@@ -223,6 +223,52 @@ void main() {
     );
   });
 
+  test('getLastSurface restores a recent surface selection', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-23T18:00:00Z');
+
+    await store.setLastSurface(
+      FeedSurface.reels,
+      at: now.subtract(const Duration(minutes: 10)),
+    );
+
+    expect(
+      await store.getLastSurface(now: now),
+      FeedSurface.reels,
+    );
+  });
+
+  test('getLastSurface expires stale surface selection', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-23T18:00:00Z');
+
+    await store.setLastSurface(
+      FeedSurface.videos,
+      at: now.subtract(const Duration(hours: 2)),
+    );
+
+    expect(
+      await store.getLastSurface(now: now),
+      isNull,
+    );
+    expect(await cache.getMeta('feed_last_surface'), isNull);
+  });
+
+  test('getLastSurface drops legacy plain-string values', () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+
+    await cache.setMeta('feed_last_surface', FeedSurface.reels.storageKey);
+
+    expect(
+      await store.getLastSurface(now: DateTime.parse('2026-03-23T18:00:00Z')),
+      isNull,
+    );
+    expect(await cache.getMeta('feed_last_surface'), isNull);
+  });
+
   test('active session preserves null article image URLs', () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
