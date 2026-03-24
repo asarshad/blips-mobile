@@ -128,6 +128,7 @@ void main() {
           home: Scaffold(
             body: SizedBox(
               height: 700,
+              width: 400,
               child: VideoCard(
                 entry: entry,
                 isVisible: isVisible,
@@ -178,7 +179,7 @@ void main() {
 
       expect(find.text('Video unavailable'), findsOneWidget);
 
-      await tester.tap(find.byType(FeedCardFrame));
+      await tester.tap(find.text('Video unavailable'));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
@@ -261,6 +262,21 @@ void main() {
 
       expect(find.text('Watch video'), findsOneWidget);
       expect(find.text('1 min watch'), findsNothing);
+    });
+
+    testWidgets('renders source label below the summary block', (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final titleRect =
+          tester.getRect(find.text('Video playback contract test'));
+      final sourceRect =
+          tester.getRect(find.byKey(const Key('feed-card-source-label')));
+
+      expect(find.byKey(const Key('feed-card-source-label')), findsOneWidget);
+      expect(sourceRect.top, greaterThan(titleRect.bottom));
     });
 
     testWidgets('has bookmark toggle button', (tester) async {

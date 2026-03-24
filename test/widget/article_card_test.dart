@@ -77,9 +77,22 @@ void main() {
       await tester.pumpWidget(buildTestWidget(testEntry));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Source appears in the content header and may also appear in the
-      // media placeholder when the network image fails to load in tests.
+      expect(find.byKey(const Key('feed-card-source-label')), findsOneWidget);
       expect(find.text('Test Source'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('pins source below the summary content', (tester) async {
+      await tester.pumpWidget(buildTestWidget(testEntry));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final titleRect = tester.getRect(find.text('Test Article Title'));
+      final sourceRect =
+          tester.getRect(find.byKey(const Key('feed-card-source-label')));
+
+      expect(
+        sourceRect.top,
+        greaterThan(titleRect.bottom),
+      );
     });
 
     testWidgets('renders category badge', (tester) async {

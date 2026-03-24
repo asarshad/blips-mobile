@@ -427,6 +427,8 @@ class _Summary extends StatelessWidget {
   final ColorScheme colorScheme;
   final TextTheme textTheme;
 
+  static const Key _sourceKey = Key('feed-card-source-label');
+
   @override
   Widget build(BuildContext context) {
     final summaryText = summary.trim();
@@ -436,25 +438,58 @@ class _Summary extends StatelessWidget {
       height: AppTypography.lineHeightNormal,
     );
 
-    return Text.rich(
-      TextSpan(
-        style: baseStyle,
-        children: [
-          if (summaryText.isNotEmpty) TextSpan(text: summaryText),
-          if (summaryText.isNotEmpty && sourceText.isNotEmpty)
-            const TextSpan(text: '  '),
-          if (sourceText.isNotEmpty)
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final canPinSource =
+            sourceText.isNotEmpty && constraints.maxHeight >= 34;
+        if (!canPinSource) {
+          return Text.rich(
             TextSpan(
-              text: sourceText,
+              style: baseStyle,
+              children: [
+                if (summaryText.isNotEmpty) TextSpan(text: summaryText),
+                if (summaryText.isNotEmpty && sourceText.isNotEmpty)
+                  const TextSpan(text: '  '),
+                if (sourceText.isNotEmpty)
+                  TextSpan(
+                    text: sourceText,
+                    style: textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 5,
+            overflow: TextOverflow.ellipsis,
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                summaryText,
+                style: baseStyle,
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              sourceText,
+              key: _sourceKey,
               style: textTheme.labelMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-        ],
-      ),
-      maxLines: 5,
-      overflow: TextOverflow.ellipsis,
+          ],
+        );
+      },
     );
   }
 }
