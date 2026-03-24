@@ -59,8 +59,12 @@ class ArticleCard extends HookConsumerWidget {
             isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: '${entry.readTime} min read',
-          onTap: () => _handleTap(showBubbles, repository, sessionStore),
-          onOpenLink: () => _openInBrowser(entry.url, repository, sessionStore),
+          onMediaTap: () => _handleTap(showBubbles, repository, sessionStore),
+          onContentTap: () => _openInBrowser(
+            entry.url,
+            repository,
+            sessionStore,
+          ),
           onChat: () => showBubbles.value = !showBubbles.value,
           onShare: () => _shareArticle(context, repository, sessionStore),
           onSaveToggle: () => unawaited(

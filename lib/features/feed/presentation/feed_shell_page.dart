@@ -670,15 +670,7 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.videoPreloadCount,
     );
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    final state = videoManager.getState(firstUrl);
-    if (state == YTPlayerState.loading ||
-        state == YTPlayerState.idle ||
-        state == YTPlayerState.error) {
-      await videoManager.retryVideo(firstUrl);
-      return;
-    }
-    await videoManager.playVideo(firstUrl);
+    await _nudgePrimaryPlayback(videoManager, firstUrl);
   }
 
   Future<void> _rearmFirstReelPlayback(WidgetRef ref) async {
@@ -693,15 +685,32 @@ class FeedShellPage extends HookConsumerWidget {
       videoUrls: urls,
       preloadAhead: MemoryConfig.reelPreloadCount,
     );
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    final state = videoManager.getState(firstUrl);
-    if (state == YTPlayerState.loading ||
-        state == YTPlayerState.idle ||
-        state == YTPlayerState.error) {
-      await videoManager.retryVideo(firstUrl);
-      return;
+    await _nudgePrimaryPlayback(videoManager, firstUrl);
+  }
+
+  Future<void> _nudgePrimaryPlayback(
+    YoutubePlayerManagerBase videoManager,
+    String primaryUrl,
+  ) async {
+    await videoManager.initController(primaryUrl);
+    await WidgetsBinding.instance.endOfFrame;
+
+    for (final delay in const [
+      Duration(milliseconds: 180),
+      Duration(milliseconds: 420),
+      Duration(milliseconds: 900),
+    ]) {
+      await Future<void>.delayed(delay);
+      final state = videoManager.getState(primaryUrl);
+      if (state == YTPlayerState.playing) {
+        return;
+      }
+      if (state == YTPlayerState.error) {
+        await videoManager.retryVideo(primaryUrl);
+        continue;
+      }
+      await videoManager.playVideo(primaryUrl);
     }
-    await videoManager.playVideo(firstUrl);
   }
 
   String _resolveVideoPlaybackUrl(

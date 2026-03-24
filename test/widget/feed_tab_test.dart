@@ -33,6 +33,8 @@ void main() {
   Widget buildHarness({
     required YoutubePlayerManagerBase manager,
     required bool isActive,
+    PageController? controller,
+    List<FeedPageItem>? items,
   }) {
     return ProviderScope(
       overrides: [
@@ -42,7 +44,7 @@ void main() {
         home: Scaffold(
           body: FeedTab<FeedPageItem>(
             feed: AsyncValue.data(
-              <FeedPageItem>[OrganicFeedPageItem(buildVideo())],
+              items ?? <FeedPageItem>[OrganicFeedPageItem(buildVideo())],
             ),
             builder: (entry, isCurrentPage) => const SizedBox.expand(),
             emptyLabel: 'No content',
@@ -50,6 +52,7 @@ void main() {
             overlayLabel: 'VID',
             containsVideos: true,
             isActive: isActive,
+            controller: controller,
           ),
         ),
       ),
@@ -80,5 +83,44 @@ void main() {
     await tester.pump();
 
     expect(manager.getState(playbackUrl), YTPlayerState.playing);
+  });
+
+  testWidgets('activation follows the controller page after a jump to top',
+      (tester) async {
+    final manager = FakeYoutubePlayerManager();
+    final controller = PageController(initialPage: 1);
+    const secondUrl = 'https://www.youtube.com/watch?v=jcxgwl9NYFE';
+
+    final items = <FeedPageItem>[
+      OrganicFeedPageItem(buildVideo()),
+      OrganicFeedPageItem(
+        VideoFeedEntry(
+          id: 303,
+          title: 'Second visible video',
+          summary: 'Summary',
+          videoUrl: secondUrl,
+          link: secondUrl,
+          source: 'YouTube',
+          category: 'Technology',
+          publishedAt: DateTime.parse('2026-03-23T11:00:00Z'),
+          readTime: 3,
+          thumbnailUrl: 'https://example.com/video-2.jpg',
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      buildHarness(
+        manager: manager,
+        isActive: true,
+        controller: controller,
+        items: items,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(manager.getState(secondUrl), YTPlayerState.playing);
+    expect(manager.getState(playbackUrl), isNot(YTPlayerState.playing));
   });
 }

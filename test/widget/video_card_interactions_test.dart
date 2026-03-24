@@ -94,10 +94,10 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('open action launches source immediately', (tester) async {
+  testWidgets('content tap launches source immediately', (tester) async {
     await pumpHarness(tester);
 
-    await tester.tap(find.byIcon(Icons.open_in_new));
+    await tester.tap(find.text(video.title));
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(recordingUrlLauncher.launches, hasLength(1));

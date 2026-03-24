@@ -98,15 +98,11 @@ void main() {
       expect(find.textContaining('5 min'), findsOneWidget);
     });
 
-    testWidgets('has open link action button', (tester) async {
+    testWidgets('does not show an open link action button', (tester) async {
       await tester.pumpWidget(buildTestWidget(testEntry));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Look for open_in_new icon button
-      expect(
-        find.byIcon(Icons.open_in_new),
-        findsOneWidget,
-      );
+      expect(find.byIcon(Icons.open_in_new), findsNothing);
     });
 
     testWidgets('has share action button', (tester) async {

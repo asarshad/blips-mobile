@@ -266,7 +266,7 @@ class VideoCard extends HookConsumerWidget {
             isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: watchLabel,
-          onTap: () => _handleTap(
+          onMediaTap: () => _handleTap(
             showBubbles: showBubbles,
             controller: controller,
             videoManager: videoManager,
@@ -274,7 +274,7 @@ class VideoCard extends HookConsumerWidget {
             playerState: playerState,
           ),
           onLongPress: () => _showActionsSheet(context, feedRepository),
-          onOpenLink: () => _openInBrowser(
+          onContentTap: () => _openInBrowser(
             repository: feedRepository,
             sessionStore: sessionStore,
           ),

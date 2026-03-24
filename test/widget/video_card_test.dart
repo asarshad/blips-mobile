@@ -271,5 +271,14 @@ void main() {
 
       expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
     });
+
+    testWidgets('does not show an open link action button', (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(entry: videoEntry, isVisible: false),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.open_in_new), findsNothing);
+    });
   });
 }

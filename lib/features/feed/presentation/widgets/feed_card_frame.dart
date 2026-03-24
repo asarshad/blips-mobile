@@ -39,11 +39,11 @@ class FeedCardFrame extends StatelessWidget {
     this.date,
     this.freshnessInfo,
     required this.readTime,
-    this.onTap,
+    this.onMediaTap,
+    this.onContentTap,
     this.onLongPress,
     this.onShare,
     this.onChat,
-    this.onOpenLink,
     this.onSaveToggle,
     this.isSaved = false,
     this.showActions = true,
@@ -68,11 +68,11 @@ class FeedCardFrame extends StatelessWidget {
   /// New freshness info with tier and timestamps.
   final FreshnessInfo? freshnessInfo;
   final String readTime;
-  final VoidCallback? onTap;
+  final VoidCallback? onMediaTap;
+  final VoidCallback? onContentTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
-  final VoidCallback? onOpenLink;
   final VoidCallback? onSaveToggle;
   final bool isSaved;
   final bool showActions;
@@ -88,7 +88,6 @@ class FeedCardFrame extends StatelessWidget {
     final textTheme = theme.textTheme;
 
     return GestureDetector(
-      onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
@@ -109,10 +108,14 @@ class FeedCardFrame extends StatelessWidget {
             ? _AspectRatioLayout(
                 media: media,
                 aspectRatio: mediaAspectRatio!,
+                onMediaTap: onMediaTap,
+                onContentTap: onContentTap,
                 contentSection: _buildContent(colorScheme, textTheme),
               )
             : _FlexLayout(
                 media: media,
+                onMediaTap: onMediaTap,
+                onContentTap: onContentTap,
                 contentSection: _buildContent(colorScheme, textTheme),
               ),
       ),
@@ -134,7 +137,6 @@ class FeedCardFrame extends StatelessWidget {
         showActions: showActions,
         onShare: onShare,
         onChat: onChat,
-        onOpenLink: onOpenLink,
         onSaveToggle: onSaveToggle,
         isSaved: isSaved,
         colorScheme: colorScheme,
@@ -150,11 +152,15 @@ class _AspectRatioLayout extends StatelessWidget {
   const _AspectRatioLayout({
     required this.media,
     required this.aspectRatio,
+    this.onMediaTap,
+    this.onContentTap,
     required this.contentSection,
   });
 
   final Widget media;
   final double aspectRatio;
+  final VoidCallback? onMediaTap;
+  final VoidCallback? onContentTap;
   final Widget contentSection;
 
   @override
@@ -165,8 +171,20 @@ class _AspectRatioLayout extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: double.infinity, height: mediaHeight, child: media),
-            Expanded(child: contentSection),
+            SizedBox(
+              width: double.infinity,
+              height: mediaHeight,
+              child: _TapSection(
+                onTap: onMediaTap,
+                child: media,
+              ),
+            ),
+            Expanded(
+              child: _TapSection(
+                onTap: onContentTap,
+                child: contentSection,
+              ),
+            ),
           ],
         );
       },
@@ -177,9 +195,16 @@ class _AspectRatioLayout extends StatelessWidget {
 /// Layout for flex-based media (e.g. article images with BoxFit.cover).
 /// Media = 39% of card height; content = 61%.
 class _FlexLayout extends StatelessWidget {
-  const _FlexLayout({required this.media, required this.contentSection});
+  const _FlexLayout({
+    required this.media,
+    this.onMediaTap,
+    this.onContentTap,
+    required this.contentSection,
+  });
 
   final Widget media;
+  final VoidCallback? onMediaTap;
+  final VoidCallback? onContentTap;
   final Widget contentSection;
 
   @override
@@ -187,9 +212,46 @@ class _FlexLayout extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(flex: 39, child: SizedBox.expand(child: media)),
-        Expanded(flex: 61, child: contentSection),
+        Expanded(
+          flex: 39,
+          child: SizedBox.expand(
+            child: _TapSection(
+              onTap: onMediaTap,
+              child: media,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 61,
+          child: _TapSection(
+            onTap: onContentTap,
+            child: contentSection,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _TapSection extends StatelessWidget {
+  const _TapSection({
+    required this.child,
+    this.onTap,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onTap == null) {
+      return child;
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.deferToChild,
+      child: child,
     );
   }
 }
@@ -209,7 +271,6 @@ class _ContentSection extends StatelessWidget {
     required this.textTheme,
     this.onShare,
     this.onChat,
-    this.onOpenLink,
     this.onSaveToggle,
     required this.isSaved,
   });
@@ -227,7 +288,6 @@ class _ContentSection extends StatelessWidget {
   final TextTheme textTheme;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
-  final VoidCallback? onOpenLink;
   final VoidCallback? onSaveToggle;
   final bool isSaved;
 
@@ -245,10 +305,8 @@ class _ContentSection extends StatelessWidget {
         children: [
           _Header(
             category: category,
-            source: source,
             showActions: showActions,
             onShare: onShare,
-            onOpenLink: onOpenLink,
             onSaveToggle: onSaveToggle,
             isSaved: isSaved,
             colorScheme: colorScheme,
@@ -265,6 +323,7 @@ class _ContentSection extends StatelessWidget {
           Expanded(
             child: _Summary(
               summary: summary,
+              source: source,
               colorScheme: colorScheme,
               textTheme: textTheme,
             ),
@@ -291,23 +350,19 @@ class _ContentSection extends StatelessWidget {
 class _Header extends StatelessWidget {
   const _Header({
     required this.category,
-    required this.source,
     required this.showActions,
     required this.colorScheme,
     required this.textTheme,
     this.onShare,
-    this.onOpenLink,
     this.onSaveToggle,
     required this.isSaved,
   });
 
   final String category;
-  final String source;
   final bool showActions;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
   final VoidCallback? onShare;
-  final VoidCallback? onOpenLink;
   final VoidCallback? onSaveToggle;
   final bool isSaved;
 
@@ -316,23 +371,11 @@ class _Header extends StatelessWidget {
     return Row(
       children: [
         _CategoryBadge(category: category, colorScheme: colorScheme),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            source,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
-            ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-        ),
+        const Spacer(),
         if (showActions) ...[
           const SizedBox(width: AppSpacing.sm),
           _HeaderActions(
             colorScheme: colorScheme,
-            onOpenLink: onOpenLink,
             onShare: onShare,
             onSaveToggle: onSaveToggle,
             isSaved: isSaved,
@@ -374,22 +417,44 @@ class _Title extends StatelessWidget {
 class _Summary extends StatelessWidget {
   const _Summary({
     required this.summary,
+    required this.source,
     required this.colorScheme,
     required this.textTheme,
   });
 
   final String summary;
+  final String source;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      summary.trim(),
-      style: textTheme.bodySmall?.copyWith(
-        color: colorScheme.onSurfaceVariant,
-        height: AppTypography.lineHeightNormal,
+    final summaryText = summary.trim();
+    final sourceText = source.trim();
+    final baseStyle = textTheme.bodySmall?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+      height: AppTypography.lineHeightNormal,
+    );
+
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
+        children: [
+          if (summaryText.isNotEmpty) TextSpan(text: summaryText),
+          if (summaryText.isNotEmpty && sourceText.isNotEmpty)
+            const TextSpan(text: '  '),
+          if (sourceText.isNotEmpty)
+            TextSpan(
+              text: sourceText,
+              style: textTheme.labelMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
       ),
+      maxLines: 5,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -535,14 +600,12 @@ class _CategoryBadge extends StatelessWidget {
 class _HeaderActions extends StatelessWidget {
   const _HeaderActions({
     required this.colorScheme,
-    this.onOpenLink,
     this.onShare,
     this.onSaveToggle,
     required this.isSaved,
   });
 
   final ColorScheme colorScheme;
-  final VoidCallback? onOpenLink;
   final VoidCallback? onShare;
   final VoidCallback? onSaveToggle;
   final bool isSaved;
@@ -561,8 +624,6 @@ class _HeaderActions extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _ActionIcon(Icons.open_in_new, onOpenLink, colorScheme),
-          const SizedBox(width: AppSpacing.xs),
           _ActionIcon(Icons.share_outlined, onShare, colorScheme),
           const SizedBox(width: AppSpacing.xs),
           _ActionIcon(

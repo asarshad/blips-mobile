@@ -115,6 +115,28 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     final lastCaughtUpEntryId = useRef<int?>(null);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
+    useEffect(() {
+      void syncCurrentPage() {
+        final nextIndex = (() {
+          if (!effectiveController.hasClients) {
+            return effectiveController.initialPage;
+          }
+          final page = effectiveController.page;
+          if (page == null) {
+            return effectiveController.initialPage;
+          }
+          return page.round();
+        })();
+        if (nextIndex != currentPage.value) {
+          currentPage.value = nextIndex;
+        }
+      }
+
+      effectiveController.addListener(syncCurrentPage);
+      WidgetsBinding.instance.addPostFrameCallback((_) => syncCurrentPage());
+      return () => effectiveController.removeListener(syncCurrentPage);
+    }, [effectiveController]);
+
     // Preload first videos when data loads
     final hasVideos = containsVideos;
     useEffect(() {
@@ -205,8 +227,18 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        final activeIndex = (() {
+          if (effectiveController.hasClients) {
+            final page = effectiveController.page;
+            if (page != null) {
+              return page.round().clamp(0, entries.length - 1);
+            }
+            return effectiveController.initialPage.clamp(0, entries.length - 1);
+          }
+          return currentPage.value.clamp(0, entries.length - 1);
+        })();
         _handleVideoPreloading(
-          currentPage.value.clamp(0, entries.length - 1),
+          activeIndex,
           entries,
           videoManager,
         );
