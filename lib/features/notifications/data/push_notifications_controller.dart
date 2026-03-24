@@ -297,7 +297,7 @@ class PushNotificationsController {
         await _localNotifications.show(
           target.contentId,
           title ?? 'Blips update',
-          body ?? '',
+          body,
           const NotificationDetails(
             android: AndroidNotificationDetails(
               _kAndroidChannelId,
