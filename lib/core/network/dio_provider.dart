@@ -2,7 +2,6 @@ import 'package:blips_mobile/core/config/app_config.dart';
 import 'package:blips_mobile/core/network/interceptors.dart';
 import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Provides a configured [Dio] instance for REST calls.
@@ -35,10 +34,9 @@ final dioProvider = Provider<Dio>((ref) {
   // Add retry interceptor for resilience
   dio.interceptors.add(RetryInterceptor(dio: dio));
 
-  // Add logging in debug mode
-  if (kDebugMode) {
-    dio.interceptors.add(LoggingInterceptor());
-  }
+  // Add logging always — in debug for full request/response output, in
+  // release so network errors flow through AppLogger and reach Sentry.
+  dio.interceptors.add(LoggingInterceptor());
 
   return dio;
 });

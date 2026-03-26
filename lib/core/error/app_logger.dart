@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:blips_mobile/core/error/app_exception.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Log categories for filtering and organization
 enum LogCategory {
@@ -135,10 +136,16 @@ class AppLogger {
         name: 'Blips News',
       );
     } else {
-      // In release, use debugPrint which respects Flutter's logging config
-      // This ensures nothing sensitive leaks but critical logs are available
+      // In release, surface critical logs and report exceptions to Sentry.
       if (level >= 1000) {
         debugPrint(logMessage);
+      }
+      // Send exceptions at warning level and above to Sentry so failures
+      // (e.g. feed refresh errors) are diagnosable in production.
+      if (error != null && level >= 900) {
+        unawaited(
+          Sentry.captureException(error, stackTrace: stackTrace),
+        );
       }
     }
   }
