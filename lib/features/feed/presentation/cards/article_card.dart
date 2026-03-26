@@ -190,11 +190,12 @@ class ArticleCard extends HookConsumerWidget {
   }
 
   String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${date.month}/${date.day}/${date.year}';
+    final now = DateTime.now().toLocal();
+    final local = date.toLocal();
+    final days = DateUtils.dateOnly(now).difference(DateUtils.dateOnly(local)).inDays;
+    if (days <= 0) return 'Today';
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return '${days}d ago';
+    return '${local.month}/${local.day}/${local.year}';
   }
 }

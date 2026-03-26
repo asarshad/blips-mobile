@@ -171,7 +171,7 @@ extension ArticleDtoX on ArticleDto {
       source: deriveSource(sourceUrl),
       publishedAt:
           resolvePublishedDate(publishedAt ?? publishedDate, createdAt),
-      addedAt: createdAt != null ? DateTime.tryParse(createdAt!) : null,
+      addedAt: parseBackendDateTime(createdAt),
       url: sourceUrl,
       imageUrl: imageUrl,
       category: category,

@@ -351,12 +351,12 @@ class _SegmentLabel extends StatelessWidget {
 }
 
 String _formatSavedDate(DateTime date) {
-  final now = DateTime.now();
+  final now = DateTime.now().toLocal();
   final local = date.toLocal();
-  final diff = now.difference(local);
-  if (diff.inDays <= 0) return 'Today';
-  if (diff.inDays == 1) return 'Yesterday';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  final days = DateUtils.dateOnly(now).difference(DateUtils.dateOnly(local)).inDays;
+  if (days <= 0) return 'Today';
+  if (days == 1) return 'Yesterday';
+  if (days < 7) return '${days}d ago';
   return '${local.month}/${local.day}/${local.year}';
 }
 

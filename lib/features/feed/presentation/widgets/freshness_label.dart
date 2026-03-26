@@ -15,6 +15,7 @@ class FreshnessLabel extends StatelessWidget {
     this.freshnessTier = FreshnessTier.fresh,
     this.isNewSinceLastSeen = false,
     this.showTierIndicator = true,
+    this.now,
   });
 
   /// When the content was originally published.
@@ -32,16 +33,18 @@ class FreshnessLabel extends StatelessWidget {
   /// Whether to show tier indicator badge for non-fresh content.
   final bool showTierIndicator;
 
+  /// Override clock for deterministic tests.
+  final DateTime Function()? now;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    final now = DateTime.now();
-    final publishedAge = _formatAge(now.difference(publishedAt));
-    final addedAge =
-        addedAt != null ? _formatAge(now.difference(addedAt!)) : null;
+    final reference = (now ?? DateTime.now)();
+    final publishedAge = _formatAge(publishedAt, reference);
+    final addedAge = addedAt != null ? _formatAge(addedAt!, reference) : null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -87,11 +90,15 @@ class FreshnessLabel extends StatelessWidget {
   }
 
   /// Formats a duration into a human-readable age string.
-  String _formatAge(Duration duration) {
-    // Anything within 24 hours (including slightly future due to UTC offset)
-    if (duration.inHours.abs() < 24) return 'Today';
+  String _formatAge(DateTime timestamp, DateTime reference) {
+    final localTimestamp = timestamp.toLocal();
+    final localReference = reference.toLocal();
+    final days = DateUtils.dateOnly(localReference)
+        .difference(DateUtils.dateOnly(localTimestamp))
+        .inDays;
 
-    final days = duration.inDays;
+    if (days <= 0) return 'Today';
+    if (days == 1) return 'Yesterday';
     if (days < 7) return '${days}d ago';
 
     if (days < 30) {

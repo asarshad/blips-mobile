@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/domain/saved_item.dart';
 import 'package:path/path.dart';
@@ -328,7 +329,7 @@ class FeedCache implements FeedCacheInterface {
       title: row['title'] as String,
       summary: row['summary'] as String,
       source: row['source'] as String,
-      publishedAt: DateTime.parse(row['published_at'] as String),
+      publishedAt: parseBackendDateTime(row['published_at'] as String)!,
       url: row['url'] as String,
       imageUrl: _nullIfBlankString(row['image_url']),
       category: row['category'] as String,
@@ -388,7 +389,7 @@ class FeedCache implements FeedCacheInterface {
       link: row['link'] as String,
       source: row['source'] as String,
       category: row['category'] as String,
-      publishedAt: DateTime.parse(row['published_at'] as String),
+      publishedAt: parseBackendDateTime(row['published_at'] as String)!,
       readTime: row['read_time'] as int,
       thumbnailUrl: row['thumbnail_url'] as String?,
       conversationStarters: _decodeStarters(row['conversation_starters']),
@@ -442,7 +443,7 @@ class FeedCache implements FeedCacheInterface {
       videoUrl: row['video_url'] as String,
       link: row['link'] as String,
       source: row['source'] as String,
-      publishedAt: DateTime.parse(row['published_at'] as String),
+      publishedAt: parseBackendDateTime(row['published_at'] as String)!,
       thumbnailUrl: row['thumbnail_url'] as String?,
       conversationStarters: _decodeStarters(row['conversation_starters']),
     );
@@ -516,7 +517,7 @@ class FeedCache implements FeedCacheInterface {
             source: row['source'] as String,
             imageUrl: _nullIfBlankString(row['image_url']),
             category: row['category'] as String,
-            publishedAt: DateTime.parse(row['published_at'] as String),
+            publishedAt: parseBackendDateTime(row['published_at'] as String)!,
             savedAt: DateTime.parse(row['saved_at'] as String),
           ),
         )
@@ -574,7 +575,7 @@ class FeedCache implements FeedCacheInterface {
             source: row['source'] as String,
             thumbnailUrl: _nullIfBlankString(row['thumbnail_url']),
             category: row['category'] as String,
-            publishedAt: DateTime.parse(row['published_at'] as String),
+            publishedAt: parseBackendDateTime(row['published_at'] as String)!,
             savedAt: DateTime.parse(row['saved_at'] as String),
           ),
         )

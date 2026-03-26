@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:blips_mobile/features/feed/data/feed_cache_interface.dart';
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 
@@ -575,8 +576,8 @@ FeedEntry _deserializeEntry(Map<String, dynamic> json) {
     orElse: () => FreshnessTier.fresh,
   );
 
-  final publishedAt = DateTime.parse(json['published_at'] as String);
-  final addedAt = (json['added_at'] as String?)?.let(DateTime.parse);
+  final publishedAt = parseBackendDateTime(json['published_at'] as String)!;
+  final addedAt = (json['added_at'] as String?)?.let(parseBackendDateTime);
   final starters = (json['conversation_starters'] as List<dynamic>? ?? const [])
       .whereType<String>()
       .toList(growable: false);

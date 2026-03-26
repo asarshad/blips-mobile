@@ -2,6 +2,7 @@ import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:dio/dio.dart';
@@ -576,7 +577,7 @@ class FeedRepository {
     if (value is! String || value.trim().isEmpty) {
       return null;
     }
-    return DateTime.tryParse(value);
+    return parseBackendDateTime(value);
   }
 
   String _surfaceLabelForType(String type) {

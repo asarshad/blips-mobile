@@ -39,5 +39,15 @@ void main() {
       final dt = resolvePublishedDate(null, null, now: () => fakeNow);
       expect(dt, fakeNow);
     });
+
+    test('treats timezone-less backend timestamps as UTC', () {
+      final dt = resolvePublishedDate(
+        '2026-03-25T01:30:00',
+        null,
+        now: () => DateTime.utc(2030, 1, 1),
+      );
+      expect(dt.isUtc, isTrue);
+      expect(dt, DateTime.utc(2026, 3, 25, 1, 30));
+    });
   });
 }

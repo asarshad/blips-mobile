@@ -43,5 +43,20 @@ void main() {
       expect(find.text('New to you'), findsOneWidget);
       expect(find.textContaining('Added'), findsOneWidget);
     });
+
+    testWidgets('shows yesterday for late-night items across midnight', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildSubject(
+          FreshnessLabel(
+            publishedAt: DateTime.utc(2026, 3, 25, 6, 30),
+            now: () => DateTime.utc(2026, 3, 25, 9, 56),
+          ),
+        ),
+      );
+
+      expect(find.text('Published Yesterday'), findsOneWidget);
+    });
   });
 }
