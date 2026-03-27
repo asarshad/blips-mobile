@@ -104,6 +104,19 @@ class VideoCard extends HookConsumerWidget {
         });
         videoManager.pauseVideo(playbackUrl);
         showBubbles.value = false;
+      } else {
+        // Self-arm playback when this card becomes visible. FeedTab is the
+        // primary owner via onPageChanged, but that path can be missed when
+        // navigating from a push notification or restoring scroll position
+        // after the tab's isActive effect already fired. Only issue the play
+        // request when the video is idle or paused — not when it is already
+        // loading or playing, to avoid duplicate play commands.
+        final state = videoManager.getState(playbackUrl);
+        if (state == YTPlayerState.idle ||
+            state == YTPlayerState.paused ||
+            state == YTPlayerState.ready) {
+          unawaited(videoManager.playVideo(playbackUrl));
+        }
       }
       return null;
     }, [isVisible, playbackUrl]);

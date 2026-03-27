@@ -138,8 +138,26 @@ void main() {
       );
     }
 
-    testWidgets('visible card does not independently arm autoplay',
+    testWidgets('visible card arms autoplay when video is idle',
         (tester) async {
+      // Default state is idle — card should self-arm to handle push-notification
+      // and scroll-restore paths where FeedTab's onPageChanged fires before the
+      // card is mounted.
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls.where((call) => call.startsWith('play:')),
+        isNotEmpty,
+        reason: 'Card must self-arm when visible and video is idle, '
+            'to cover push-notification and restore-scroll entry paths.',
+      );
+    });
+
+    testWidgets('visible card does not arm autoplay when already playing',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.playing);
       await tester
           .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
       await tester.pump(const Duration(milliseconds: 100));
@@ -147,8 +165,21 @@ void main() {
       expect(
         mockManager.calls.where((call) => call.startsWith('play:')),
         isEmpty,
-        reason: 'FeedTab should own autoplay so cards do not issue duplicate '
-            'play requests on every visibility change.',
+        reason: 'No duplicate play request when video is already playing.',
+      );
+    });
+
+    testWidgets('visible card does not arm autoplay when already loading',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.loading);
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls.where((call) => call.startsWith('play:')),
+        isEmpty,
+        reason: 'No duplicate play request when controller is still loading.',
       );
     });
 
@@ -339,6 +370,9 @@ void main() {
         buildTestWidget(entry: videoEntry, isVisible: true),
       );
       await tester.pump(const Duration(milliseconds: 100));
+
+      // Clear calls from initial self-arm; this test is about lifecycle cycles.
+      mockManager.calls.clear();
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump(const Duration(milliseconds: 700));
