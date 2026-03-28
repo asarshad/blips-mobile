@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 
 /// Displays truthful freshness information for feed items.
 ///
-/// Shows "Published X ago" for fresh content and "Added Y ago" for recently added
-/// or evergreen content. Optionally shows a tier indicator like "New to you" or
-/// "Highlights" for non-fresh tiers.
+/// Shows the published age for all content. Optionally shows a tier indicator
+/// like "New to you" or "Highlights" for non-fresh tiers.
 class FreshnessLabel extends StatelessWidget {
   const FreshnessLabel({
     super.key,
@@ -44,7 +43,6 @@ class FreshnessLabel extends StatelessWidget {
 
     final reference = (now ?? DateTime.now)();
     final publishedAge = _formatAge(publishedAt, reference);
-    final addedAge = addedAt != null ? _formatAge(addedAt!, reference) : null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -61,7 +59,7 @@ class FreshnessLabel extends StatelessWidget {
         // Freshness text
         Flexible(
           child: Text(
-            _buildFreshnessText(publishedAge, addedAge),
+            publishedAge,
             style: textTheme.labelSmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -70,23 +68,6 @@ class FreshnessLabel extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _buildFreshnessText(String publishedAge, String? addedAge) {
-    switch (freshnessTier) {
-      case FreshnessTier.fresh:
-        // Just show "Published X ago"
-        return 'Published $publishedAge';
-      case FreshnessTier.recentlyAdded:
-        // Emphasize when it was added
-        if (addedAge != null) {
-          return 'Added $addedAge · Published $publishedAge';
-        }
-        return 'Published $publishedAge';
-      case FreshnessTier.evergreen:
-        // Just show published, tier badge explains why it's here
-        return 'Published $publishedAge';
-    }
   }
 
   /// Formats a duration into a human-readable age string.
