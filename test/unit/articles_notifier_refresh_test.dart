@@ -177,6 +177,64 @@ void main() {
   );
 
   test(
+    'ArticlesNotifier records a single VIEW_10S interaction after stable article dwell',
+    () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': _articlesResponse(
+            List<int>.generate(15, (index) => index + 1),
+          ),
+          '/session/interactions': {
+            'success': true,
+          },
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+          articleViewThresholdProvider.overrideWithValue(
+            const Duration(milliseconds: 20),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final notifier = container.read(articlesFeedProvider.notifier);
+      await notifier.markExposed(1);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await _settle();
+
+      await notifier.markExposed(1);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await _settle();
+
+      final interactionRequests = api.requests
+          .where(
+            (request) =>
+                request.method == 'POST' &&
+                request.path == '/session/interactions',
+          )
+          .toList(growable: false);
+
+      expect(interactionRequests, hasLength(1));
+      expect(
+        interactionRequests.single.body,
+        {
+          'content_item_id': 1,
+          'event_type': 'VIEW_10S',
+          'extra_data': {'surface': 'articles'},
+        },
+      );
+    },
+  );
+
+  test(
     'ArticlesNotifier manualRefresh keeps current items visible until replacement arrives',
     () async {
       final delayedResponse = Completer<Map<String, dynamic>>();

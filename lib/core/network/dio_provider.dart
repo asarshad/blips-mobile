@@ -1,5 +1,6 @@
 import 'package:blips_mobile/core/config/app_config.dart';
 import 'package:blips_mobile/core/network/interceptors.dart';
+import 'package:blips_mobile/core/services/device_country_service.dart';
 import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 ///
 /// Includes:
 /// - X-Device-ID header for anonymous device identification
+/// - X-Device-Country header for coarse region context
 /// - Retry with exponential backoff
 /// - Logging (debug mode only)
 /// - Proper timeouts
@@ -29,6 +31,14 @@ final dioProvider = Provider<Dio>((ref) {
     if (id != null) {
       dio.options.headers['X-Device-ID'] = id;
     }
+  }, fireImmediately: true);
+
+  ref.listen<String?>(deviceCountryCodeProvider, (_, next) {
+    if (next == null) {
+      dio.options.headers.remove('X-Device-Country');
+      return;
+    }
+    dio.options.headers['X-Device-Country'] = next;
   }, fireImmediately: true);
 
   // Add retry interceptor for resilience

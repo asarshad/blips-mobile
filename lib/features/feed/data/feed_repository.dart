@@ -42,6 +42,7 @@ class FeedPageResult<T extends FeedEntry> {
 }
 
 abstract final class FeedInteractionEvent {
+  static const view10s = 'VIEW_10S';
   static const openSource = 'OPEN_SOURCE';
   static const share = 'SHARE';
   static const save = 'SAVE';

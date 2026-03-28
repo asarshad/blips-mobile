@@ -34,6 +34,10 @@ final feedSessionStoreProvider = Provider<FeedSessionStore>((ref) {
   return FeedSessionStore(ref.watch(feedCacheProvider));
 });
 
+final articleViewThresholdProvider = Provider<Duration>(
+  (_) => const Duration(seconds: 10),
+);
+
 class FeedSurfaceUiState {
   const FeedSurfaceUiState({
     this.pendingNewCount = 0,
@@ -126,6 +130,7 @@ class ArticlesNotifier
     this._sessionStore,
     this._diagnostics,
     this._ref,
+    this._articleViewThreshold,
   ) : super(const AsyncValue.loading()) {
     _loadInitial();
     _startPolling();
@@ -136,6 +141,7 @@ class ArticlesNotifier
   final FeedSessionStore _sessionStore;
   final AppDiagnosticsController _diagnostics;
   final Ref _ref;
+  final Duration _articleViewThreshold;
   final FeedSurface _surface = FeedSurface.articles;
   int _page = 1;
   bool _hasMore = true;
@@ -156,6 +162,9 @@ class ArticlesNotifier
   String? _currentFeedVersion;
   String? _pendingFeedVersion;
   FeedPageResult<FeedEntry>? _pendingPrefetchedPage;
+  Timer? _articleViewTimer;
+  int? _pendingArticleViewId;
+  final Set<int> _trackedArticleViewIds = <int>{};
 
   FeedSurfaceUiState get _uiState =>
       _ref.read(feedSurfaceUiStateProvider(_surface));
@@ -165,6 +174,11 @@ class ArticlesNotifier
   }
 
   void setCurrentViewPosition(int index, ArticleFeedEntry? entry) {
+    if (_pendingArticleViewId != null && _pendingArticleViewId != entry?.id) {
+      _articleViewTimer?.cancel();
+      _articleViewTimer = null;
+      _pendingArticleViewId = null;
+    }
     _currentItemId = entry?.id;
     _currentItemIndex = index;
     if (index == 0) {
@@ -175,6 +189,7 @@ class ArticlesNotifier
 
   Future<void> markExposed(int contentId) async {
     await _sessionStore.markExposed(_surface, contentId);
+    _scheduleArticleViewTracking(contentId);
   }
 
   Future<void> markConsumed(int contentId) async {
@@ -196,6 +211,33 @@ class ArticlesNotifier
         clearUnavailableTargetMessage: true,
       ),
     );
+  }
+
+  void _scheduleArticleViewTracking(int contentId) {
+    if (_trackedArticleViewIds.contains(contentId)) {
+      return;
+    }
+    if (_pendingArticleViewId == contentId && _articleViewTimer?.isActive == true) {
+      return;
+    }
+
+    _articleViewTimer?.cancel();
+    _pendingArticleViewId = contentId;
+    _articleViewTimer = Timer(_articleViewThreshold, () {
+      if (!mounted || _currentItemId != contentId) {
+        return;
+      }
+      _trackedArticleViewIds.add(contentId);
+      _pendingArticleViewId = null;
+      _articleViewTimer = null;
+      unawaited(
+        _repository.recordInteraction(
+          contentItemId: contentId,
+          eventType: FeedInteractionEvent.view10s,
+          extraData: const {'surface': 'articles'},
+        ),
+      );
+    });
   }
 
   bool _restoreResolvedNotificationTarget(int contentId) {
@@ -946,6 +988,7 @@ class ArticlesNotifier
 
   @override
   void dispose() {
+    _articleViewTimer?.cancel();
     _pollTimer?.cancel();
     super.dispose();
   }
@@ -1856,6 +1899,7 @@ final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
     ref.watch(feedSessionStoreProvider),
     ref.watch(appDiagnosticsProvider),
     ref,
+    ref.watch(articleViewThresholdProvider),
   ),
 );
 
