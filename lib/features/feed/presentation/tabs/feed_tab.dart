@@ -248,6 +248,26 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
     useEffect(() {
       final entries = feed.valueOrNull;
+      if (entries == null || entries.isEmpty || !isActive) return null;
+
+      // Preload article hero images for the next 2 entries so they are ready
+      // before the user swipes to them.
+      final end = (currentPage.value + 3).clamp(0, entries.length);
+      for (var i = currentPage.value + 1; i < end; i++) {
+        final entry = entries[i];
+        if (entry.videoEntry != null)
+          continue; // video player handles its own preloading
+        final organic = entry.organicEntry;
+        final imageUrl =
+            organic is ArticleFeedEntry ? organic.imageUrl?.trim() : null;
+        if (imageUrl == null || imageUrl.isEmpty) continue;
+        precacheImage(NetworkImage(imageUrl), context);
+      }
+      return null;
+    }, [currentPage.value, feed.valueOrNull]);
+
+    useEffect(() {
+      final entries = feed.valueOrNull;
       if (entries == null || entries.isEmpty || onLoadMore == null) {
         return null;
       }
