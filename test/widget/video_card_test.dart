@@ -143,9 +143,11 @@ void main() {
       // Default state is idle — card should self-arm to handle push-notification
       // and scroll-restore paths where FeedTab's onPageChanged fires before the
       // card is mounted.
+      // nudgePrimaryPlayback fires its first play attempt after a 180 ms delay,
+      // so pump past that threshold before asserting.
       await tester
           .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 200));
 
       expect(
         mockManager.calls.where((call) => call.startsWith('play:')),
@@ -153,6 +155,11 @@ void main() {
         reason: 'Card must self-arm when visible and video is idle, '
             'to cover push-notification and restore-scroll entry paths.',
       );
+
+      // Drain remaining nudgePrimaryPlayback timers (180+420+900 ms total)
+      // so the test harness is clean. Using a fixed pump avoids issues with
+      // periodic timers in the widget tree that would stall pumpAndSettle.
+      await tester.pump(const Duration(milliseconds: 1600));
     });
 
     testWidgets('visible card does not arm autoplay when already playing',
@@ -369,7 +376,11 @@ void main() {
       await tester.pumpWidget(
         buildTestWidget(entry: videoEntry, isVisible: true),
       );
-      await tester.pump(const Duration(milliseconds: 100));
+      // Drain all timers from the initial self-arm (nudgePrimaryPlayback runs
+      // for 180+420+900 ms total). Using a fixed pump avoids stalling on
+      // periodic timers in the widget tree that would cause pumpAndSettle
+      // to time out.
+      await tester.pump(const Duration(milliseconds: 1600));
 
       // Clear calls from initial self-arm; this test is about lifecycle cycles.
       mockManager.calls.clear();

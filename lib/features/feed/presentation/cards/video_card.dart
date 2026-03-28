@@ -106,16 +106,17 @@ class VideoCard extends HookConsumerWidget {
         showBubbles.value = false;
       } else {
         // Self-arm playback when this card becomes visible. FeedTab is the
-        // primary owner via onPageChanged, but that path can be missed when
-        // navigating from a push notification or restoring scroll position
-        // after the tab's isActive effect already fired. Only issue the play
-        // request when the video is idle or paused — not when it is already
-        // loading or playing, to avoid duplicate play commands.
+        // primary owner via onPageChanged, but that path may not fire quickly
+        // enough — especially after a tab switch on iOS where the WebView may
+        // need time to wake up before play() takes effect.
+        // nudgePrimaryPlayback retries with escalating delays and falls back
+        // to a full controller restart (~600 ms) if play() doesn't take hold.
+        // Skip if already loading or playing to avoid duplicate commands.
         final state = videoManager.getState(playbackUrl);
         if (state == YTPlayerState.idle ||
             state == YTPlayerState.paused ||
             state == YTPlayerState.ready) {
-          unawaited(videoManager.playVideo(playbackUrl));
+          unawaited(nudgePrimaryPlayback(videoManager, playbackUrl));
         }
       }
       return null;
