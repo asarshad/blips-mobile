@@ -106,17 +106,29 @@ class VideoCard extends HookConsumerWidget {
         showBubbles.value = false;
       } else {
         // Self-arm playback when this card becomes visible. FeedTab is the
-        // primary owner via onPageChanged, but that path may not fire quickly
-        // enough — especially after a tab switch on iOS where the WebView may
-        // need time to wake up before play() takes effect.
-        // nudgePrimaryPlayback retries with escalating delays and falls back
-        // to a full controller restart (~600 ms) if play() doesn't take hold.
-        // Skip if already loading or playing to avoid duplicate commands.
+        // primary owner via onPageChanged, but that path can be missed when
+        // navigating from a push notification or restoring scroll position
+        // after the tab's isActive effect already fired. Only issue the play
+        // request when the video is idle or paused — not when it is already
+        // loading or playing, to avoid duplicate play commands.
         final state = videoManager.getState(playbackUrl);
         if (state == YTPlayerState.idle ||
             state == YTPlayerState.paused ||
             state == YTPlayerState.ready) {
-          unawaited(nudgePrimaryPlayback(videoManager, playbackUrl));
+          unawaited(videoManager.playVideo(playbackUrl));
+          // On iOS, controller.play() may be silently ignored if the WebView
+          // hasn't fully re-entered the viewport yet (common after a tab
+          // switch). If the video is still paused after 1.5 s, restart the
+          // controller so the YouTube iframe gets a fresh play opportunity.
+          // The Timer is cancelled automatically (via effect cleanup) if the
+          // user navigates away before the 1.5 s window elapses.
+          final retryTimer = Timer(const Duration(milliseconds: 1500), () {
+            final s = videoManager.getState(playbackUrl);
+            if (s == YTPlayerState.paused || s == YTPlayerState.idle) {
+              unawaited(videoManager.retryVideo(playbackUrl));
+            }
+          });
+          return retryTimer.cancel;
         }
       }
       return null;

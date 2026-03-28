@@ -142,12 +142,10 @@ void main() {
         (tester) async {
       // Default state is idle — card should self-arm to handle push-notification
       // and scroll-restore paths where FeedTab's onPageChanged fires before the
-      // card is mounted.
-      // nudgePrimaryPlayback fires its first play attempt after a 180 ms delay,
-      // so pump past that threshold before asserting.
+      // card is mounted. play() is issued synchronously on the first effect run.
       await tester
           .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
-      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
 
       expect(
         mockManager.calls.where((call) => call.startsWith('play:')),
@@ -156,9 +154,7 @@ void main() {
             'to cover push-notification and restore-scroll entry paths.',
       );
 
-      // Drain remaining nudgePrimaryPlayback timers (180+420+900 ms total)
-      // so the test harness is clean. Using a fixed pump avoids issues with
-      // periodic timers in the widget tree that would stall pumpAndSettle.
+      // Drain the 1500 ms fallback retry timer so the test harness is clean.
       await tester.pump(const Duration(milliseconds: 1600));
     });
 
@@ -376,10 +372,9 @@ void main() {
       await tester.pumpWidget(
         buildTestWidget(entry: videoEntry, isVisible: true),
       );
-      // Drain all timers from the initial self-arm (nudgePrimaryPlayback runs
-      // for 180+420+900 ms total). Using a fixed pump avoids stalling on
-      // periodic timers in the widget tree that would cause pumpAndSettle
-      // to time out.
+      // Drain the initial self-arm: play() fires synchronously, but the
+      // 1.5 s fallback retry timer is still pending — pump past it so the
+      // harness is clean before testing lifecycle events.
       await tester.pump(const Duration(milliseconds: 1600));
 
       // Clear calls from initial self-arm; this test is about lifecycle cycles.
