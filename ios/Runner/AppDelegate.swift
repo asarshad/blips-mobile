@@ -210,49 +210,48 @@ final class PaddingLabel: UILabel {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    // Pre-configure audio session for video playback
+    configureAudioSession()
+
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
     let nativeAdFactory = BlipsNativeAdFactory()
     FLTGoogleMobileAdsPlugin.registerNativeAdFactory(
-      self,
+      engineBridge.pluginRegistry,
       factoryId: BlipsNativeAdFactory.factoryId,
       nativeAdFactory: nativeAdFactory
     )
-    
-    // Configure video optimizations channel
-    setupVideoOptimizationsChannel()
-    
-    // Pre-configure audio session for video playback
-    configureAudioSession()
-    
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+
+    setupVideoOptimizationsChannel(binaryMessenger: engineBridge.applicationRegistrar.binaryMessenger)
   }
-  
-  private func setupVideoOptimizationsChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
-    }
-    
+
+  private func setupVideoOptimizationsChannel(
+    binaryMessenger: FlutterBinaryMessenger
+  ) {
     let channel = FlutterMethodChannel(
       name: "blips/video_optimizations",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: binaryMessenger
     )
-    
+
     channel.setMethodCallHandler { [weak self] (call, result) in
       switch call.method {
       case "configureAudioSession":
         self?.configureAudioSession()
         result(nil)
-        
+
       case "prewarmVideoPipeline":
         self?.prewarmVideoPipeline()
         result(nil)
-        
+
       case "setPreferredBufferDuration":
         if let args = call.arguments as? [String: Any],
            let seconds = args["seconds"] as? Double {
@@ -268,11 +267,11 @@ final class PaddingLabel: UILabel {
       }
     }
   }
-  
+
   private func configureAudioSession() {
     do {
       let audioSession = AVAudioSession.sharedInstance()
-      
+
       // Take a normal foreground media playback session so in-app
       // video volume matches native media apps more closely.
       try audioSession.setCategory(
@@ -280,16 +279,16 @@ final class PaddingLabel: UILabel {
         mode: .moviePlayback,
         options: []
       )
-      
+
       // Activate the session
       try audioSession.setActive(true)
-      
+
       print("Audio session configured for video playback")
     } catch {
       print("Failed to configure audio session: \(error)")
     }
   }
-  
+
   private func prewarmVideoPipeline() {
     // Pre-warm AVPlayer by creating and immediately releasing a player
     // This loads the video decoder into memory

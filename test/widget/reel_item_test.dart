@@ -3,6 +3,7 @@ library reel_item_test;
 
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/domain/saved_item.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -13,6 +14,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
+import '../test_utils/fake_feed_cache.dart';
 
 /// Mock video manager for testing reel items without actual playback.
 class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
@@ -68,9 +70,11 @@ void main() {
   group('ReelItem', () {
     late ReelFeedEntry testReel;
     late MockYoutubePlayerManager mockManager;
+    late FakeFeedCache cache;
 
     setUp(() {
       mockManager = MockYoutubePlayerManager();
+      cache = FakeFeedCache();
       testReel = ReelFeedEntry(
         id: 100,
         title: 'Test Reel Title',
@@ -93,6 +97,7 @@ void main() {
       return ProviderScope(
         overrides: [
           youtubePlayerManagerProvider.overrideWith((ref) => mockManager),
+          feedCacheProvider.overrideWithValue(cache),
           feedRepositoryProvider.overrideWithValue(
             FeedRepository(
               FakeBackendApiClient(
@@ -145,9 +150,28 @@ void main() {
       await tester.pumpWidget(buildTestWidget(entry: testReel));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should have share and open_in_new action buttons
+      // Should have save, share, and open action buttons
+      expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
       expect(find.byIcon(Icons.share), findsOneWidget);
       expect(find.byIcon(Icons.open_in_new), findsOneWidget);
+    });
+
+    testWidgets('bookmark button saves reel into saved videos flow',
+        (tester) async {
+      await tester.pumpWidget(buildTestWidget(entry: testReel));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byIcon(Icons.bookmark_border_rounded));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
+      expect(find.text('Saved'), findsOneWidget);
+
+      final savedItems = await cache.getSavedVideos();
+      expect(savedItems, hasLength(1));
+      expect(savedItems.single.contentId, testReel.id);
+      expect(savedItems.single.type, SavedVideoType.reel);
+      expect(savedItems.single.category, 'Reel');
     });
 
     testWidgets('renders with inactive state', (tester) async {

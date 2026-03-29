@@ -570,6 +570,7 @@ class FeedCache implements FeedCacheInterface {
         .map(
           (row) => SavedVideoItem(
             contentId: row['content_id'] as int,
+            type: SavedVideoType.fromStorage(row['type'] as String?),
             sourceUrl: row['source_url'] as String,
             title: row['title'] as String,
             source: row['source'] as String,
@@ -589,7 +590,7 @@ class FeedCache implements FeedCacheInterface {
       'saved_videos',
       {
         'content_id': video.contentId,
-        'type': 'VIDEO',
+        'type': video.type.storageValue,
         'source_url': video.sourceUrl,
         'title': video.title,
         'source': video.source,

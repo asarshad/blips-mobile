@@ -149,26 +149,28 @@ class SavedVideosNotifier
   }
 
   Future<void> save(VideoFeedEntry entry) async {
-    final item = SavedVideoItem.fromFeedEntry(entry);
-    final previous = state.valueOrNull ?? const <SavedVideoItem>[];
-    final next = [
-      item,
-      ...previous.where((saved) => saved.contentId != entry.id),
-    ]..sort((a, b) => b.savedAt.compareTo(a.savedAt));
-    state = AsyncValue.data(next);
-    try {
-      await _cache.saveVideoBookmark(item);
-    } catch (error, stackTrace) {
-      logger.warning(
-        'Failed to persist saved video',
-        category: LogCategory.app,
-        error: error,
-        stackTrace: stackTrace,
-      );
-      state = AsyncValue.data(previous);
+    await _saveItem(
+      SavedVideoItem.fromFeedEntry(entry),
+      source: entry.source,
+      surface: 'videos',
+    );
+  }
+
+  Future<void> toggleReel(ReelFeedEntry entry) async {
+    final saved = _isSaved(entry.id);
+    if (saved) {
+      await remove(entry.id);
       return;
     }
-    unawaited(_recordSaveSignal(entry.id, entry.source));
+    await saveReel(entry);
+  }
+
+  Future<void> saveReel(ReelFeedEntry entry) async {
+    await _saveItem(
+      SavedVideoItem.fromReelEntry(entry),
+      source: entry.source,
+      surface: 'reels',
+    );
   }
 
   Future<void> remove(int contentId) async {
@@ -193,13 +195,49 @@ class SavedVideosNotifier
         .any((item) => item.contentId == contentId);
   }
 
-  Future<void> _recordSaveSignal(int contentId, String source) async {
+  Future<void> _saveItem(
+    SavedVideoItem item, {
+    required String source,
+    required String surface,
+  }) async {
+    final previous = state.valueOrNull ?? const <SavedVideoItem>[];
+    final next = [
+      item,
+      ...previous.where((saved) => saved.contentId != item.contentId),
+    ]..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    state = AsyncValue.data(next);
+    try {
+      await _cache.saveVideoBookmark(item);
+    } catch (error, stackTrace) {
+      logger.warning(
+        'Failed to persist saved video',
+        category: LogCategory.app,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      state = AsyncValue.data(previous);
+      return;
+    }
+    unawaited(
+      _recordSaveSignal(
+        item.contentId,
+        source: source,
+        surface: surface,
+      ),
+    );
+  }
+
+  Future<void> _recordSaveSignal(
+    int contentId, {
+    required String source,
+    required String surface,
+  }) async {
     try {
       await _repository.recordInteraction(
         contentItemId: contentId,
         eventType: FeedInteractionEvent.videoSave,
         extraData: {
-          'surface': 'videos',
+          'surface': surface,
           'source': source,
         },
       );

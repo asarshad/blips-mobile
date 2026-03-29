@@ -64,6 +64,7 @@ void main() {
     await cache.saveVideoBookmark(
       SavedVideoItem(
         contentId: 22,
+        type: SavedVideoType.video,
         sourceUrl: 'https://example.com/video-saved',
         title: 'Saved video title',
         source: 'Creator',
@@ -71,6 +72,19 @@ void main() {
         category: 'Technology',
         publishedAt: DateTime.utc(2026, 3, 20),
         savedAt: DateTime.utc(2026, 3, 21, 10),
+      ),
+    );
+    await cache.saveVideoBookmark(
+      SavedVideoItem(
+        contentId: 23,
+        type: SavedVideoType.reel,
+        sourceUrl: 'https://example.com/reel-saved',
+        title: 'Saved reel title',
+        source: 'Shorts Creator',
+        thumbnailUrl: 'https://example.com/reel.jpg',
+        category: 'Reel',
+        publishedAt: DateTime.utc(2026, 3, 20),
+        savedAt: DateTime.utc(2026, 3, 21, 11),
       ),
     );
 
@@ -105,6 +119,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(find.text('Saved reel title'), findsOneWidget);
+    expect(find.text('Shorts Creator'), findsOneWidget);
     expect(find.text('Saved video title'), findsOneWidget);
     expect(find.text('Creator'), findsOneWidget);
 

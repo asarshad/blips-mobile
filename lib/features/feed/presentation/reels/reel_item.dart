@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/services/external_url_launcher.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/external_video_url.dart';
@@ -9,12 +10,12 @@ import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button
 import 'package:blips_mobile/features/feed/presentation/reels/reel_playback_tap_action.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 /// Individual reel item with video playback.
@@ -47,6 +48,7 @@ class ReelItem extends HookConsumerWidget {
     final controller = videoManager.getController(entry.link);
     final playerState = videoManager.getState(entry.link);
     final playerError = videoManager.getError(entry.link);
+    final isSaved = ref.watch(savedVideoIdsProvider).contains(entry.id);
     final showThumbnail = useState(true);
     final isMounted = useIsMounted();
     final isTextExpanded = useState(false);
@@ -290,6 +292,10 @@ class ReelItem extends HookConsumerWidget {
 
         // Action Buttons
         _ActionButtons(
+          isSaved: isSaved,
+          onSaveToggle: () => ref.read(savedVideosProvider.notifier).toggleReel(
+                entry,
+              ),
           onShare: () => _shareReel(repository, sessionStore),
           onOpen: () => _openReel(repository, sessionStore),
         ),
@@ -426,7 +432,7 @@ class ReelItem extends HookConsumerWidget {
       );
       return;
     }
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final launched = await ExternalUrlLauncher.launchUri(uri);
     if (!launched) {
       logger.warning(
         'Failed to launch reel URL',
@@ -597,10 +603,14 @@ class _PlayIndicator extends StatelessWidget {
 
 class _ActionButtons extends StatelessWidget {
   const _ActionButtons({
+    required this.isSaved,
+    required this.onSaveToggle,
     required this.onShare,
     required this.onOpen,
   });
 
+  final bool isSaved;
+  final Future<void> Function() onSaveToggle;
   final Future<void> Function() onShare;
   final Future<void> Function() onOpen;
 
@@ -612,6 +622,14 @@ class _ActionButtons extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ReelActionButton(
+            icon: isSaved
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_border_rounded,
+            label: isSaved ? 'Saved' : 'Save',
+            onTap: () => unawaited(onSaveToggle()),
+          ),
+          const SizedBox(height: 12),
           ReelActionButton(
             icon: Icons.share,
             label: 'Share',
