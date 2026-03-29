@@ -231,15 +231,16 @@ final class PaddingLabel: UILabel {
       nativeAdFactory: nativeAdFactory
     )
 
-    setupVideoOptimizationsChannel(binaryMessenger: engineBridge.applicationRegistrar.binaryMessenger)
+    setupVideoOptimizationsChannel()
   }
 
-  private func setupVideoOptimizationsChannel(
-    binaryMessenger: FlutterBinaryMessenger
-  ) {
+  private func setupVideoOptimizationsChannel() {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "blips/video_optimizations",
-      binaryMessenger: binaryMessenger
+      binaryMessenger: controller.binaryMessenger
     )
 
     channel.setMethodCallHandler { [weak self] (call, result) in
