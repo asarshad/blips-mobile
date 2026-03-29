@@ -6,17 +6,17 @@ void main() {
     test('accepts the production backend for release builds', () {
       expect(
         AppConfig.validateBackendBaseUrl(
-          'https://blips-api.onrender.com/api/v1',
+          'https://api.blips.tech/api/v1',
           isReleaseBuild: true,
         ),
-        'https://blips-api.onrender.com/api/v1',
+        'https://api.blips.tech/api/v1',
       );
     });
 
     test('rejects http backends for release builds', () {
       expect(
         () => AppConfig.validateBackendBaseUrl(
-          'http://blips-api.onrender.com/api/v1',
+          'http://api.blips.tech/api/v1',
           isReleaseBuild: true,
         ),
         throwsA(isA<StateError>()),

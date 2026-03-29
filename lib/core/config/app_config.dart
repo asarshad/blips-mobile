@@ -2,7 +2,7 @@
 class AppConfig {
   AppConfig._();
 
-  static const _defaultBackendBaseUrl = 'https://blips-api.onrender.com/api/v1';
+  static const _defaultBackendBaseUrl = 'https://api.blips.tech/api/v1';
 
   /// Base URL used by HTTP clients when calling the backend.
   static final backendBaseUrl = validateBackendBaseUrl(
