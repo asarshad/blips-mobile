@@ -397,6 +397,7 @@ class SettingsPage extends ConsumerWidget {
       // 3. Reset the persisted device ID so a fresh one is generated
       await resetDeviceId();
       ref.invalidate(deviceIdProvider);
+      ref.invalidate(deviceAuthBundleProvider);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

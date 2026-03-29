@@ -1,6 +1,6 @@
 /// Fire-and-forget sync of selected categories to the backend.
 ///
-/// Calls `PUT /api/v1/users/{deviceId}/categories`.
+/// Calls `PUT /preferences/categories`.
 /// All errors are swallowed — the user experience must never block on this.
 library;
 
@@ -13,17 +13,16 @@ class InterestsRemoteService {
 
   final Dio _dio;
 
-  /// Fire-and-forget: sends [selectedCategories] for [deviceId].
+  /// Fire-and-forget: sends [selectedCategories] for the current session.
   ///
   /// Does not throw. Any network or parse error is logged and silently
   /// ignored so the caller is never blocked.
   Future<void> syncCategories({
-    required String deviceId,
     required List<String> selectedCategories,
   }) async {
     try {
       await _dio.put<void>(
-        '/api/v1/users/$deviceId/categories',
+        '/preferences/categories',
         data: {'selected_categories': selectedCategories},
       );
     } on DioException catch (e) {

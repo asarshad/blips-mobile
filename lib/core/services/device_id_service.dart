@@ -1,86 +1,29 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:blips_mobile/core/network/dio_provider.dart';
+import 'package:blips_mobile/core/services/device_auth_service.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
-/// Key used to persist the device identifier across app launches.
-const _kDeviceIdKey = 'blips_device_id';
-
-/// Secure persistence abstraction for the stable device identifier.
-abstract class DeviceIdStorage {
-  /// Creates a storage adapter for the stable device identifier.
-  const DeviceIdStorage();
-
-  /// Reads the persisted device identifier, if one exists.
-  Future<String?> read();
-
-  /// Persists the stable device identifier.
-  Future<void> write(String value);
-
-  /// Deletes the persisted device identifier.
-  Future<void> delete();
-}
-
-/// Production [DeviceIdStorage] backed by `flutter_secure_storage`.
-class SecureDeviceIdStorage extends DeviceIdStorage {
-  /// Creates a secure-storage-backed device ID adapter.
-  const SecureDeviceIdStorage([this._storage = const FlutterSecureStorage()]);
-
-  final FlutterSecureStorage _storage;
-
-  @override
-  Future<String?> read() => _storage.read(key: _kDeviceIdKey);
-
-  @override
-  Future<void> write(String value) =>
-      _storage.write(key: _kDeviceIdKey, value: value);
-
-  @override
-  Future<void> delete() => _storage.delete(key: _kDeviceIdKey);
-}
-
-const _defaultDeviceIdStorage = SecureDeviceIdStorage();
-
-/// Provides a stable, anonymous device identifier.
+/// Compatibility provider for the stable anonymous device identifier.
 ///
-/// On first launch a random UUID v4 is generated and persisted in secure
-/// storage. Existing plaintext values in [SharedPreferences] are migrated once.
-/// The identifier is sent to the backend as `X-Device-ID` header and is the
-/// key used for server-side usage tracking and data deletion.
+/// The identifier now comes from the stored auth bundle.
 final deviceIdProvider = FutureProvider<String>((ref) async {
-  return loadDeviceId();
+  final bundle = await ref.watch(deviceAuthBundleProvider.future);
+  return bundle.deviceId;
 });
 
-/// Loads the stable device identifier from secure storage, migrating any
-/// legacy plaintext value from [SharedPreferences] exactly once.
+/// Reads the current device identifier from secure storage.
 Future<String> loadDeviceId({
-  DeviceIdStorage storage = _defaultDeviceIdStorage,
-  SharedPreferences? preferences,
+  DeviceAuthStorage storage = defaultDeviceAuthStorage,
 }) async {
-  final prefs = preferences ?? await SharedPreferences.getInstance();
-  var id = await storage.read();
-  if (id == null || id.length < 8) {
-    final legacyId = prefs.getString(_kDeviceIdKey);
-    if (legacyId != null && legacyId.length >= 8) {
-      id = legacyId;
-    } else {
-      id = const Uuid().v4();
-    }
-    await storage.write(id);
+  final bundle = await storage.read();
+  if (bundle == null) {
+    throw StateError('No stored auth bundle found');
   }
-  if (prefs.containsKey(_kDeviceIdKey)) {
-    await prefs.remove(_kDeviceIdKey);
-  }
-  return id;
+  return bundle.deviceId;
 }
 
-/// Clear the persisted device ID (called after data deletion so a fresh ID is
-/// generated on next launch).
+/// Clears the persisted auth bundle so a new anonymous session is created.
 Future<void> resetDeviceId({
-  DeviceIdStorage storage = _defaultDeviceIdStorage,
-  SharedPreferences? preferences,
+  DeviceAuthStorage storage = defaultDeviceAuthStorage,
 }) async {
-  final prefs = preferences ?? await SharedPreferences.getInstance();
   await storage.delete();
-  await prefs.remove(_kDeviceIdKey);
 }

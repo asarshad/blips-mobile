@@ -2,7 +2,81 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:blips_mobile/core/error/error.dart';
+import 'package:blips_mobile/core/services/device_auth_service.dart';
 import 'package:dio/dio.dart';
+
+class AuthInterceptor extends Interceptor {
+  AuthInterceptor({
+    required Dio dio,
+    required DeviceAuthService authService,
+  })  : _dio = dio,
+        _authService = authService;
+
+  final Dio _dio;
+  final DeviceAuthService _authService;
+
+  @override
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    if (options.extra['skipAuth'] == true) {
+      handler.next(options);
+      return;
+    }
+
+    try {
+      final bundle = await _authService.ensureAuthenticated();
+      options.headers['Authorization'] = 'Bearer ${bundle.accessToken}';
+      handler.next(options);
+    } catch (error, stackTrace) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          error: error,
+          stackTrace: stackTrace,
+          type: DioExceptionType.unknown,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final statusCode = err.response?.statusCode;
+    final alreadyRetried = err.requestOptions.extra['authRetried'] == true;
+    final skipAuth = err.requestOptions.extra['skipAuth'] == true;
+
+    if (statusCode != 401 || alreadyRetried || skipAuth) {
+      handler.next(err);
+      return;
+    }
+
+    try {
+      final bundle = await _authService.refresh();
+      final options = err.requestOptions;
+      options.headers['Authorization'] = 'Bearer ${bundle.accessToken}';
+      options.extra['authRetried'] = true;
+
+      final response = await _dio.fetch<dynamic>(options);
+      handler.resolve(response);
+    } catch (error, stackTrace) {
+      await _authService.resetLocalState();
+      handler.next(
+        DioException(
+          requestOptions: err.requestOptions,
+          response: err.response,
+          error: error,
+          stackTrace: stackTrace,
+          type: DioExceptionType.badResponse,
+        ),
+      );
+    }
+  }
+}
 
 /// Retry interceptor with exponential backoff.
 ///
@@ -74,7 +148,6 @@ class RetryInterceptor extends Interceptor {
 
         return handler.resolve(response);
       } on DioException catch (retryErr) {
-        // Copy retry count to new error for next attempt
         retryErr.requestOptions.extra['retryCount'] = retryCount + 1;
         return onError(retryErr, handler);
       }
@@ -99,19 +172,16 @@ class RetryInterceptor extends Interceptor {
 
   bool _isRetryableStatus(int? statusCode) {
     if (statusCode == null) return false;
-    // Retry 5xx server errors, 429 rate limit
     return statusCode >= 500 || statusCode == 429;
   }
 
   Duration _calculateDelay(int retryCount) {
-    // Exponential backoff with jitter
     final exponentialDelay = baseDelay * math.pow(2, retryCount).toInt();
     final jitter = Duration(
       milliseconds: math.Random().nextInt(100),
     );
     final totalDelay = exponentialDelay + jitter;
 
-    // Cap at max delay
     if (totalDelay > maxDelay) return maxDelay;
     return totalDelay;
   }
@@ -129,7 +199,8 @@ class LoggingInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
+  void onResponse(
+      Response<Object?> response, ResponseInterceptorHandler handler) {
     logger.debug(
       '← ${response.statusCode} ${response.requestOptions.path}',
       category: LogCategory.network,

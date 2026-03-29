@@ -2,7 +2,6 @@
 library push_notifications_controller_test;
 
 import 'package:blips_mobile/core/network/dio_provider.dart';
-import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -61,7 +60,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dioProvider.overrideWithValue(dio),
-        deviceIdProvider.overrideWith((ref) async => 'device-abc'),
       ],
     );
     addTearDown(container.dispose);
@@ -75,7 +73,6 @@ void main() {
     expect(request.method, 'DELETE');
     expect(request.path, '/notifications/subscription');
     expect(request.data, const <String, dynamic>{'token': 'token-123'});
-    expect(request.headers['X-Device-ID'], 'device-abc');
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('push_last_synced_token'), isNull);

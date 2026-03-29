@@ -1,7 +1,6 @@
 import 'package:blips_mobile/core/config/remote_app_config.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
-import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/features/ads/data/app_config_repository.dart';
 import 'package:blips_mobile/features/ads/data/event_service.dart';
 import 'package:blips_mobile/features/ads/domain/ads_config.dart';
@@ -16,9 +15,6 @@ final appConfigRepositoryProvider = Provider<AppConfigRepository>((ref) {
 
 /// Fetches the top-level remote app config from the backend.
 final remoteAppConfigProvider = FutureProvider<RemoteAppConfig>((ref) async {
-  final deviceId = await ref.watch(deviceIdProvider.future);
-  final dio = ref.read(dioProvider);
-  dio.options.headers['X-Device-ID'] = deviceId;
   final repo = ref.watch(appConfigRepositoryProvider);
   return repo.fetchAppConfig();
 });

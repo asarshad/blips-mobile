@@ -1,80 +1,50 @@
+import 'package:blips_mobile/core/services/device_auth_service.dart';
 import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-class _FakeDeviceIdStorage extends DeviceIdStorage {
-  _FakeDeviceIdStorage();
-
-  String? value;
+class _FakeDeviceAuthStorage extends DeviceAuthStorage {
+  DeviceAuthBundle? bundle;
 
   @override
   Future<void> delete() async {
-    value = null;
+    bundle = null;
   }
 
   @override
-  Future<String?> read() async => value;
+  Future<DeviceAuthBundle?> read() async => bundle;
 
   @override
-  Future<void> write(String nextValue) async {
-    value = nextValue;
+  Future<void> write(DeviceAuthBundle nextBundle) async {
+    bundle = nextBundle;
   }
+}
+
+DeviceAuthBundle _bundle(String deviceId) {
+  return DeviceAuthBundle(
+    deviceId: deviceId,
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 15)),
+    platform: 'ios',
+  );
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('loadDeviceId', () {
-    test('prefers secure storage when present', () async {
-      SharedPreferences.setMockInitialValues(const <String, Object>{});
-      final prefs = await SharedPreferences.getInstance();
-      final storage = _FakeDeviceIdStorage()..value = 'secure-device-id';
+  test('loadDeviceId reads the device id from the auth bundle', () async {
+    final storage = _FakeDeviceAuthStorage()..bundle = _bundle('device-123');
 
-      final id = await loadDeviceId(storage: storage, preferences: prefs);
+    final id = await loadDeviceId(storage: storage);
 
-      expect(id, 'secure-device-id');
-      expect(prefs.containsKey('blips_device_id'), isFalse);
-    });
-
-    test('migrates a legacy shared preferences identifier', () async {
-      SharedPreferences.setMockInitialValues(
-        const <String, Object>{'blips_device_id': 'legacy-device-id'},
-      );
-      final prefs = await SharedPreferences.getInstance();
-      final storage = _FakeDeviceIdStorage();
-
-      final id = await loadDeviceId(storage: storage, preferences: prefs);
-
-      expect(id, 'legacy-device-id');
-      expect(storage.value, 'legacy-device-id');
-      expect(prefs.containsKey('blips_device_id'), isFalse);
-    });
-
-    test('generates and persists a new secure identifier when missing',
-        () async {
-      SharedPreferences.setMockInitialValues(const <String, Object>{});
-      final prefs = await SharedPreferences.getInstance();
-      final storage = _FakeDeviceIdStorage();
-
-      final id = await loadDeviceId(storage: storage, preferences: prefs);
-
-      expect(id, isNotEmpty);
-      expect(id.length, greaterThanOrEqualTo(8));
-      expect(storage.value, id);
-      expect(prefs.containsKey('blips_device_id'), isFalse);
-    });
+    expect(id, 'device-123');
   });
 
-  test('resetDeviceId clears secure storage and legacy preferences', () async {
-    SharedPreferences.setMockInitialValues(
-      const <String, Object>{'blips_device_id': 'legacy-device-id'},
-    );
-    final prefs = await SharedPreferences.getInstance();
-    final storage = _FakeDeviceIdStorage()..value = 'secure-device-id';
+  test('resetDeviceId clears the stored auth bundle', () async {
+    final storage = _FakeDeviceAuthStorage()..bundle = _bundle('device-123');
 
-    await resetDeviceId(storage: storage, preferences: prefs);
+    await resetDeviceId(storage: storage);
 
-    expect(storage.value, isNull);
-    expect(prefs.containsKey('blips_device_id'), isFalse);
+    expect(storage.bundle, isNull);
   });
 }

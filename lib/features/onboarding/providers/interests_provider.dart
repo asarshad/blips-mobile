@@ -11,7 +11,6 @@ library;
 import 'dart:async';
 
 import 'package:blips_mobile/core/network/dio_provider.dart';
-import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/features/onboarding/data/interests_local_service.dart';
 import 'package:blips_mobile/features/onboarding/data/interests_remote_service.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -43,14 +42,12 @@ const kMaxSelectedCategories = 3;
 
 /// State: currently selected category IDs.
 class InterestsNotifier extends StateNotifier<List<String>> {
-  InterestsNotifier(this._local, this._remote, this._deviceIdFuture)
-      : super(const []) {
+  InterestsNotifier(this._local, this._remote) : super(const []) {
     _load();
   }
 
   final InterestsLocalService _local;
   final InterestsRemoteService _remote;
-  final Future<String> _deviceIdFuture;
 
   /// Load persisted selection from disk.
   Future<void> _load() async {
@@ -82,10 +79,8 @@ class InterestsNotifier extends StateNotifier<List<String>> {
     await _local.markOnboardingDone();
 
     // Best-effort remote sync – swallows all errors.
-    final deviceId = await _deviceIdFuture;
     unawaited(
       _remote.syncCategories(
-        deviceId: deviceId,
         selectedCategories: categories,
       ),
     );
@@ -103,7 +98,5 @@ final interestsNotifierProvider =
     StateNotifierProvider<InterestsNotifier, List<String>>((ref) {
   final local = ref.watch(interestsLocalServiceProvider);
   final remote = ref.watch(interestsRemoteServiceProvider);
-  // Provide the future; the notifier resolves it internally without blocking.
-  final deviceIdFuture = ref.watch(deviceIdProvider.future);
-  return InterestsNotifier(local, remote, deviceIdFuture);
+  return InterestsNotifier(local, remote);
 });

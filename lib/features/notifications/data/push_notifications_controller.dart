@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:blips_mobile/core/config/remote_app_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
-import 'package:blips_mobile/core/services/device_id_service.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/notifications/domain/notification_target.dart';
 import 'package:dio/dio.dart';
@@ -101,8 +100,6 @@ class PushNotificationsController {
 
     try {
       final dio = _ref.read(dioProvider);
-      final deviceId = await _ref.read(deviceIdProvider.future);
-      dio.options.headers['X-Device-ID'] = deviceId;
       await dio.delete<void>(
         '/notifications/subscription',
         data: <String, dynamic>{'token': storedToken},
@@ -242,8 +239,6 @@ class PushNotificationsController {
     final prefs = await SharedPreferences.getInstance();
     final previousToken = prefs.getString(_kStoredPushTokenKey);
     final dio = _ref.read(dioProvider);
-    final deviceId = await _ref.read(deviceIdProvider.future);
-    dio.options.headers['X-Device-ID'] = deviceId;
 
     if (previousToken != null &&
         previousToken.isNotEmpty &&
