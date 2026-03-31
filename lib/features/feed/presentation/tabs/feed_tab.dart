@@ -252,17 +252,31 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
       // Preload article hero images for the next 2 entries so they are ready
       // before the user swipes to them.
-      final end = (currentPage.value + 3).clamp(0, entries.length);
-      for (var i = currentPage.value + 1; i < end; i++) {
-        final entry = entries[i];
-        if (entry.videoEntry != null)
-          continue; // video player handles its own preloading
-        final organic = entry.organicEntry;
-        final imageUrl =
-            organic is ArticleFeedEntry ? organic.imageUrl?.trim() : null;
-        if (imageUrl == null || imageUrl.isEmpty) continue;
-        precacheImage(NetworkImage(imageUrl), context);
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final end = (currentPage.value + 3).clamp(0, entries.length);
+        for (var i = currentPage.value + 1; i < end; i++) {
+          final entry = entries[i];
+          if (entry.videoEntry != null) {
+            continue; // video player handles its own preloading
+          }
+          final organic = entry.organicEntry;
+          final imageUrl =
+              organic is ArticleFeedEntry ? organic.imageUrl?.trim() : null;
+          if (imageUrl == null || imageUrl.isEmpty) continue;
+          unawaited(
+            precacheImage(
+              NetworkImage(imageUrl),
+              context,
+              onError: (Object error, StackTrace? stackTrace) {
+                logger.debug(
+                  'Article image prefetch failed: $error',
+                  category: LogCategory.app,
+                );
+              },
+            ),
+          );
+        }
+      });
       return null;
     }, [currentPage.value, feed.valueOrNull]);
 

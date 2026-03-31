@@ -191,14 +191,66 @@ class FeedShellPage extends HookConsumerWidget {
             );
             return;
           }
-          currentIndex.value = index;
-          if (index == 3) {
-            // Refresh chat list when entering chat tab
-            ref.invalidate(chatListProvider);
-          }
+          _handleTabEntry(index, ref, currentIndex);
         },
       ),
     );
+  }
+
+  void _handleTabEntry(
+    int index,
+    WidgetRef ref,
+    ValueNotifier<int> currentIndex,
+  ) {
+    final previousIndex = currentIndex.value;
+    if (previousIndex == index) {
+      return;
+    }
+
+    currentIndex.value = index;
+
+    if (index == 3) {
+      ref.invalidate(chatListProvider);
+      return;
+    }
+
+    final diagnostics = ref.read(appDiagnosticsProvider);
+    final surface = switch (index) {
+      0 => 'articles',
+      1 => 'videos',
+      2 => 'reels',
+      _ => null,
+    };
+    if (surface == null) {
+      return;
+    }
+
+    diagnostics.record(
+      scope: 'feed.shell',
+      action: 'tabEntryRefresh',
+      stage: 'start',
+      surface: surface,
+      data: <String, Object?>{
+        'fromIndex': previousIndex,
+        'toIndex': index,
+      },
+    );
+
+    switch (index) {
+      case 0:
+        unawaited(ref.read(articlesFeedProvider.notifier).refreshSilently());
+        break;
+      case 1:
+        unawaited(ref.read(videosFeedProvider.notifier).refreshSilently());
+        break;
+      case 2:
+        unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
+        break;
+      case 3:
+      case 4:
+      case 5:
+        break;
+    }
   }
 
   void _useBackgroundReelsWarmup(WidgetRef ref) {
@@ -902,7 +954,7 @@ class FeedShellPage extends HookConsumerWidget {
 
     return PageView(
       controller: pageController,
-      onPageChanged: (index) => currentIndex.value = index,
+      onPageChanged: (index) => _handleTabEntry(index, ref, currentIndex),
       children: allTabs
           .map((tab) => _KeepAliveWrapper(child: ErrorBoundary(child: tab)))
           .toList(),
