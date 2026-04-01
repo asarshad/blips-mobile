@@ -223,6 +223,58 @@ void main() {
     expect(reelRequests(), greaterThan(initialReelRequests));
   });
 
+  testWidgets('app resume revalidates Articles, Videos, and Reels',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = buildApi();
+    await tester.pumpWidget(
+      buildAppUiHarness(
+        api: api,
+        onboardingDone: true,
+      ),
+    );
+    await pumpUi(tester, const Duration(seconds: 2));
+
+    int articleRequests() => api.requests
+        .where(
+          (request) =>
+              request.method == 'GET' &&
+              request.path == '/session/playlist' &&
+              request.queryParameters?['type'] == 'ARTICLE',
+        )
+        .length;
+    int videoRequests() => api.requests
+        .where(
+          (request) =>
+              request.method == 'GET' &&
+              request.path == '/session/playlist' &&
+              request.queryParameters?['type'] == 'VIDEO',
+        )
+        .length;
+    int reelRequests() => api.requests
+        .where(
+          (request) =>
+              request.method == 'GET' && request.path == '/videos/reels',
+        )
+        .length;
+
+    final initialArticleRequests = articleRequests();
+    final initialVideoRequests = videoRequests();
+    final initialReelRequests = reelRequests();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpUi(tester, const Duration(milliseconds: 500));
+
+    expect(articleRequests(), greaterThan(initialArticleRequests));
+    expect(videoRequests(), greaterThan(initialVideoRequests));
+    expect(reelRequests(), greaterThan(initialReelRequests));
+  });
+
   testWidgets(
       're-tapping the current feed tab keeps position and surfaces View latest until tapped',
       (tester) async {

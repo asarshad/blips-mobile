@@ -380,28 +380,20 @@ class FeedShellPage extends HookConsumerWidget {
             scope: 'feed.shell',
             action: 'resumeRefresh',
             stage: 'start',
-            surface: switch (currentIndex) {
-              0 => 'articles',
-              1 => 'videos',
-              2 => 'reels',
-              _ => null,
+            surface: 'all',
+            data: <String, Object?>{
+              'currentIndex': currentIndex,
+              'refreshesAllFeeds': true,
             },
-            data: <String, Object?>{'currentIndex': currentIndex},
           );
 
-          switch (currentIndex) {
-            case 0:
-              unawaited(
-                  ref.read(articlesFeedProvider.notifier).refreshSilently());
-              break;
-            case 1:
-              unawaited(
-                  ref.read(videosFeedProvider.notifier).refreshSilently());
-              break;
-            case 2:
-              unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
-              break;
-          }
+          unawaited(
+            Future.wait<void>([
+              ref.read(articlesFeedProvider.notifier).refreshSilently(),
+              ref.read(videosFeedProvider.notifier).refreshSilently(),
+              ref.read(reelsFeedProvider.notifier).refreshSilently(),
+            ]),
+          );
         },
       );
       return listener.dispose;
