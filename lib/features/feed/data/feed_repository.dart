@@ -25,6 +25,9 @@ class FeedPageResult<T extends FeedEntry> {
     this.feedVersion,
     this.newestPublishedAt,
     this.newestCreatedAt,
+    this.freshnessStrategy,
+    this.resumeContinuityWindowMinutes,
+    this.resumeSnapshotAfterRemoteWindow = true,
   });
 
   final List<T> items;
@@ -37,9 +40,15 @@ class FeedPageResult<T extends FeedEntry> {
   final String? feedVersion;
   final DateTime? newestPublishedAt;
   final DateTime? newestCreatedAt;
+  final String? freshnessStrategy;
+  final int? resumeContinuityWindowMinutes;
+  final bool resumeSnapshotAfterRemoteWindow;
 
   bool get isCaughtUp => inventoryState == FeedInventoryState.caughtUp;
 }
+
+const String kFeedFreshnessStrategyCurrent = 'current';
+const String kFeedFreshnessStrategyFreshUnseenV1 = 'fresh_unseen_v1';
 
 abstract final class FeedInteractionEvent {
   static const view10s = 'VIEW_10S';
@@ -218,6 +227,11 @@ class FeedRepository {
         feedVersion: response['feed_version'] as String?,
         newestPublishedAt: _parseServedAt(response['newest_published_at']),
         newestCreatedAt: _parseServedAt(response['newest_created_at']),
+        freshnessStrategy: response['freshness_strategy'] as String?,
+        resumeContinuityWindowMinutes:
+            response['resume_continuity_window_minutes'] as int?,
+        resumeSnapshotAfterRemoteWindow:
+            response['resume_snapshot_after_remote_window'] as bool? ?? true,
       );
     } catch (error, stackTrace) {
       span?.failure(error, stackTrace: stackTrace);
@@ -458,6 +472,11 @@ class FeedRepository {
         feedVersion: response['feed_version'] as String?,
         newestPublishedAt: _parseServedAt(response['newest_published_at']),
         newestCreatedAt: _parseServedAt(response['newest_created_at']),
+        freshnessStrategy: response['freshness_strategy'] as String?,
+        resumeContinuityWindowMinutes:
+            response['resume_continuity_window_minutes'] as int?,
+        resumeSnapshotAfterRemoteWindow:
+            response['resume_snapshot_after_remote_window'] as bool? ?? true,
       );
     } on DioException catch (e, stack) {
       span?.failure(e, stackTrace: stack);

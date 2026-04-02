@@ -13,6 +13,9 @@ FeedSessionSnapshot _snapshot({
   required DateTime lastActiveAt,
   int currentItemId = 2,
   PendingFeedActionKind pendingActionKind = PendingFeedActionKind.newItems,
+  String? lastFreshnessStrategy,
+  int? resumeContinuationWindowMinutes,
+  bool? resumeSnapshotAfterRemoteWindow,
 }) {
   final items = <FeedEntry>[
     ArticleFeedEntry(
@@ -53,6 +56,9 @@ FeedSessionSnapshot _snapshot({
     pendingNewCount: 3,
     pendingActionKind: pendingActionKind,
     lastFeedVersion: 'feed-v1',
+    lastFreshnessStrategy: lastFreshnessStrategy,
+    resumeContinuationWindowMinutes: resumeContinuationWindowMinutes,
+    resumeSnapshotAfterRemoteWindow: resumeSnapshotAfterRemoteWindow,
   );
 }
 
@@ -96,7 +102,7 @@ void main() {
     await store.saveActiveSession(
       _snapshot(
         surface: FeedSurface.articles,
-        lastActiveAt: now.subtract(const Duration(minutes: 55)),
+        lastActiveAt: now.subtract(const Duration(minutes: 8)),
       ),
     );
 
@@ -141,7 +147,8 @@ void main() {
     );
   });
 
-  test('prepareRestore no longer expires snapshots across a day boundary',
+  test(
+      'prepareRestore keeps current article strategy continuity after 10 minutes',
       () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
@@ -150,7 +157,8 @@ void main() {
     await store.saveActiveSession(
       _snapshot(
         surface: FeedSurface.articles,
-        lastActiveAt: DateTime.parse('2026-03-18T23:30:00Z'),
+        lastActiveAt: now.subtract(const Duration(minutes: 14)),
+        lastFreshnessStrategy: kFeedFreshnessStrategyCurrent,
       ),
     );
 
@@ -160,7 +168,106 @@ void main() {
     );
 
     expect(decision.resumeSnapshot, isNotNull);
-    expect(decision.resumeSnapshot!.currentItemId, 2);
+    expect(decision.preferLatestOnRefresh, isFalse);
+  });
+
+  test(
+      'prepareRestore prefers latest for fresh unseen article sessions after 10 minutes',
+      () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-19T08:30:00Z');
+
+    await store.saveActiveSession(
+      _snapshot(
+        surface: FeedSurface.articles,
+        lastActiveAt: now.subtract(const Duration(minutes: 14)),
+        lastFreshnessStrategy: kFeedFreshnessStrategyFreshUnseenV1,
+        resumeContinuationWindowMinutes: 10,
+        resumeSnapshotAfterRemoteWindow: false,
+      ),
+    );
+
+    final decision = await store.prepareRestore(
+      FeedSurface.articles,
+      now: now,
+    );
+
+    expect(decision.resumeSnapshot, isNull);
+    expect(decision.preferLatestOnRefresh, isTrue);
+    expect(
+      await store.getActiveSession(FeedSurface.articles),
+      isNull,
+    );
+  });
+
+  test(
+      'article remote continuation expires after 10 minutes for fresh unseen strategy',
+      () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-19T08:30:00Z');
+    final snapshot = _snapshot(
+      surface: FeedSurface.articles,
+      lastActiveAt: now.subtract(const Duration(minutes: 11)),
+      lastFreshnessStrategy: kFeedFreshnessStrategyFreshUnseenV1,
+      resumeContinuationWindowMinutes: 10,
+      resumeSnapshotAfterRemoteWindow: false,
+    );
+
+    expect(
+      store.isRemoteContinuationFresh(
+        FeedSurface.articles,
+        snapshot,
+        now: now,
+      ),
+      isFalse,
+    );
+  });
+
+  test('article remote continuation keeps current strategy baseline window',
+      () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-19T08:30:00Z');
+    final snapshot = _snapshot(
+      surface: FeedSurface.articles,
+      lastActiveAt: now.subtract(const Duration(minutes: 55)),
+      lastFreshnessStrategy: kFeedFreshnessStrategyCurrent,
+    );
+
+    expect(
+      store.isRemoteContinuationFresh(
+        FeedSurface.articles,
+        snapshot,
+        now: now,
+      ),
+      isTrue,
+    );
+  });
+
+  test('article resume policy honors backend-provided continuation window',
+      () async {
+    final cache = FakeFeedCache();
+    final store = FeedSessionStore(cache);
+    final now = DateTime.parse('2026-03-19T08:30:00Z');
+
+    await store.saveActiveSession(
+      _snapshot(
+        surface: FeedSurface.articles,
+        lastActiveAt: now.subtract(const Duration(minutes: 14)),
+        resumeContinuationWindowMinutes: 10,
+        resumeSnapshotAfterRemoteWindow: false,
+      ),
+    );
+
+    final decision = await store.prepareRestore(
+      FeedSurface.articles,
+      now: now,
+    );
+
+    expect(decision.resumeSnapshot, isNull);
+    expect(decision.preferLatestOnRefresh, isTrue);
   });
 
   test('prepareRestore marks reels for latest bias after longer inactivity',

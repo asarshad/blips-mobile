@@ -160,6 +160,9 @@ class ArticlesNotifier
   int _currentItemIndex = 0;
   bool _canContinueRemotely = true;
   String? _currentFeedVersion;
+  String? _currentFreshnessStrategy;
+  int? _currentResumeContinuationWindowMinutes;
+  bool _currentResumeSnapshotAfterRemoteWindow = true;
   String? _pendingFeedVersion;
   FeedPageResult<FeedEntry>? _pendingPrefetchedPage;
   Timer? _articleViewTimer;
@@ -217,7 +220,8 @@ class ArticlesNotifier
     if (_trackedArticleViewIds.contains(contentId)) {
       return;
     }
-    if (_pendingArticleViewId == contentId && _articleViewTimer?.isActive == true) {
+    if (_pendingArticleViewId == contentId &&
+        _articleViewTimer?.isActive == true) {
       return;
     }
 
@@ -357,13 +361,35 @@ class ArticlesNotifier
           count: 1,
         ),
       );
+      unawaited(
+        _repository.recordFreshnessEvent(
+          eventName: 'resume_path_restored_snapshot',
+          surface: _surface.storageKey,
+          contentItemId: restore.resumeSnapshot!.currentItemId,
+          feedVersion: restore.resumeSnapshot!.lastFeedVersion,
+          count: 1,
+        ),
+      );
       _markFeedSeenNowInBackground();
       unawaited(_refreshInBackground());
       return;
     }
 
     try {
-      final cached = await _cache.getCachedArticles(limit: _limit);
+      final shouldPreferLatestImmediately =
+          restore.resumeSnapshot == null && restore.preferLatestOnRefresh;
+      if (shouldPreferLatestImmediately) {
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'resume_path_latest_head',
+            surface: _surface.storageKey,
+            count: 1,
+          ),
+        );
+      }
+      final cached = shouldPreferLatestImmediately
+          ? const <ArticleFeedEntry>[]
+          : await _cache.getCachedArticles(limit: _limit);
       if (cached.isNotEmpty && mounted) {
         state = AsyncValue.data(cached);
         _updateNewSinceLastSeen(cached);
@@ -428,6 +454,9 @@ class ArticlesNotifier
         hasMore: page.hasMore,
         inventoryState: page.inventoryState,
         feedVersion: page.feedVersion,
+        freshnessStrategy: page.freshnessStrategy,
+        resumeContinuationWindowMinutes: page.resumeContinuityWindowMinutes,
+        resumeSnapshotAfterRemoteWindow: page.resumeSnapshotAfterRemoteWindow,
       );
       _cacheInBackground(articles);
       await _persistActiveSession(
@@ -587,6 +616,13 @@ class ArticlesNotifier
         _page++;
         _hasMore = nextPage.hasMore;
         _inventoryState = nextPage.inventoryState;
+        _currentFreshnessStrategy =
+            nextPage.freshnessStrategy ?? _currentFreshnessStrategy;
+        _currentResumeContinuationWindowMinutes =
+            nextPage.resumeContinuityWindowMinutes ??
+                _currentResumeContinuationWindowMinutes;
+        _currentResumeSnapshotAfterRemoteWindow =
+            nextPage.resumeSnapshotAfterRemoteWindow;
         final merged = [...latestList, ...unique];
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
@@ -759,9 +795,15 @@ class ArticlesNotifier
           fallbackIndex: snapshot.lastViewedIndex,
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
+    _currentFreshnessStrategy =
+        snapshot.lastFreshnessStrategy ?? kFeedFreshnessStrategyCurrent;
+    _currentResumeContinuationWindowMinutes =
+        snapshot.resumeContinuationWindowMinutes;
+    _currentResumeSnapshotAfterRemoteWindow =
+        snapshot.resumeSnapshotAfterRemoteWindow ?? true;
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
-    _canContinueRemotely =
+    _canContinueRemotely = snapshot.sessionId != null &&
         _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
     if (_canContinueRemotely) {
       _repository.restoreArticleSession(
@@ -792,6 +834,9 @@ class ArticlesNotifier
     required bool hasMore,
     required FeedInventoryState inventoryState,
     required String? feedVersion,
+    required String? freshnessStrategy,
+    required int? resumeContinuationWindowMinutes,
+    required bool resumeSnapshotAfterRemoteWindow,
   }) {
     _page = 1;
     _hasMore = hasMore;
@@ -801,6 +846,10 @@ class ArticlesNotifier
     _currentHeadBaselineIds = _headBaselineIds(articles, _limit);
     _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
+    _currentFreshnessStrategy =
+        freshnessStrategy ?? kFeedFreshnessStrategyCurrent;
+    _currentResumeContinuationWindowMinutes = resumeContinuationWindowMinutes;
+    _currentResumeSnapshotAfterRemoteWindow = resumeSnapshotAfterRemoteWindow;
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
     state = AsyncValue.data(articles);
@@ -876,6 +925,13 @@ class ArticlesNotifier
   Future<FeedPageResult<FeedEntry>> _startFreshContinuationAfterExpiry(
     List<ArticleFeedEntry> currentList,
   ) async {
+    unawaited(
+      _repository.recordFreshnessEvent(
+        eventName: 'resume_path_fresh_continuation',
+        surface: _surface.storageKey,
+        count: 1,
+      ),
+    );
     final existingIds = currentList.map((entry) => entry.id).toSet();
     var result = await _repository.fetchArticlesPage(page: 1, size: _limit);
     var collected = result.items.whereType<ArticleFeedEntry>().where((entry) {
@@ -901,6 +957,9 @@ class ArticlesNotifier
       hasMore: result.hasMore,
       inventoryState: result.inventoryState,
       sessionId: result.sessionId,
+      freshnessStrategy: result.freshnessStrategy,
+      resumeContinuityWindowMinutes: result.resumeContinuityWindowMinutes,
+      resumeSnapshotAfterRemoteWindow: result.resumeSnapshotAfterRemoteWindow,
     );
   }
 
@@ -930,6 +989,11 @@ class ArticlesNotifier
         pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
         pendingActionKind: _uiState.pendingActionKind,
         lastFeedVersion: _currentFeedVersion,
+        lastFreshnessStrategy: _currentFreshnessStrategy,
+        resumeContinuationWindowMinutes:
+            _currentResumeContinuationWindowMinutes,
+        resumeSnapshotAfterRemoteWindow:
+            _currentResumeSnapshotAfterRemoteWindow,
       ),
     );
   }
@@ -975,6 +1039,11 @@ class ArticlesNotifier
           hasMore: prefetchedPage.hasMore,
           inventoryState: prefetchedPage.inventoryState,
           feedVersion: prefetchedPage.feedVersion,
+          freshnessStrategy: prefetchedPage.freshnessStrategy,
+          resumeContinuationWindowMinutes:
+              prefetchedPage.resumeContinuityWindowMinutes,
+          resumeSnapshotAfterRemoteWindow:
+              prefetchedPage.resumeSnapshotAfterRemoteWindow,
         );
         _cacheInBackground(articles);
         await _persistActiveSession(
@@ -1214,6 +1283,15 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       unawaited(
         _repository.recordFreshnessEvent(
           eventName: 'resume_position_restored',
+          surface: _surface.storageKey,
+          contentItemId: restore.resumeSnapshot!.currentItemId,
+          feedVersion: restore.resumeSnapshot!.lastFeedVersion,
+          count: 1,
+        ),
+      );
+      unawaited(
+        _repository.recordFreshnessEvent(
+          eventName: 'resume_path_restored_snapshot',
           surface: _surface.storageKey,
           contentItemId: restore.resumeSnapshot!.currentItemId,
           feedVersion: restore.resumeSnapshot!.lastFeedVersion,
@@ -1699,6 +1777,13 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   Future<FeedPageResult<FeedEntry>> _startFreshContinuationAfterExpiry(
     List<VideoFeedEntry> currentList,
   ) async {
+    unawaited(
+      _repository.recordFreshnessEvent(
+        eventName: 'resume_path_fresh_continuation',
+        surface: _surface.storageKey,
+        count: 1,
+      ),
+    );
     final existingIds = currentList.map((entry) => entry.id).toSet();
     var result = await _repository.fetchVideosPage(page: 1, size: _limit);
     var collected = result.items.whereType<VideoFeedEntry>().where((entry) {
@@ -2087,6 +2172,15 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       unawaited(
         _repository.recordFreshnessEvent(
           eventName: 'resume_position_restored',
+          surface: _surface.storageKey,
+          contentItemId: restore.resumeSnapshot!.currentItemId,
+          feedVersion: restore.resumeSnapshot!.lastFeedVersion,
+          count: 1,
+        ),
+      );
+      unawaited(
+        _repository.recordFreshnessEvent(
+          eventName: 'resume_path_restored_snapshot',
           surface: _surface.storageKey,
           contentItemId: restore.resumeSnapshot!.currentItemId,
           feedVersion: restore.resumeSnapshot!.lastFeedVersion,

@@ -16,6 +16,7 @@ const Duration kLastSurfaceRestoreWindow = Duration(minutes: 30);
 const Duration kFeedResumeWindow = Duration(hours: 2);
 const Duration kArticleExactRestoreWindow = Duration(hours: 24);
 const Duration kArticleSoftRestoreWindow = Duration(hours: 72);
+const Duration kArticleContinuationFreshWindow = Duration(minutes: 10);
 const Duration kVideoExactRestoreWindow = Duration(hours: 12);
 const Duration kVideoSoftRestoreWindow = Duration(hours: 48);
 const Duration kReelExactRestoreWindow = Duration(hours: 2);
@@ -78,12 +79,14 @@ class _FeedResumePolicy {
     required this.softRestoreWindow,
     required this.remoteContinuationWindow,
     this.preferLatestAfter,
+    this.resumeSnapshotAfterRemoteWindow = true,
   });
 
   final Duration exactRestoreWindow;
   final Duration softRestoreWindow;
   final Duration remoteContinuationWindow;
   final Duration? preferLatestAfter;
+  final bool resumeSnapshotAfterRemoteWindow;
 }
 
 class FeedSessionSnapshot {
@@ -101,6 +104,9 @@ class FeedSessionSnapshot {
     this.pendingNewCount = 0,
     this.pendingActionKind = PendingFeedActionKind.newItems,
     this.lastFeedVersion,
+    this.lastFreshnessStrategy,
+    this.resumeContinuationWindowMinutes,
+    this.resumeSnapshotAfterRemoteWindow,
   });
 
   final FeedSurface surface;
@@ -116,6 +122,9 @@ class FeedSessionSnapshot {
   final int pendingNewCount;
   final PendingFeedActionKind pendingActionKind;
   final String? lastFeedVersion;
+  final String? lastFreshnessStrategy;
+  final int? resumeContinuationWindowMinutes;
+  final bool? resumeSnapshotAfterRemoteWindow;
 
   Map<String, dynamic> toJson() {
     return {
@@ -134,6 +143,9 @@ class FeedSessionSnapshot {
       'pending_new_count': pendingNewCount,
       'pending_action_kind': pendingActionKind.name,
       'last_feed_version': lastFeedVersion,
+      'last_freshness_strategy': lastFreshnessStrategy,
+      'resume_continuity_window_minutes': resumeContinuationWindowMinutes,
+      'resume_snapshot_after_remote_window': resumeSnapshotAfterRemoteWindow,
     };
   }
 
@@ -166,6 +178,12 @@ class FeedSessionSnapshot {
       pendingActionKind: PendingFeedActionKind.fromJsonValue(
           json['pending_action_kind'] as String?),
       lastFeedVersion: json['last_feed_version'] as String?,
+      lastFreshnessStrategy: (json['last_freshness_strategy'] as String?) ??
+          (json['freshness_strategy'] as String?),
+      resumeContinuationWindowMinutes:
+          json['resume_continuity_window_minutes'] as int?,
+      resumeSnapshotAfterRemoteWindow:
+          json['resume_snapshot_after_remote_window'] as bool?,
     );
   }
 
@@ -187,6 +205,12 @@ class FeedSessionSnapshot {
     PendingFeedActionKind? pendingActionKind,
     String? lastFeedVersion,
     bool clearLastFeedVersion = false,
+    String? lastFreshnessStrategy,
+    bool clearLastFreshnessStrategy = false,
+    int? resumeContinuationWindowMinutes,
+    bool clearResumeContinuationWindowMinutes = false,
+    bool? resumeSnapshotAfterRemoteWindow,
+    bool clearResumeSnapshotAfterRemoteWindow = false,
   }) {
     return FeedSessionSnapshot(
       surface: surface,
@@ -209,6 +233,17 @@ class FeedSessionSnapshot {
       lastFeedVersion: clearLastFeedVersion
           ? null
           : (lastFeedVersion ?? this.lastFeedVersion),
+      lastFreshnessStrategy: clearLastFreshnessStrategy
+          ? null
+          : (lastFreshnessStrategy ?? this.lastFreshnessStrategy),
+      resumeContinuationWindowMinutes: clearResumeContinuationWindowMinutes
+          ? null
+          : (resumeContinuationWindowMinutes ??
+              this.resumeContinuationWindowMinutes),
+      resumeSnapshotAfterRemoteWindow: clearResumeSnapshotAfterRemoteWindow
+          ? null
+          : (resumeSnapshotAfterRemoteWindow ??
+              this.resumeSnapshotAfterRemoteWindow),
     );
   }
 }
@@ -282,8 +317,15 @@ class FeedSessionStore {
     }
 
     final reference = now ?? DateTime.now();
-    final policy = _resumePolicy(surface);
+    final policy = _resumePolicy(surface, snapshot: active);
     final age = reference.difference(active.lastActiveAt);
+    if (age > policy.remoteContinuationWindow &&
+        !policy.resumeSnapshotAfterRemoteWindow) {
+      await clearActiveSession(surface);
+      return const FeedSessionRestoreDecision(
+        preferLatestOnRefresh: true,
+      );
+    }
     if (age <= policy.softRestoreWindow) {
       return FeedSessionRestoreDecision(
         resumeSnapshot: active,
@@ -384,7 +426,7 @@ class FeedSessionStore {
     DateTime? now,
   }) {
     final reference = now ?? DateTime.now();
-    final policy = _resumePolicy(surface);
+    final policy = _resumePolicy(surface, snapshot: snapshot);
     final remoteWindow = surface == FeedSurface.reels
         ? policy.remoteContinuationWindow
         : (policy.remoteContinuationWindow <= kBackendSessionTtl
@@ -472,16 +514,18 @@ class FeedSessionStore {
     DateTime now,
   ) {
     return now.difference(snapshot.lastActiveAt) <=
-        _resumePolicy(surface).softRestoreWindow;
+        _resumePolicy(
+          surface,
+          snapshot: snapshot,
+        ).softRestoreWindow;
   }
 
-  _FeedResumePolicy _resumePolicy(FeedSurface surface) {
+  _FeedResumePolicy _resumePolicy(
+    FeedSurface surface, {
+    FeedSessionSnapshot? snapshot,
+  }) {
     return switch (surface) {
-      FeedSurface.articles => const _FeedResumePolicy(
-          exactRestoreWindow: kArticleExactRestoreWindow,
-          softRestoreWindow: kArticleSoftRestoreWindow,
-          remoteContinuationWindow: kBackendSessionTtl,
-        ),
+      FeedSurface.articles => _articleResumePolicy(snapshot),
       FeedSurface.videos => const _FeedResumePolicy(
           exactRestoreWindow: kVideoExactRestoreWindow,
           softRestoreWindow: kVideoSoftRestoreWindow,
@@ -494,6 +538,36 @@ class FeedSessionStore {
           preferLatestAfter: kReelNewestBiasThreshold,
         ),
     };
+  }
+
+  _FeedResumePolicy _articleResumePolicy(FeedSessionSnapshot? snapshot) {
+    if (snapshot?.resumeContinuationWindowMinutes != null ||
+        snapshot?.resumeSnapshotAfterRemoteWindow != null) {
+      return _FeedResumePolicy(
+        exactRestoreWindow: kArticleExactRestoreWindow,
+        softRestoreWindow: kArticleSoftRestoreWindow,
+        remoteContinuationWindow: Duration(
+          minutes: snapshot?.resumeContinuationWindowMinutes ??
+              kBackendSessionTtl.inMinutes,
+        ),
+        resumeSnapshotAfterRemoteWindow:
+            snapshot?.resumeSnapshotAfterRemoteWindow ?? true,
+      );
+    }
+    if (snapshot?.lastFreshnessStrategy ==
+        kFeedFreshnessStrategyFreshUnseenV1) {
+      return const _FeedResumePolicy(
+        exactRestoreWindow: kArticleExactRestoreWindow,
+        softRestoreWindow: kArticleSoftRestoreWindow,
+        remoteContinuationWindow: kArticleContinuationFreshWindow,
+        resumeSnapshotAfterRemoteWindow: false,
+      );
+    }
+    return const _FeedResumePolicy(
+      exactRestoreWindow: kArticleExactRestoreWindow,
+      softRestoreWindow: kArticleSoftRestoreWindow,
+      remoteContinuationWindow: kBackendSessionTtl,
+    );
   }
 
   String _historyKey(FeedSurface surface, int contentId) {
