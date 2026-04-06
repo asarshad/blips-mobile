@@ -1,3 +1,4 @@
-#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include? "Pods/Target Support Files/Pods-Blips/Pods-Blips.debug-blips.xcconfig"
 #include "Generated.xcconfig"
+CLANG_MODULE_CACHE_PATH=$(PROJECT_TEMP_DIR)/ModuleCache.noindex
 BLIPS_ADMOB_APP_ID=ca-app-pub-1680408170724576~7649867915
