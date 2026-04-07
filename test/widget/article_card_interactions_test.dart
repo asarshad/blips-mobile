@@ -4,9 +4,11 @@ library article_card_interactions_test;
 import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/cards/article_card.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/article_image_viewer.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/share_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:photo_view/photo_view.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import '../test_utils/fake_backend_api_client.dart';
@@ -99,6 +101,48 @@ void main() {
     expect(recordingUrlLauncher.launches.single.url, article.url);
 
     await settleDelayedInteraction(tester);
+  });
+
+  testWidgets(
+      'media tap opens zoomable image viewer instead of launching source',
+      (tester) async {
+    await pumpHarness(tester);
+
+    await tester.tap(find.byType(Image).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(recordingUrlLauncher.launches, isEmpty);
+    expect(find.byType(ArticleImageViewer), findsOneWidget);
+    expect(find.byKey(const Key('article-image-viewer-close')), findsOneWidget);
+    expect(find.byType(PhotoView), findsOneWidget);
+  });
+
+  testWidgets('image viewer closes from the close button', (tester) async {
+    await pumpHarness(tester);
+
+    await tester.tap(find.byType(Image).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const Key('article-image-viewer-close')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ArticleImageViewer), findsNothing);
+  });
+
+  testWidgets('image viewer closes on vertical swipe', (tester) async {
+    await pumpHarness(tester);
+
+    await tester.tap(find.byType(Image).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.drag(
+      find.byKey(const Key('article-image-viewer-drag-area')),
+      const Offset(0, 220),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ArticleImageViewer), findsNothing);
   });
 
   testWidgets('share action invokes share immediately', (tester) async {

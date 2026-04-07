@@ -26,6 +26,8 @@ class ArticleCard extends HookConsumerWidget {
   final bool isVisible;
   final bool isNewSinceLastSeen;
 
+  String get _imageHeroTag => 'article-image-${entry.id}';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showBubbles = useState(false);
@@ -42,10 +44,13 @@ class ArticleCard extends HookConsumerWidget {
     return Stack(
       children: [
         FeedCardFrame(
-          media: ArticleImage.hero(
-            imageUrl: entry.imageUrl,
-            category: entry.category,
-            source: entry.source,
+          media: Hero(
+            tag: _imageHeroTag,
+            child: ArticleImage.hero(
+              imageUrl: entry.imageUrl,
+              category: entry.category,
+              source: entry.source,
+            ),
           ),
           category: entry.category,
           title: entry.title,
@@ -59,7 +64,12 @@ class ArticleCard extends HookConsumerWidget {
             isNewSinceLastSeen: isNewSinceLastSeen,
           ),
           readTime: '${entry.readTime} min read',
-          onMediaTap: () => _handleTap(showBubbles, repository, sessionStore),
+          onMediaTap: () => _handleMediaTap(
+            context,
+            showBubbles,
+            repository,
+            sessionStore,
+          ),
           onContentTap: () => _openInBrowser(
             entry.url,
             repository,
@@ -86,7 +96,8 @@ class ArticleCard extends HookConsumerWidget {
     );
   }
 
-  Future<void> _handleTap(
+  Future<void> _handleMediaTap(
+    BuildContext context,
     ValueNotifier<bool> showBubbles,
     FeedRepository repository,
     FeedSessionStore sessionStore,
@@ -96,15 +107,22 @@ class ArticleCard extends HookConsumerWidget {
       return;
     }
 
+    final mediaUrl = entry.imageUrl?.trim();
+    if (mediaUrl != null && mediaUrl.isNotEmpty) {
+      await ArticleImageViewer.show(
+        context,
+        imageUrl: mediaUrl,
+        heroTag: _imageHeroTag,
+      );
+      return;
+    }
+
     unawaited(_recordOpenSourceIntent(repository, sessionStore));
     final uri = Uri.parse(entry.url);
-    final launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched) {
       logger.warning(
-        'Failed to launch article URL from card tap',
+        'Failed to launch article URL from image tap fallback',
         category: LogCategory.app,
         error: entry.url,
       );
@@ -192,7 +210,8 @@ class ArticleCard extends HookConsumerWidget {
   String _formatDate(DateTime date) {
     final now = DateTime.now().toLocal();
     final local = date.toLocal();
-    final days = DateUtils.dateOnly(now).difference(DateUtils.dateOnly(local)).inDays;
+    final days =
+        DateUtils.dateOnly(now).difference(DateUtils.dateOnly(local)).inDays;
     if (days <= 0) return 'Today';
     if (days == 1) return 'Yesterday';
     if (days < 7) return '${days}d ago';
