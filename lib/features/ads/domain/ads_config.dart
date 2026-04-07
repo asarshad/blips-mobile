@@ -171,6 +171,8 @@ class AdsConfig {
   /// Whether any feed surface should render ads for this caller.
   bool get showFeedAds => enabled && eligible;
 
+  bool get hasAdMobProvider => provider == 'admob_native';
+
   /// Banner surfaces are intentionally disabled in this rollout.
   bool get showBannerAds => false;
 

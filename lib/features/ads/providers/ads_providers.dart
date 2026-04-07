@@ -1,6 +1,7 @@
 import 'package:blips_mobile/core/config/remote_app_config.dart';
 import 'package:blips_mobile/core/network/backend_api_client.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
+import 'package:blips_mobile/features/ads/data/admob_initializer.dart';
 import 'package:blips_mobile/features/ads/data/app_config_repository.dart';
 import 'package:blips_mobile/features/ads/data/event_service.dart';
 import 'package:blips_mobile/features/ads/domain/ads_config.dart';
@@ -22,6 +23,10 @@ final remoteAppConfigProvider = FutureProvider<RemoteAppConfig>((ref) async {
 /// Build-time ad runtime config used for local testing and SDK mode switching.
 final adsRuntimeConfigProvider = Provider<AdsRuntimeConfig>((ref) {
   return AdsRuntimeConfig.fromEnvironment();
+});
+
+final adMobInitializerProvider = Provider<AdMobInitializer>((ref) {
+  return AdMobInitializer(const GoogleMobileAdsClient());
 });
 
 /// Fetches [AdsConfig] from the backend on first read and caches it.

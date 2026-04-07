@@ -1,13 +1,11 @@
 import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/config/firebase_bootstrap_options.dart';
 import 'package:blips_mobile/core/error/error.dart';
-import 'package:blips_mobile/features/ads/domain/ads_runtime_config.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Ensures Flutter bindings are ready before attaching the ProviderScope.
@@ -32,8 +30,6 @@ Future<void> bootstrap() async {
     logger.info('App starting...', category: LogCategory.lifecycle);
 
     await _initializeFirebase();
-    await _initializeAdMob();
-
     // Clean up very old cache on app start (older than 7 days)
     // Prevents unbounded growth; freshness is handled by background refresh
     try {
@@ -84,8 +80,6 @@ Future<void> bootstrapWithOverrides({
     FlutterNativeSplash.preserve(widgetsBinding: binding);
 
     await _initializeFirebase();
-    await _initializeAdMob();
-
     runApp(
       ProviderScope(
         overrides: overrides,
@@ -95,35 +89,6 @@ Future<void> bootstrapWithOverrides({
 
     FlutterNativeSplash.remove();
   });
-}
-
-Future<void> _initializeAdMob() async {
-  final runtimeConfig = AdsRuntimeConfig.fromEnvironment();
-
-  if (!runtimeConfig.usesSdkAds) {
-    logger.info(
-      'AdMob skipped in mock ads mode',
-      category: LogCategory.lifecycle,
-    );
-    return;
-  }
-
-  try {
-    if (runtimeConfig.testDeviceIds.isNotEmpty) {
-      await MobileAds.instance.updateRequestConfiguration(
-        RequestConfiguration(testDeviceIds: runtimeConfig.testDeviceIds),
-      );
-    }
-    await MobileAds.instance.initialize();
-    logger.info('AdMob initialized', category: LogCategory.lifecycle);
-  } catch (e, stackTrace) {
-    logger.warning(
-      'AdMob initialization failed',
-      category: LogCategory.app,
-      error: e,
-      stackTrace: stackTrace,
-    );
-  }
 }
 
 Future<void> _initializeFirebase() async {
