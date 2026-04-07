@@ -45,7 +45,12 @@ String? _countryCodeFromLanguageTag(String tag) {
     return null;
   }
 
-  for (final segment in tag.split(RegExp('[-_]')).reversed) {
+  final segments = tag.split(RegExp('[-_]'));
+  for (var index = segments.length - 1; index >= 0; index--) {
+    if (segments.length > 1 && index == 0) {
+      continue;
+    }
+    final segment = segments[index];
     final normalized = normalizeCountryCode(segment);
     if (normalized != null) {
       return normalized;

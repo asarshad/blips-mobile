@@ -39,9 +39,9 @@ Complete all items before submitting to app stores.
 ## iOS Submission
 
 ### App Store Connect
-- [ ] App registered in App Store Connect
+- [x] App registered in App Store Connect
 - [ ] Bundle ID matches: check Xcode project
-- [ ] App name: "Blips"
+- [ ] App name: "Blips News"
 - [ ] Subtitle: "AI-Curated Tech News"
 - [ ] Description filled (see `store_metadata/app_store/description.md`)
 - [ ] Keywords set
@@ -53,18 +53,17 @@ Complete all items before submitting to app stores.
 - [ ] App icon 1024×1024 uploaded
 
 ### Privacy & Legal
-- [ ] Privacy policy URL: https://blips.tech/privacy.html
-- [ ] Support URL: https://blips.tech/support.html
+- [ ] Privacy policy URL: https://blips.tech/privacy
+- [ ] Support URL: https://blips.tech/support
 - [ ] Data collection declarations completed
 - [ ] No user accounts → declare accordingly
-- [ ] App Tracking Transparency: Not used → declare
+- [ ] App Tracking Transparency declaration matches shipped ad/SDK behavior
 
 ### Build
-- [ ] Version bumped in `pubspec.yaml` (currently 1.0.2+3)
+- [x] Version bumped in `pubspec.yaml` (currently 1.0.3+6)
 - [ ] Run `flutter build ipa --release`
 - [ ] Upload via Xcode Organizer or `xcrun altool`
-- [ ] TestFlight build processing complete
-- [ ] Internal testing group created and invited
+- [ ] App Store build uploaded and processed
 
 ### Review
 - [ ] Demo notes prepared (no login needed, explain AI features)
@@ -76,9 +75,9 @@ Complete all items before submitting to app stores.
 ## Android Submission
 
 ### Play Console
-- [ ] App registered in Google Play Console
+- [x] App registered in Google Play Console
 - [ ] Application ID: `com.blips.blips_mobile`
-- [ ] App name: "Blips"
+- [ ] App name: "Blips News"
 - [ ] Short description filled (see `store_metadata/play_store/listing.md`)
 - [ ] Full description filled
 - [ ] Category: News & Magazines
@@ -99,9 +98,9 @@ Complete all items before submitting to app stores.
 - [ ] Rating received (expected: Everyone)
 
 ### Privacy & Legal
-- [ ] Privacy policy URL: https://blips.tech/privacy.html
+- [ ] Privacy policy URL: https://blips.tech/privacy
 - [ ] Data safety section completed
-- [ ] No user data collected → declare accordingly
+- [ ] Ads and SDK data collection disclosures match the shipped build
 
 ### Build
 - [ ] Version bumped in `pubspec.yaml` (currently 1.0.2+3)
@@ -113,11 +112,9 @@ Complete all items before submitting to app stores.
 
 ## Soft Launch
 
-### TestFlight (iOS)
-- [ ] Internal testers added (up to 25)
-- [ ] External testing group created
-- [ ] Up to 100 external testers invited
-- [ ] Beta App Review submitted (if external testing)
+### Pre-Release Validation (iOS)
+- [ ] App Store processing finished for the release build
+- [ ] Final smoke test completed from the processed build
 
 ### Internal Testing (Android)
 - [ ] Internal test track published
@@ -127,7 +124,7 @@ Complete all items before submitting to app stores.
 ### Feedback
 - [ ] Feedback form created (Google Forms / Typeform)
 - [ ] Link added to app settings or about screen
-- [ ] Support email configured: support@blips.tech
+- [ ] Support email configured for `blips.tech`
 
 ### Monitoring (7-day checkpoint)
 - [ ] Crash-free rate >99% (both platforms)

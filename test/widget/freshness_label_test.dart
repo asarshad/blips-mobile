@@ -41,7 +41,7 @@ void main() {
       );
 
       expect(find.text('New to you'), findsOneWidget);
-      expect(find.textContaining('Added'), findsOneWidget);
+      expect(find.text('5d ago'), findsOneWidget);
     });
 
     testWidgets('shows yesterday for late-night items across midnight', (
@@ -56,7 +56,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Published Yesterday'), findsOneWidget);
+      expect(find.text('Yesterday'), findsOneWidget);
     });
   });
 }

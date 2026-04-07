@@ -40,7 +40,6 @@ class _FakeRemoteService extends InterestsRemoteService {
 
   @override
   Future<void> syncCategories({
-    required String deviceId,
     required List<String> selectedCategories,
   }) async {
     callCount++;
@@ -57,7 +56,6 @@ InterestsNotifier _makeNotifier({
   return InterestsNotifier(
     local ?? _FakeLocalService(),
     remote ?? _FakeRemoteService(),
-    Future.value('test-device-id'),
   );
 }
 

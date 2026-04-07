@@ -37,7 +37,6 @@ class _FakeRemoteService extends InterestsRemoteService {
   _FakeRemoteService() : super(Dio());
   @override
   Future<void> syncCategories({
-    required String deviceId,
     required List<String> selectedCategories,
   }) async {}
 }
@@ -50,10 +49,9 @@ Widget _buildTestApp({_FakeLocalService? local, _FakeRemoteService? remote}) {
   final fakeLocal = local ?? _FakeLocalService();
   final fakeRemote = remote ?? _FakeRemoteService();
 
-  // Override the notifier directly so it never tries to resolve
-  // deviceIdProvider (which requires SharedPreferences in the test env).
+  // Override the notifier directly so it never touches real app services.
   final notifierOverride = interestsNotifierProvider.overrideWith(
-    (ref) => InterestsNotifier(fakeLocal, fakeRemote, Future.value('test-id')),
+    (ref) => InterestsNotifier(fakeLocal, fakeRemote),
   );
 
   final router = GoRouter(
