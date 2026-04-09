@@ -816,8 +816,6 @@ class FeedShellPage extends HookConsumerWidget {
       FeedTab<FeedPageItem>(
         feed: articleFeed,
         emptyLabel: 'Articles are warming up.',
-        overlayLabel: 'ART',
-        overlayHasMore: ref.read(articlesFeedProvider.notifier).hasMore,
         controller: articleFeedController,
         builder: (entry, isCurrentPage) {
           final notifier = ref.read(articlesFeedProvider.notifier);
@@ -865,8 +863,6 @@ class FeedShellPage extends HookConsumerWidget {
       FeedTab<FeedPageItem>(
         feed: videoFeed,
         emptyLabel: 'Videos are warming up.',
-        overlayLabel: 'VID',
-        overlayHasMore: ref.read(videosFeedProvider.notifier).hasMore,
         containsVideos: true,
         controller: videoFeedController,
         builder: (entry, isCurrentPage) {

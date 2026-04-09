@@ -23,11 +23,26 @@ import '../test/test_utils/fake_feed_cache.dart';
 import '../test/test_utils/fake_youtube_player_manager.dart';
 import '../test/test_utils/recording_chat_repository.dart';
 
-const _feedTitle = 'Your brief, before the rest of the timeline wakes up.';
-const _videoTitle = 'Signal over noise, in one scroll.';
-const _reelTitle = 'Three clips to catch up before the meeting starts.';
+const _feedTitle =
+    'OpenAI ships sharper memory controls as AI assistants move into daily work.';
+const _videoTitle =
+    'Nvidia, OpenAI, and Apple all just made the next AI device cycle easier to see.';
+const _reelTitle =
+    'Three clips that explain where AI products, chips, and distribution are heading.';
 const _chatReply =
     'Here is the fast read: AI infrastructure, shipping cadence, and distribution economics are driving the story.';
+const _articleSummaryLong =
+    'OpenAI\'s latest memory controls matter because they turn AI from a disposable prompt box into a tool people can trust throughout the workday. Instead of forcing users to restate preferences, projects, and context every time, the assistant can now feel more continuous, more personalized, and less repetitive. That shift changes retention, changes workflow design, and raises the bar for every product competing to become the interface people open first each morning.';
+const _videoSummaryLong =
+    'This video connects the dots between Nvidia\'s platform momentum, OpenAI\'s product cadence, and Apple\'s device strategy to explain why the next AI cycle may spread faster than the last one. It shows how hardware, distribution, and interface design are finally aligning in a way that makes mainstream adoption easier to imagine. For viewers, that means fewer isolated launches and a much clearer picture of where attention, consumer behavior, and product value are moving next.';
+const _articleImage =
+    'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1600&q=80';
+const _articleImageSecondary =
+    'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80';
+const _videoThumbnailPrimary =
+    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1600&q=80';
+const _videoThumbnailSecondary =
+    'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?auto=format&fit=crop&w=1600&q=80';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized()
@@ -59,14 +74,14 @@ void main() {
                 id: 'user-1',
                 role: 'user',
                 content: 'What changed this morning?',
-                timestamp: DateTime.utc(2026, 3, 24, 9, 42),
+                timestamp: DateTime.utc(2026, 4, 8, 9, 42),
               ),
               ChatMessage(
                 id: 'assistant-1',
                 role: 'assistant',
                 content:
                     'The biggest changes are around AI infra pricing and faster product releases.',
-                timestamp: DateTime.utc(2026, 3, 24, 9, 43),
+                timestamp: DateTime.utc(2026, 4, 8, 9, 43),
               ),
             ],
           ),
@@ -217,11 +232,10 @@ Map<String, dynamic> _buildArticlePlaylistResponse() {
         'title': _feedTitle,
         'source': 'Blips Desk',
         'source_url': 'https://blips.tech/story/morning-brief',
-        'summary': 'A tighter news stack for the day: AI infrastructure, '
-            'product moves, and the market context behind them.',
-        'image_url': '',
-        'published_at': '2026-03-24T09:41:00Z',
-        'created_at': '2026-03-24T09:41:00Z',
+        'summary': _articleSummaryLong,
+        'image_url': _articleImage,
+        'published_at': '2026-04-08T09:41:00Z',
+        'created_at': '2026-04-08T09:41:00Z',
         'topics': ['Technology'],
         'conversation_starters': {
           'starters': ['Give me the fast read.'],
@@ -230,15 +244,15 @@ Map<String, dynamic> _buildArticlePlaylistResponse() {
       {
         'id': 8102,
         'type': 'ARTICLE',
-        'title': 'Agent workflows are moving from demo to operating system.',
+        'title': 'Why the best AI products now feel more like coworkers than search boxes.',
         'source': 'Blips Desk',
         'source_url': 'https://blips.tech/story/agent-workflows',
         'summary':
-            'Why the best product teams are treating AI orchestration as '
-                'core UX, not a bolt-on feature.',
-        'image_url': '',
-        'published_at': '2026-03-24T09:28:00Z',
-        'created_at': '2026-03-24T09:28:00Z',
+            'Teams are redesigning onboarding, memory, and interface speed so '
+                'AI features become part of the daily workflow instead of a side panel.',
+        'image_url': _articleImageSecondary,
+        'published_at': '2026-04-08T09:28:00Z',
+        'created_at': '2026-04-08T09:28:00Z',
         'topics': ['Technology'],
         'conversation_starters': {
           'starters': ['What changed this week?'],
@@ -255,12 +269,11 @@ ArticleFeedEntry _marketingArticleEntry() {
   return ArticleFeedEntry(
     id: 8101,
     title: _feedTitle,
-    summary: 'A tighter news stack for the day: AI infrastructure, product '
-        'moves, and the market context behind them.',
+    summary: _articleSummaryLong,
     source: 'Blips Desk',
-    publishedAt: DateTime.utc(2026, 3, 24, 9, 41),
+    publishedAt: DateTime.utc(2026, 4, 8, 9, 41),
     url: 'https://blips.tech/story/morning-brief',
-    imageUrl: null,
+    imageUrl: _articleImage,
     category: 'Technology',
     readTime: 4,
     conversationStarters: const ['Give me the fast read.'],
@@ -271,15 +284,14 @@ VideoFeedEntry _marketingVideoEntry() {
   return VideoFeedEntry(
     id: 9101,
     title: _videoTitle,
-    summary: 'Catch the most important product and platform moves without '
-        'leaving the feed.',
+    summary: _videoSummaryLong,
     videoUrl: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
     link: 'https://blips.tech/story/signal-over-noise',
     source: 'Blips Video',
     category: 'Technology',
-    publishedAt: DateTime.utc(2026, 3, 24, 9, 33),
+    publishedAt: DateTime.utc(2026, 4, 8, 9, 33),
     readTime: 2,
-    thumbnailUrl: 'https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+    thumbnailUrl: _videoThumbnailPrimary,
     durationSeconds: 132,
     conversationStarters: const ['Summarize the key points.'],
   );
@@ -295,13 +307,11 @@ Map<String, dynamic> _buildVideoPlaylistResponse() {
         'video_url': 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
         'source_url': 'https://blips.tech/story/signal-over-noise',
         'source': 'Blips Video',
-        'summary':
-            'Catch the most important product and platform moves without '
-                'leaving the feed.',
-        'image_url': 'https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+        'summary': _videoSummaryLong,
+        'image_url': _videoThumbnailPrimary,
         'duration': 132,
-        'published_at': '2026-03-24T09:33:00Z',
-        'created_at': '2026-03-24T09:33:00Z',
+        'published_at': '2026-04-08T09:33:00Z',
+        'created_at': '2026-04-08T09:33:00Z',
         'topics': ['Technology'],
         'conversation_starters': {
           'starters': ['Summarize the key points.'],
@@ -310,17 +320,17 @@ Map<String, dynamic> _buildVideoPlaylistResponse() {
       {
         'id': 9102,
         'type': 'VIDEO',
-        'title': 'The release cadence is now the product strategy.',
+        'title': 'Why faster AI shipping now matters more than splashy launch events.',
         'video_url': 'https://www.youtube.com/watch?v=M7lc1UVf-VE',
         'source_url': 'https://blips.tech/story/release-cadence',
         'source': 'Blips Video',
         'summary':
-            'Why shipping rhythm now signals platform confidence more than '
-                'blog posts do.',
-        'image_url': 'https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg',
+            'A clear breakdown of how release cadence became the signal investors, '
+                'developers, and creators are watching most closely.',
+        'image_url': _videoThumbnailSecondary,
         'duration': 165,
-        'published_at': '2026-03-24T08:58:00Z',
-        'created_at': '2026-03-24T08:58:00Z',
+        'published_at': '2026-04-08T08:58:00Z',
+        'created_at': '2026-04-08T08:58:00Z',
         'topics': ['Technology'],
         'conversation_starters': {
           'starters': ['What should I watch for next?'],
@@ -345,10 +355,10 @@ Map<String, dynamic> _buildReelsResponse() {
         'summary':
             'Short takes on AI launches, chips, and creator tools, cut for '
                 'the first minute of your day.',
-        'thumbnail_url': 'https://i.ytimg.com/vi/jcxgwl9NYFE/hqdefault.jpg',
+        'thumbnail_url': _videoThumbnailPrimary,
         'duration_seconds': 34,
-        'published_at': '2026-03-24T09:36:00Z',
-        'created_at': '2026-03-24T09:36:00Z',
+        'published_at': '2026-04-08T09:36:00Z',
+        'created_at': '2026-04-08T09:36:00Z',
       },
       {
         'id': 10102,
@@ -357,10 +367,10 @@ Map<String, dynamic> _buildReelsResponse() {
         'source_url': 'https://blips.tech/story/distribution-cost',
         'source': 'Blips Clips',
         'summary': 'The fastest take on where attention still compounds.',
-        'thumbnail_url': 'https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+        'thumbnail_url': _videoThumbnailSecondary,
         'duration_seconds': 26,
-        'published_at': '2026-03-24T09:12:00Z',
-        'created_at': '2026-03-24T09:12:00Z',
+        'published_at': '2026-04-08T09:12:00Z',
+        'created_at': '2026-04-08T09:12:00Z',
       },
     ],
     'has_more': false,

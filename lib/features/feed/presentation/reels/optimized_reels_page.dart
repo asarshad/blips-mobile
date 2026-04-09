@@ -488,17 +488,8 @@ class OptimizedReelsPage extends HookConsumerWidget {
     };
 
     final boundedIndex = currentIndex.value.clamp(0, entries.length - 1);
-    final currentPageItem = entries[boundedIndex];
     final currentOrganicIndex =
         _organicIndexForPageIndex(entries, boundedIndex);
-    final currentOrganicPosition =
-        _organicCountThroughPageIndex(entries, boundedIndex).clamp(
-      1,
-      organicEntries.length,
-    );
-    final currentEntry = currentOrganicIndex == null
-        ? null
-        : organicEntries[currentOrganicIndex];
     final showCaughtUpBanner = isCaughtUp &&
         currentOrganicIndex != null &&
         currentOrganicIndex >= organicEntries.length - 1;
@@ -577,14 +568,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
               placement: FeedActionPillPlacement.bottom,
             ),
           ),
-        FeedStatusOverlay(
-          title:
-              '${currentPageItem.organicEntry == null ? 'AD' : 'REEL'} $currentOrganicPosition/${organicEntries.length}${hasMore ? '+' : ''}',
-          subtitle: currentPageItem is NativeAdSlotFeedPageItem
-              ? 'slot ${currentPageItem.slotIndex + 1} · ${hasMore ? 'more' : 'end'}'
-              : '#${currentEntry?.id ?? '-'} · ${hasMore ? 'more' : 'end'}',
-          dark: true,
-        ),
         if (showCaughtUpBanner)
           const Positioned(
             left: 0,

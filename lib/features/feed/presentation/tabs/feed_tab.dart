@@ -30,7 +30,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     required this.builder,
     required this.emptyLabel,
     required this.onRefresh,
-    required this.overlayLabel,
     this.controller,
     this.onLoadMore,
     this.onPageChanged,
@@ -46,15 +45,12 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     this.onTopAction,
     this.isActive = true,
     this.topActionDark = false,
-    this.overlayDark = false,
-    this.overlayHasMore = false,
   });
 
   final AsyncValue<List<T>> feed;
   final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
   final VoidCallback onRefresh;
-  final String overlayLabel;
 
   /// External page controller owned by the shell. Falls back to an internal
   /// controller when not provided.
@@ -100,12 +96,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
 
   /// Whether the top pill should use the dark visual style.
   final bool topActionDark;
-
-  /// Whether the diagnostics overlay should use the dark visual style.
-  final bool overlayDark;
-
-  /// Whether the current loaded feed is still expandable.
-  final bool overlayHasMore;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -357,7 +347,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     final showCaughtUpBanner =
         isCaughtUp && currentPage.value >= entries.length - 1;
     final showTopAction = topActionLabel != null && onTopAction != null;
-    final overlayData = _buildOverlayData(entries, currentPage.value);
 
     return Stack(
       children: [
@@ -389,12 +378,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
               placement: FeedActionPillPlacement.bottom,
             ),
           ),
-        FeedStatusOverlay(
-          title:
-              '$overlayLabel ${overlayData.position}/${overlayData.total}${overlayHasMore ? '+' : ''}',
-          subtitle: overlayData.subtitle,
-          dark: overlayDark,
-        ),
         if (showCaughtUpBanner)
           Positioned(
             left: 0,
@@ -403,42 +386,6 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
             child: FeedStateBanner(message: caughtUpLabel),
           ),
       ],
-    );
-  }
-
-  _FeedOverlayData _buildOverlayData(List<T> entries, int currentPage) {
-    final organicEntries = entries
-        .where((entry) => entry.organicEntry != null)
-        .toList(growable: false);
-    final total = organicEntries.length;
-    if (total == 0) {
-      return const _FeedOverlayData(
-        position: 0,
-        total: 0,
-        subtitle: 'no content',
-      );
-    }
-
-    final boundedPage = currentPage.clamp(0, entries.length - 1);
-    final currentOrganic = entries[boundedPage].organicEntry;
-    var organicPosition = _organicCountThroughPageIndex(entries, boundedPage);
-
-    if (organicPosition <= 0) {
-      organicPosition = 1;
-    }
-
-    if (currentOrganic == null) {
-      return _FeedOverlayData(
-        position: organicPosition.clamp(1, total),
-        total: total,
-        subtitle: 'ad slot',
-      );
-    }
-
-    return _FeedOverlayData(
-      position: organicPosition.clamp(1, total),
-      total: total,
-      subtitle: '#${currentOrganic.id} · ${overlayHasMore ? 'more' : 'end'}',
     );
   }
 
@@ -571,16 +518,4 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     }
     return entry.link.trim();
   }
-}
-
-class _FeedOverlayData {
-  const _FeedOverlayData({
-    required this.position,
-    required this.total,
-    required this.subtitle,
-  });
-
-  final int position;
-  final int total;
-  final String subtitle;
 }
