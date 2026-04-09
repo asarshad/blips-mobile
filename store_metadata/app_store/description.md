@@ -4,29 +4,31 @@
 Blips News
 
 ## Subtitle (30 chars max)
-AI-Curated Tech News
+Tech News, Videos, AI Chat
 
 ## Promotional Text (170 chars max)
-Your personal AI news feed for tech. Get curated articles, short videos, and chat with AI about any story.
+Follow the biggest stories in tech with curated articles, short videos, and AI chat that helps you understand what matters fast.
 
 ## Description (4000 chars max)
 
-Blips News is your AI-powered tech news companion. Stay informed with curated articles and short-form videos from the best sources, all in one beautifully designed app.
+Blips News helps you keep up with the most important stories in technology without drowning in tabs, feeds, and newsletters.
+
+Read curated articles, watch short video updates, and ask AI questions about any story, all in one focused app built for fast daily catch-up.
 
 **Smart Curation**
-Every article and video is scored and ranked by our AI engine, so you always see the most relevant content first. No algorithmic manipulation — just quality ranking.
+Articles and videos are ranked to help you find the signal faster, so you spend less time hunting for what matters and more time understanding it.
 
 **Quick Reads & Reels**
-Browse articles with estimated read times, or swipe through short tech videos in a familiar reels format. Get informed in minutes, not hours.
+Browse articles with quick summaries and estimated read times, or swipe through short tech videos when you want the fastest possible catch-up.
 
 **Ask AI About Any Story**
-Curious about an article? Tap the chat bubble and ask questions. Our AI assistant helps you understand complex topics, get summaries, or explore related ideas.
+Tap into AI chat for any article to get a clear explanation, a fast summary, or a deeper breakdown of the ideas behind the headline.
 
 **Clean & Focused**
-Stay focused on great tech journalism from trusted sources like TechCrunch, The Verge, Ars Technica, WIRED, and more.
+Blips News is built for focused reading and watching, with a clean interface that keeps the story front and center.
 
-**Privacy First**
-No account required. No tracking. Your reading habits stay on your device.
+**No Account Required**
+Open the app and start reading. There is no account setup, no follow graph, and no extra friction between you and the news.
 
 Sources include:
 • TechCrunch
@@ -38,7 +40,7 @@ Sources include:
 • Top YouTube tech channels
 
 ## Keywords (100 chars max)
-tech,news,AI,articles,videos,reels,technology,curated,summary,chat
+tech news,ai news,technology,articles,videos,chat,news reader,startups,gadgets,reels
 
 ## Categories
 - Primary: News

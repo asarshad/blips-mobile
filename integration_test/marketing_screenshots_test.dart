@@ -4,7 +4,10 @@ library marketing_screenshots_test;
 import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/theme/app_theme.dart';
 import 'package:blips_mobile/core/theme/debug_overlay.dart';
+import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/feed_status_overlay.dart';
+import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/domain/saved_item.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
 import 'package:blips_mobile/features/notifications/providers/push_notification_providers.dart';
@@ -16,11 +19,15 @@ import 'package:integration_test/integration_test.dart';
 
 import '../test/test_utils/app_ui_test_harness.dart';
 import '../test/test_utils/fake_backend_api_client.dart';
+import '../test/test_utils/fake_feed_cache.dart';
 import '../test/test_utils/fake_youtube_player_manager.dart';
+import '../test/test_utils/recording_chat_repository.dart';
 
 const _feedTitle = 'Your brief, before the rest of the timeline wakes up.';
 const _videoTitle = 'Signal over noise, in one scroll.';
 const _reelTitle = 'Three clips to catch up before the meeting starts.';
+const _chatReply =
+    'Here is the fast read: AI infrastructure, shipping cadence, and distribution economics are driving the story.';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized()
@@ -39,10 +46,46 @@ void main() {
 
       final youtubeManager = FakeYoutubePlayerManager();
       final api = FakeBackendApiClient(responseResolver: _resolveResponse);
+      final cache = FakeFeedCache();
+      final articleEntry = _marketingArticleEntry();
+      final videoEntry = _marketingVideoEntry();
+      final chatRepository = RecordingChatRepository(
+        conversations: [
+          ChatConversation(
+            articleId: articleEntry.id,
+            article: articleEntry,
+            messages: [
+              ChatMessage(
+                id: 'user-1',
+                role: 'user',
+                content: 'What changed this morning?',
+                timestamp: DateTime.utc(2026, 3, 24, 9, 42),
+              ),
+              ChatMessage(
+                id: 'assistant-1',
+                role: 'assistant',
+                content:
+                    'The biggest changes are around AI infra pricing and faster product releases.',
+                timestamp: DateTime.utc(2026, 3, 24, 9, 43),
+              ),
+            ],
+          ),
+        ],
+        responseContent: _chatReply,
+      );
+
+      await cache.saveArticleBookmark(
+        SavedArticleItem.fromFeedEntry(articleEntry),
+      );
+      await cache.saveVideoBookmark(
+        SavedVideoItem.fromFeedEntry(videoEntry),
+      );
 
       await tester.pumpWidget(
         buildAppUiHarness(
           api: api,
+          cache: cache,
+          chatRepository: chatRepository,
           youtubeManager: youtubeManager,
           overrides: [
             pushNotificationsControllerProvider.overrideWith(
@@ -86,6 +129,33 @@ void main() {
       await _waitFor(tester, find.text(_reelTitle));
       await _settleUi(tester);
       await binding.takeScreenshot('screenshot-reels');
+
+      await tester.tap(find.byKey(const ValueKey<String>('nav-Chat')));
+      await _waitFor(tester, find.text('Your Conversations'));
+      await _waitFor(tester, find.text(articleEntry.title));
+      await _settleUi(tester);
+      await binding.takeScreenshot('screenshot-chat');
+
+      await tester.tap(find.byKey(const ValueKey<String>('nav-Saved')));
+      await _waitFor(tester, find.text('Saved'));
+      await _waitFor(tester, find.text(articleEntry.title));
+      await _settleUi(tester);
+      await binding.takeScreenshot('screenshot-saved');
+
+      await tester.tap(find.byKey(const ValueKey<String>('nav-Settings')));
+      await _waitFor(tester, find.text('Settings'));
+      await _waitFor(tester, find.text('Storage & privacy'));
+      await _settleUi(tester);
+      await binding.takeScreenshot('screenshot-settings');
+
+      await tester.tap(find.byKey(const ValueKey<String>('nav-Feed')));
+      await _waitFor(tester, find.text(_feedTitle));
+      await tester.tap(find.byIcon(Icons.auto_awesome_rounded).first);
+      await _waitFor(tester, find.text('Give me the fast read.'));
+      await tester.tap(find.text('Give me the fast read.'));
+      await _waitFor(tester, find.text(_chatReply));
+      await _settleUi(tester);
+      await binding.takeScreenshot('screenshot-ai-chat');
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
@@ -179,6 +249,40 @@ Map<String, dynamic> _buildArticlePlaylistResponse() {
     'cursor': 2,
     'has_more': false,
   };
+}
+
+ArticleFeedEntry _marketingArticleEntry() {
+  return ArticleFeedEntry(
+    id: 8101,
+    title: _feedTitle,
+    summary: 'A tighter news stack for the day: AI infrastructure, product '
+        'moves, and the market context behind them.',
+    source: 'Blips Desk',
+    publishedAt: DateTime.utc(2026, 3, 24, 9, 41),
+    url: 'https://blips.tech/story/morning-brief',
+    imageUrl: null,
+    category: 'Technology',
+    readTime: 4,
+    conversationStarters: const ['Give me the fast read.'],
+  );
+}
+
+VideoFeedEntry _marketingVideoEntry() {
+  return VideoFeedEntry(
+    id: 9101,
+    title: _videoTitle,
+    summary: 'Catch the most important product and platform moves without '
+        'leaving the feed.',
+    videoUrl: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+    link: 'https://blips.tech/story/signal-over-noise',
+    source: 'Blips Video',
+    category: 'Technology',
+    publishedAt: DateTime.utc(2026, 3, 24, 9, 33),
+    readTime: 2,
+    thumbnailUrl: 'https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg',
+    durationSeconds: 132,
+    conversationStarters: const ['Summarize the key points.'],
+  );
 }
 
 Map<String, dynamic> _buildVideoPlaylistResponse() {

@@ -133,6 +133,7 @@ cd "${ROOT_DIR}"
 "${FLUTTER_BIN}" pub get
 BLIPS_SCREENSHOT_OUTPUT_DIR="${RAW_OUTPUT_DIR}" \
   "${FLUTTER_BIN}" drive \
+    --flavor blips \
     --driver=test_driver/marketing_screenshots_driver.dart \
     --target=integration_test/marketing_screenshots_test.dart \
     -d "${DEVICE_ID}"

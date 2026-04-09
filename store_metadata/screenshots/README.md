@@ -49,7 +49,7 @@ Use the simulator capture flow when `blips-site` needs fresh device screenshots:
 2. The script will:
    - boot an available iPhone simulator
    - apply a clean `9:41` status bar override
-   - run the integration test target that captures Feed, Videos, and Reels
+   - run the `blips` flavor integration test target that captures Feed, Videos, and Reels
    - write raw PNGs to `build/marketing_screenshots/raw`
    - resize and sync the final PNGs into `../blips-site/assets/screenshot-*.png`
 3. If you want a specific simulator, pass the name:
