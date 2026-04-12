@@ -50,6 +50,7 @@ class VideoCard extends HookConsumerWidget {
     final playbackUrl = _resolvePlaybackUrl(videoManager);
     final controller = videoManager.getController(playbackUrl);
     final playerState = videoManager.getState(playbackUrl);
+    final overlayState = videoManager.getPlaybackOverlayState(playbackUrl);
     final playerError = videoManager.getError(playbackUrl);
     final sentImpression = useRef(false);
     final sentStart = useRef(false);
@@ -61,9 +62,6 @@ class VideoCard extends HookConsumerWidget {
     final lastPositionMs = useRef(0);
     final resumeRecoveryArmed = useRef(false);
 
-    final isLoading = playerState == YTPlayerState.loading ||
-        playerState == YTPlayerState.idle;
-    final isError = playerState == YTPlayerState.error;
     final watchLabel = _buildWatchLabel(
       controller: controller,
       explicitDurationSeconds: entry.durationSeconds,
@@ -262,8 +260,7 @@ class VideoCard extends HookConsumerWidget {
           media: _VideoMedia(
             thumbnailUrl: preview,
             controller: controller,
-            isLoading: isLoading,
-            isError: isError,
+            overlayState: overlayState,
             playerError: playerError,
           ),
           category: entry.category,
@@ -568,15 +565,13 @@ class _VideoMedia extends StatelessWidget {
   const _VideoMedia({
     required this.thumbnailUrl,
     required this.controller,
-    required this.isLoading,
-    required this.isError,
+    required this.overlayState,
     required this.playerError,
   });
 
   final String thumbnailUrl;
   final YoutubePlayerController? controller;
-  final bool isLoading;
-  final bool isError;
+  final YTPlaybackOverlayState overlayState;
   final YTPlayerError? playerError;
 
   /// Checks if controller exists and can render the underlying WebView.
@@ -584,15 +579,13 @@ class _VideoMedia extends StatelessWidget {
     return controller != null;
   }
 
-  /// Determines if play button should be shown.
-  bool _shouldShowPlayButton(bool showPlayer) {
-    if (!showPlayer) return true;
-    return controller?.value.playerState != PlayerState.playing;
-  }
-
   @override
   Widget build(BuildContext context) {
     final showPlayer = _isControllerValid;
+    final showPlayButton = overlayState == YTPlaybackOverlayState.manualPause ||
+        overlayState == YTPlaybackOverlayState.autoplayStalled;
+    final showLoading = overlayState == YTPlaybackOverlayState.autoplayPending;
+    final showError = overlayState == YTPlaybackOverlayState.error;
 
     return ClipRect(
       clipBehavior: Clip.hardEdge,
@@ -666,14 +659,12 @@ class _VideoMedia extends StatelessWidget {
             ),
           ),
 
-          if (isError) _VideoErrorOverlay(error: playerError),
+          if (showError) _VideoErrorOverlay(error: playerError),
 
-          // Play button overlay - show when no valid player or not playing, but not when loading
-          if (!isLoading && !isError && _shouldShowPlayButton(showPlayer))
-            _PlayButton(),
+          // Play button only appears after a user pause or a genuine autoplay stall.
+          if (showPlayButton) _PlayButton(),
 
-          // Loading indicator - show when loading (with or without controller)
-          if (isLoading)
+          if (showLoading)
             const Center(child: CircularProgressIndicator(color: Colors.white)),
         ],
       ),

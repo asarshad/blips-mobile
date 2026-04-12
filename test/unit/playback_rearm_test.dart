@@ -29,6 +29,19 @@ class _PlaybackRearmTestManager extends YoutubePlayerManagerBase {
   YTPlayerState getState(String url) => _states[url] ?? YTPlayerState.idle;
 
   @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    return switch (getState(url)) {
+      YTPlayerState.error => YTPlaybackOverlayState.error,
+      YTPlayerState.playing => YTPlaybackOverlayState.none,
+      YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
+      YTPlayerState.ready ||
+      YTPlayerState.loading ||
+      YTPlayerState.idle =>
+        YTPlaybackOverlayState.autoplayPending,
+    };
+  }
+
+  @override
   bool isPlaying(String url) => getState(url) == YTPlayerState.playing;
 
   @override

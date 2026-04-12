@@ -18,6 +18,7 @@ import '../test_utils/fake_feed_cache.dart';
 class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   final Map<String, YTPlayerState> _states = {};
   final Map<String, YTPlayerError?> _errors = {};
+  final Map<String, YTPlaybackOverlayState> _overlayStates = {};
   final List<String> calls = [];
 
   void setMockState(String url, YTPlayerState state) {
@@ -30,11 +31,33 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
     notifyListeners();
   }
 
+  void setMockOverlayState(String url, YTPlaybackOverlayState state) {
+    _overlayStates[url] = state;
+    notifyListeners();
+  }
+
   @override
   YoutubePlayerController? getController(String url) => null;
 
   @override
   YTPlayerState getState(String url) => _states[url] ?? YTPlayerState.idle;
+
+  @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final override = _overlayStates[url];
+    if (override != null) {
+      return override;
+    }
+    return switch (getState(url)) {
+      YTPlayerState.error => YTPlaybackOverlayState.error,
+      YTPlayerState.playing => YTPlaybackOverlayState.none,
+      YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
+      YTPlayerState.ready ||
+      YTPlayerState.loading ||
+      YTPlayerState.idle =>
+        YTPlaybackOverlayState.autoplayPending,
+    };
+  }
 
   @override
   YTPlayerError? getError(String url) => _errors[url];
@@ -220,6 +243,53 @@ void main() {
         contains('retry:${videoEntry.videoUrl}'),
         reason: 'Tap should retry errored playback sessions',
       );
+    });
+
+    testWidgets('autoplay-pending ready state shows spinner, not play button',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.autoplayPending,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    });
+
+    testWidgets('manual pause shows play button', (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.paused);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.manualPause,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('stalled autoplay shows play button instead of spinner',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
     testWidgets('falls back to source link when pausing a non-YouTube videoUrl',

@@ -32,6 +32,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     with WidgetsBindingObserver {
   static const Duration _recoveryInterval = Duration(milliseconds: 700);
   static const int _maxRecoveryAttempts = 4;
+  static const Duration _autoplayStallThreshold = Duration(seconds: 3);
 
   YoutubePlayerManager({AppDiagnosticsController? diagnostics})
       : _diagnostics = diagnostics {
@@ -47,6 +48,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   final Map<String, YTPlayerState> _states = {};
   final Map<String, YTPlayerError?> _errors = {};
   final Set<String> _pendingInit = {};
+  final Set<String> _userPausedUrls = {};
+  final Set<String> _autoplayStalledUrls = {};
+  final Map<String, Timer> _autoplayWatchdogs = {};
   Timer? _recoveryTimer;
   final AppDiagnosticsController? _diagnostics;
 
@@ -100,6 +104,35 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   @override
   YTPlayerError? getError(String url) => _errors[url];
 
+  @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final state = getState(url);
+    final controllerState = _controllers[url]?.value.playerState;
+
+    if (state == YTPlayerState.error) {
+      return YTPlaybackOverlayState.error;
+    }
+    if (controllerState == PlayerState.playing ||
+        state == YTPlayerState.playing) {
+      return YTPlaybackOverlayState.none;
+    }
+    if (_userPausedUrls.contains(url)) {
+      return YTPlaybackOverlayState.manualPause;
+    }
+    if (_autoplayStalledUrls.contains(url)) {
+      return YTPlaybackOverlayState.autoplayStalled;
+    }
+    final isCurrentAutoplayTarget = _currentActiveUrl == url;
+    final isAutoplayState = state == YTPlayerState.idle ||
+        state == YTPlayerState.loading ||
+        state == YTPlayerState.ready ||
+        state == YTPlayerState.paused;
+    if (isCurrentAutoplayTarget && isAutoplayState) {
+      return YTPlaybackOverlayState.autoplayPending;
+    }
+    return YTPlaybackOverlayState.none;
+  }
+
   /// Checks if a video is ready to play.
   @override
   bool isReady(String url) {
@@ -112,6 +145,67 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   /// Checks if a video is currently playing.
   @override
   bool isPlaying(String url) => _states[url] == YTPlayerState.playing;
+
+  void _clearUserPause(String url) {
+    _userPausedUrls.remove(url);
+  }
+
+  void _clearAutoplayStalled(String url) {
+    _autoplayStalledUrls.remove(url);
+  }
+
+  void _cancelAutoplayWatchdog(String url) {
+    _autoplayWatchdogs.remove(url)?.cancel();
+  }
+
+  void _cancelAllAutoplayWatchdogs() {
+    for (final timer in _autoplayWatchdogs.values) {
+      timer.cancel();
+    }
+    _autoplayWatchdogs.clear();
+  }
+
+  void _armAutoplayWatchdog(String url) {
+    _cancelAutoplayWatchdog(url);
+    if (_isDisposed ||
+        _currentActiveUrl != url ||
+        _userPausedUrls.contains(url)) {
+      return;
+    }
+    _autoplayWatchdogs[url] = Timer(_autoplayStallThreshold, () {
+      _autoplayWatchdogs.remove(url);
+      if (_isDisposed ||
+          _currentActiveUrl != url ||
+          _userPausedUrls.contains(url)) {
+        return;
+      }
+      final state = _states[url] ?? YTPlayerState.idle;
+      final controllerState = _controllers[url]?.value.playerState;
+      final alreadyPlaying = state == YTPlayerState.playing ||
+          controllerState == PlayerState.playing;
+      if (alreadyPlaying || state == YTPlayerState.error) {
+        return;
+      }
+      _autoplayStalledUrls.add(url);
+      _recordDiagnostics(
+        action: 'overlay',
+        stage: 'autoplay_stalled',
+        url: url,
+        level: AppDiagnosticsLevel.warning,
+        data: <String, Object?>{
+          'state': state.name,
+          'controllerState': controllerState?.name,
+        },
+      );
+      _notifySafe();
+    });
+  }
+
+  void _armAutoplayAttempt(String url) {
+    _clearUserPause(url);
+    _clearAutoplayStalled(url);
+    _armAutoplayWatchdog(url);
+  }
 
   /// Extracts YouTube video ID from various URL formats.
   @override
@@ -138,6 +232,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (videoId == null) {
       debugPrint('YoutubePlayerManager: Invalid YouTube URL: $url');
       _states[url] = YTPlayerState.error;
+      _cancelAutoplayWatchdog(url);
+      _clearAutoplayStalled(url);
       _errors[url] = const YTPlayerError(
         code: -1,
         message: 'Invalid YouTube URL',
@@ -243,6 +339,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // Handle errors
     if (error != 0) {
       _states[url] = YTPlayerState.error;
+      _cancelAutoplayWatchdog(url);
+      _clearAutoplayStalled(url);
       _errors[url] = YTPlayerError(
         code: error,
         message: _getErrorMessage(error),
@@ -304,6 +402,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     }
 
     if (newState == YTPlayerState.playing && _currentActiveUrl == url) {
+      _cancelAutoplayWatchdog(url);
+      _clearAutoplayStalled(url);
       _cancelRecovery();
     }
 
@@ -362,6 +462,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
           ' — ready=${_controllers[url]?.value.isReady}');
     }
     _currentActiveUrl = url;
+    _armAutoplayAttempt(url);
     _recordDiagnostics(
       action: 'playVideo',
       stage: 'start',
@@ -439,6 +540,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // Clear active intent only for the specific video being paused so that
     // other videos (e.g. in the pool) do not accidentally inherit it.
     if (_currentActiveUrl == url) _currentActiveUrl = null;
+    _cancelAutoplayWatchdog(url);
+    _clearAutoplayStalled(url);
+    _userPausedUrls.add(url);
     final controller = _controllers[url];
     if (controller != null) {
       controller.pause();
@@ -457,6 +561,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (kDebugMode) debugPrint('YoutubePlayerManager: pauseAll()');
     _cancelRecovery();
     _currentActiveUrl = null;
+    _cancelAllAutoplayWatchdogs();
+    _autoplayStalledUrls.clear();
     _recordDiagnostics(
       action: 'pauseAll',
       stage: 'issued',
@@ -480,6 +586,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (kDebugMode)
       debugPrint('YoutubePlayerManager: _pauseAllForBackground()');
     _cancelRecovery();
+    _cancelAllAutoplayWatchdogs();
     for (final entry in _controllers.entries) {
       entry.value.pause();
       _states[entry.key] = YTPlayerState.paused;
@@ -541,6 +648,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // runs, _handleControllerUpdate needs to see the correct target URL or
     // the video will be silently skipped.
     _currentActiveUrl = currentUrl;
+    _armAutoplayAttempt(currentUrl);
     _cancelRecovery();
 
     // Pause all other controllers synchronously to prevent audio bleed.
@@ -623,6 +731,12 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
       switch (action) {
         case ReelAutoplayRecoveryAction.stop:
+          if ((_states[currentUrl] ?? YTPlayerState.idle) !=
+                  YTPlayerState.playing &&
+              !_userPausedUrls.contains(currentUrl)) {
+            _autoplayStalledUrls.add(currentUrl);
+            _notifySafe();
+          }
           _cancelRecovery();
         case ReelAutoplayRecoveryAction.wait:
           _scheduleRecovery(currentUrl, attempt: attempt + 1);
@@ -649,6 +763,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // Clear pending init so retryVideo doesn't leave an orphaned listener.
     _pendingInit.remove(url);
     if (_currentActiveUrl == url) _currentActiveUrl = null;
+    _cancelAutoplayWatchdog(url);
+    _userPausedUrls.remove(url);
+    _autoplayStalledUrls.remove(url);
     final controller = _controllers.remove(url);
     if (controller != null) {
       try {
@@ -669,6 +786,9 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   void releaseAll() {
     _cancelRecovery();
     _currentActiveUrl = null;
+    _cancelAllAutoplayWatchdogs();
+    _userPausedUrls.clear();
+    _autoplayStalledUrls.clear();
     for (final entry in _controllers.entries) {
       try {
         entry.value.dispose();
@@ -697,6 +817,8 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
         'controllerExists': _controllers.containsKey(url),
       },
     );
+    _clearUserPause(url);
+    _clearAutoplayStalled(url);
     releaseVideo(url);
     await playVideo(url);
   }
@@ -734,6 +856,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     WidgetsBinding.instance.removeObserver(this);
     _isDisposed = true;
     _cancelRecovery();
+    _cancelAllAutoplayWatchdogs();
     for (final entry in _controllers.entries) {
       try {
         entry.value.dispose();

@@ -47,6 +47,7 @@ class ReelItem extends HookConsumerWidget {
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final controller = videoManager.getController(entry.link);
     final playerState = videoManager.getState(entry.link);
+    final overlayState = videoManager.getPlaybackOverlayState(entry.link);
     final playerError = videoManager.getError(entry.link);
     final isSaved = ref.watch(savedVideoIdsProvider).contains(entry.id);
     final showThumbnail = useState(true);
@@ -209,9 +210,11 @@ class ReelItem extends HookConsumerWidget {
       };
     }, const []);
 
-    final isLoading = playerState == YTPlayerState.loading ||
-        playerState == YTPlayerState.idle;
-    final isError = playerState == YTPlayerState.error;
+    final isLoading = overlayState == YTPlaybackOverlayState.autoplayPending;
+    final isError = overlayState == YTPlaybackOverlayState.error;
+    final showPlayIndicator =
+        overlayState == YTPlaybackOverlayState.manualPause ||
+            overlayState == YTPlaybackOverlayState.autoplayStalled;
 
     useEffect(() {
       if (!isActive || !isVisible || !isLoading) {
@@ -265,13 +268,9 @@ class ReelItem extends HookConsumerWidget {
               ),
             ),
 
-            // Play/pause indicator.
-            // Show when paused (user tapped pause) or ready (auto-play
-            // hasn't fired yet, tap re-arms it).  Intentionally hidden
-            // during loading/idle so the spinner is the only indicator.
-            if (isActive &&
-                (playerState == YTPlayerState.paused ||
-                    playerState == YTPlayerState.ready))
+            // Show the play affordance only after a user pause or when
+            // autoplay recovery has genuinely stalled.
+            if (isActive && showPlayIndicator)
               const IgnorePointer(child: _PlayIndicator()),
 
             // Loading Indicator
