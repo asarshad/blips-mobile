@@ -7,6 +7,7 @@ import 'package:blips_mobile/features/feed/presentation/cards/article_card.dart'
 import 'package:blips_mobile/features/feed/presentation/widgets/article_image_viewer.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/share_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -21,6 +22,7 @@ void main() {
   late UrlLauncherPlatform originalUrlLauncher;
   late RecordingUrlLauncherPlatform recordingUrlLauncher;
   late RecordingSharePlatform recordingSharePlatform;
+  late List<MethodCall> platformCalls;
 
   FakeBackendApiClient delayedInteractionApi() {
     return FakeBackendApiClient(
@@ -54,6 +56,12 @@ void main() {
     recordingUrlLauncher = RecordingUrlLauncherPlatform();
     UrlLauncherPlatform.instance = recordingUrlLauncher;
     recordingSharePlatform = RecordingSharePlatform();
+    platformCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      platformCalls.add(call);
+      return null;
+    });
     ShareService.debugOverride = ShareService.test(
       sharePlus: buildRecordingSharePlus(recordingSharePlatform),
       captureOverride: ({
@@ -74,7 +82,17 @@ void main() {
   tearDown(() {
     UrlLauncherPlatform.instance = originalUrlLauncher;
     ShareService.debugOverride = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
   });
+
+  int selectionClickCount() => platformCalls
+      .where(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      )
+      .length;
 
   Future<void> settleDelayedInteraction(WidgetTester tester) async {
     await tester.pump(const Duration(seconds: 5));
@@ -99,6 +117,7 @@ void main() {
 
     expect(recordingUrlLauncher.launches, hasLength(1));
     expect(recordingUrlLauncher.launches.single.url, article.url);
+    expect(selectionClickCount(), 0);
 
     await settleDelayedInteraction(tester);
   });
@@ -116,6 +135,7 @@ void main() {
     expect(find.byType(ArticleImageViewer), findsOneWidget);
     expect(find.byKey(const Key('article-image-viewer-close')), findsOneWidget);
     expect(find.byType(PhotoView), findsOneWidget);
+    expect(selectionClickCount(), 0);
   });
 
   testWidgets('image viewer closes from the close button', (tester) async {
@@ -156,6 +176,7 @@ void main() {
     expect(params.subject, article.title);
     expect(params.text, contains(article.url));
     expect(params.text, contains('Shared via Blips News'));
+    expect(selectionClickCount(), 1);
 
     await settleDelayedInteraction(tester);
   });
@@ -168,6 +189,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
+    expect(selectionClickCount(), 1);
 
     final body = api.requests
         .lastWhere((request) => request.method == 'POST')
@@ -186,6 +208,7 @@ void main() {
 
     expect(find.text('What do you think?'), findsOneWidget);
     expect(find.text('Ask something else...'), findsOneWidget);
+    expect(selectionClickCount(), 1);
 
     await settleDelayedInteraction(tester);
   });
@@ -201,6 +224,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.byType(ChatDetailPage), findsOneWidget);
+    expect(selectionClickCount(), 2);
 
     await settleDelayedInteraction(tester);
   });
@@ -216,6 +240,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.byType(ChatDetailPage), findsOneWidget);
+    expect(selectionClickCount(), 2);
 
     await settleDelayedInteraction(tester);
   });

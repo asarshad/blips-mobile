@@ -5,6 +5,7 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/share_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -17,6 +18,7 @@ void main() {
   late UrlLauncherPlatform originalUrlLauncher;
   late RecordingUrlLauncherPlatform recordingUrlLauncher;
   late RecordingSharePlatform recordingSharePlatform;
+  late List<MethodCall> platformCalls;
 
   FakeBackendApiClient delayedInteractionApi() {
     return FakeBackendApiClient(
@@ -44,6 +46,12 @@ void main() {
     recordingUrlLauncher = RecordingUrlLauncherPlatform();
     UrlLauncherPlatform.instance = recordingUrlLauncher;
     recordingSharePlatform = RecordingSharePlatform();
+    platformCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      platformCalls.add(call);
+      return null;
+    });
     ShareService.debugOverride = ShareService.test(
       sharePlus: buildRecordingSharePlus(recordingSharePlatform),
       captureOverride: ({
@@ -64,7 +72,17 @@ void main() {
   tearDown(() {
     UrlLauncherPlatform.instance = originalUrlLauncher;
     ShareService.debugOverride = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
   });
+
+  int selectionClickCount() => platformCalls
+      .where(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      )
+      .length;
 
   Future<void> settleDelayedInteraction(WidgetTester tester) async {
     await tester.pump(const Duration(seconds: 5));
@@ -96,6 +114,7 @@ void main() {
     expect(params.subject, reel.title);
     expect(params.text, contains(reel.link));
     expect(params.text, contains('Shared via Blips News'));
+    expect(selectionClickCount(), 1);
 
     await settleDelayedInteraction(tester);
   });
@@ -111,6 +130,7 @@ void main() {
       recordingUrlLauncher.launches.single.url,
       'https://www.youtube.com/shorts/abc123xyz99',
     );
+    expect(selectionClickCount(), 1);
 
     await settleDelayedInteraction(tester);
   });
