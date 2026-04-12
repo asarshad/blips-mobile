@@ -19,6 +19,7 @@ import 'package:blips_mobile/features/feed/presentation/reels/reels.dart';
 import 'package:blips_mobile/features/feed/presentation/saved/saved_items_page.dart';
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -108,6 +109,19 @@ class FeedShellPage extends HookConsumerWidget {
         ref.read(videosFeedProvider.notifier).clearUnavailableTargetMessage();
       },
     );
+    ref.listen<DateTime?>(
+      articleFeedDirtyAtProvider,
+      (previous, next) {
+        if (next == null || next == previous || currentIndex.value != 0) {
+          return;
+        }
+        Future.microtask(() async {
+          await ref
+              .read(articlesFeedProvider.notifier)
+              .handlePushFreshnessHint();
+        });
+      },
+    );
 
     // Warm reels data in background (controller warm-up is owned by Reels page).
     _useBackgroundReelsWarmup(ref);
@@ -127,6 +141,9 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       unawaited(pushController.ensureStarted());
       unawaited(pushController.onEligibleShellEntered());
+      Future.microtask(() {
+        ref.read(articleColdLaunchPendingProvider.notifier).state = false;
+      });
       return null;
     }, const []);
 
@@ -207,6 +224,10 @@ class FeedShellPage extends HookConsumerWidget {
       return;
     }
 
+    if (previousIndex == 0 && index != 0) {
+      ref.read(articlesFeedProvider.notifier).cancelPushFreshnessHint();
+    }
+
     currentIndex.value = index;
 
     if (index == 3) {
@@ -238,7 +259,7 @@ class FeedShellPage extends HookConsumerWidget {
 
     switch (index) {
       case 0:
-        unawaited(ref.read(articlesFeedProvider.notifier).refreshSilently());
+        unawaited(ref.read(articlesFeedProvider.notifier).handleTabActivated());
         break;
       case 1:
         unawaited(ref.read(videosFeedProvider.notifier).refreshSilently());
@@ -389,7 +410,7 @@ class FeedShellPage extends HookConsumerWidget {
 
           unawaited(
             Future.wait<void>([
-              ref.read(articlesFeedProvider.notifier).refreshSilently(),
+              ref.read(articlesFeedProvider.notifier).handleAppResume(),
               ref.read(videosFeedProvider.notifier).refreshSilently(),
               ref.read(reelsFeedProvider.notifier).refreshSilently(),
             ]),

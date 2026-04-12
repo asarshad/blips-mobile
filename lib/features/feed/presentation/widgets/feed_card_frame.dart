@@ -1,6 +1,7 @@
 import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/freshness_label.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/press_feedback_tap.dart';
 import 'package:flutter/material.dart';
 
 /// Information about content freshness for display.
@@ -553,22 +554,31 @@ class _ChatButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return PressFeedbackTap(
       onTap: onChat,
-      customBorder: const CircleBorder(),
-      child: Padding(
-        padding: AppSpacing.allSm,
-        child: Container(
-          width: AppSizes.avatarSm,
-          height: AppSizes.avatarSm,
-          decoration: BoxDecoration(
-            color: colorScheme.primary,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.auto_awesome_rounded,
-            color: colorScheme.onPrimary,
-            size: AppSizes.iconSm,
+      builder: (context, pressState) => AnimatedScale(
+        scale: pressState.scale,
+        duration: pressState.duration,
+        curve: pressState.curve,
+        child: InkWell(
+          onTap: pressState.onTap,
+          onHighlightChanged: pressState.onHighlightChanged,
+          customBorder: const CircleBorder(),
+          child: Padding(
+            padding: AppSpacing.allSm,
+            child: Container(
+              width: AppSizes.avatarSm,
+              height: AppSizes.avatarSm,
+              decoration: BoxDecoration(
+                color: colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                color: colorScheme.onPrimary,
+                size: AppSizes.iconSm,
+              ),
+            ),
           ),
         ),
       ),
@@ -664,26 +674,36 @@ class _ActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isActive
-                ? colorScheme.primary.withValues(alpha: 0.14)
-                : colorScheme.surface.withValues(alpha: 0.92),
+    return PressFeedbackTap(
+      onTap: onTap,
+      builder: (context, pressState) => AnimatedScale(
+        scale: pressState.scale,
+        duration: pressState.duration,
+        curve: pressState.curve,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: pressState.onTap,
+            onHighlightChanged: pressState.onHighlightChanged,
             borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            icon,
-            color:
-                isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
-            size: AppSizes.iconSm,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? colorScheme.primary.withValues(alpha: 0.14)
+                    : colorScheme.surface.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                icon,
+                color: isActive
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
+                size: AppSizes.iconSm,
+              ),
+            ),
           ),
         ),
       ),

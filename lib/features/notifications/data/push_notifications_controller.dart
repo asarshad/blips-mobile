@@ -4,6 +4,7 @@ import 'package:blips_mobile/core/config/remote_app_config.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/core/network/dio_provider.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
+import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:blips_mobile/features/notifications/domain/notification_target.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -282,6 +283,9 @@ class PushNotificationsController {
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final target = NotificationTarget.tryFromMessageData(message.data);
     if (target == null) return;
+    if (target.surface == NotificationSurface.articles) {
+      _ref.read(articleFeedDirtyAtProvider.notifier).state = DateTime.now();
+    }
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:

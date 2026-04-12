@@ -33,9 +33,25 @@ class ChatConversation {
 class ChatResponse {
   final String content;
   final int remainingDaily;
+  final int? remainingArticle;
+  final String? responseId;
+  final bool usedCachedStarterResponse;
 
   const ChatResponse({
     required this.content,
     required this.remainingDaily,
+    this.remainingArticle,
+    this.responseId,
+    this.usedCachedStarterResponse = false,
+  });
+}
+
+class ChatQuotaStatus {
+  final int remainingDaily;
+  final int? remainingArticle;
+
+  const ChatQuotaStatus({
+    required this.remainingDaily,
+    this.remainingArticle,
   });
 }

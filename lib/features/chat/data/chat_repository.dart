@@ -1,4 +1,5 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
+import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
@@ -8,9 +9,15 @@ import 'package:uuid/uuid.dart';
 
 class ChatRepository {
   final Dio _dio;
-  final DatabaseHelper _db;
+  final ChatLocalStore _db;
+  final AppDiagnosticsController? _diagnostics;
 
-  ChatRepository(this._dio) : _db = DatabaseHelper.instance;
+  ChatRepository(
+    this._dio, {
+    ChatLocalStore? localStore,
+    AppDiagnosticsController? diagnostics,
+  })  : _db = localStore ?? DatabaseHelper.instance,
+        _diagnostics = diagnostics;
 
   Future<List<ChatConversation>> fetchAllChats() async {
     try {
@@ -138,18 +145,42 @@ class ChatRepository {
     );
   }
 
-  Future<int> getRemainingDailyMessages() async {
+  Future<ChatQuotaStatus> getQuotaStatus(int articleId) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>('/usage');
-      return response.data?['remaining_daily_messages'] as int? ?? 5;
+      final contentItemId = articleId < 0 ? -articleId : articleId;
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/usage',
+        queryParameters: <String, dynamic>{
+          'content_item_id': contentItemId,
+        },
+      );
+      return ChatQuotaStatus(
+        remainingDaily:
+            response.data?['remaining_daily_messages'] as int? ?? 15,
+        remainingArticle: response.data?['remaining_article_messages'] as int?,
+      );
     } catch (e) {
       print('Repo: Failed to fetch usage: $e');
-      return 5; // Default to allow chatting if check fails (e.g. offline)
+      return const ChatQuotaStatus(
+        remainingDaily: 15,
+        remainingArticle: null,
+      );
     }
   }
 
-  Future<ChatResponse> sendMessage(int articleId, String message) async {
+  Future<int> getRemainingDailyMessages() async {
+    final quota = await getQuotaStatus(0);
+    return quota.remainingDaily;
+  }
+
+  Future<ChatResponse> sendMessage(
+    int articleId,
+    String message, {
+    bool starterPrompt = false,
+  }) async {
     print('Repo: Sending message for article $articleId');
+    final lastResponseId = await _db.getLastResponseId(articleId);
+
     // 1. Save user message locally
     final userMsg = ChatMessage(
       id: const Uuid().v4(),
@@ -163,31 +194,24 @@ class ChatRepository {
     // The backend expects 'history' to be previous messages.
     final history = await _db.getMessages(articleId);
     final previousHistory = history.where((m) => m.id != userMsg.id).toList();
+    final hasPreviousResponseId =
+        lastResponseId != null && lastResponseId.trim().isNotEmpty;
+    final span = _diagnostics?.startSpan(
+      scope: 'chat',
+      action: 'send_message',
+      surface: articleId < 0 ? 'videos' : 'articles',
+      data: <String, Object?>{
+        'articleId': articleId,
+        'historyLength': previousHistory.length,
+        'hasPreviousResponseId': hasPreviousResponseId,
+        'isFollowUp': previousHistory.isNotEmpty,
+      },
+    );
 
     // 3. Call API
     try {
       final isVideo = articleId < 0;
       final contentItemId = isVideo ? -articleId : articleId;
-
-      try {
-        await _dio.post<void>(
-          '/session/interactions',
-          data: {
-            'content_item_id': contentItemId,
-            'event_type': 'CHAT_MESSAGE',
-            'extra_data': {
-              'surface': isVideo ? 'videos' : 'articles',
-            },
-          },
-        );
-      } catch (e, stack) {
-        logger.warning(
-          'Failed to record chat message interaction',
-          category: LogCategory.network,
-          error: e,
-          stackTrace: stack,
-        );
-      }
 
       final payload = <String, dynamic>{
         'message': message,
@@ -199,7 +223,11 @@ class ChatRepository {
                   'content': m.content,
                 })
             .toList(),
+        'starter_prompt': starterPrompt,
       };
+      if (hasPreviousResponseId) {
+        payload['previous_response_id'] = lastResponseId;
+      }
 
       final response = await _dio.post<Map<String, dynamic>>(
         '/ai/respond',
@@ -207,7 +235,11 @@ class ChatRepository {
       );
 
       final aiContent = response.data?['response'] as String;
+      final responseId = response.data?['response_id'] as String?;
       final remainingDaily = response.data?['remaining_daily'] as int? ?? 0;
+      final remainingArticle = response.data?['remaining_article'] as int?;
+      final usedCachedStarterResponse =
+          response.data?['used_cached_starter_response'] as bool? ?? false;
 
       // 4. Save AI response locally
       final aiMsg = ChatMessage(
@@ -217,13 +249,75 @@ class ChatRepository {
         timestamp: DateTime.now(),
       );
       await _db.insertMessage(articleId, aiMsg);
+      await _db.setLastResponseId(articleId, responseId);
+      if (!usedCachedStarterResponse) {
+        try {
+          await _dio.post<void>(
+            '/session/interactions',
+            data: {
+              'content_item_id': contentItemId,
+              'event_type': 'CHAT_MESSAGE',
+              'extra_data': {
+                'surface': isVideo ? 'videos' : 'articles',
+              },
+            },
+          );
+        } catch (e, stack) {
+          logger.warning(
+            'Failed to record chat message interaction',
+            category: LogCategory.network,
+            error: e,
+            stackTrace: stack,
+          );
+        }
+      }
       print('Repo: AI response saved');
+      span?.success(
+        data: <String, Object?>{
+          'statusCode': response.statusCode,
+          'responseIdPresent': responseId != null && responseId.isNotEmpty,
+          'remainingDaily': remainingDaily,
+          'remainingArticle': remainingArticle,
+          'starterPrompt': starterPrompt,
+          'usedCachedStarterResponse': usedCachedStarterResponse,
+        },
+      );
 
-      return ChatResponse(content: aiContent, remainingDaily: remainingDaily);
+      return ChatResponse(
+        content: aiContent,
+        remainingDaily: remainingDaily,
+        remainingArticle: remainingArticle,
+        responseId: responseId,
+        usedCachedStarterResponse: usedCachedStarterResponse,
+      );
     } catch (e) {
       print('Repo: API call failed: $e');
-      // We keep the user message in the DB so the conversation is preserved
-      // even if the AI fails to respond (e.g. quota exceeded or network error).
+      final detail = e is DioException && e.response?.data is Map
+          ? (e.response?.data as Map)['detail']
+          : null;
+      if (e is DioException && e.response?.statusCode == 429) {
+        try {
+          await _db.deleteMessage(userMsg.id);
+        } catch (deleteError, deleteStack) {
+          logger.warning(
+            'Failed to remove unsent local message after quota rejection',
+            category: LogCategory.app,
+            error: deleteError,
+            stackTrace: deleteStack,
+          );
+        }
+      }
+      span?.failure(
+        e,
+        stackTrace: e is DioException ? e.stackTrace : null,
+        data: <String, Object?>{
+          'historyLength': previousHistory.length,
+          'hasPreviousResponseId': hasPreviousResponseId,
+          'starterPrompt': starterPrompt,
+          'statusCode': e is DioException ? e.response?.statusCode : null,
+          'serverDetail': detail?.toString(),
+        },
+      );
       rethrow;
     }
   }

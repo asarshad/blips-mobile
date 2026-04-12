@@ -6,6 +6,7 @@ import 'package:blips_mobile/features/chat/presentation/chat_detail_page.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/press_feedback_tap.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -117,43 +118,55 @@ class _ChatBubble extends StatelessWidget {
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: InkWell(
+        child: PressFeedbackTap(
           onTap: () => _navigateToChat(context),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(AppRadius.xl + 4),
-            topRight: Radius.circular(AppRadius.xl + 4),
-            bottomLeft: Radius.circular(AppRadius.xl + 4),
-            bottomRight: Radius.circular(AppRadius.sm),
-          ),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.md,
-            ),
-            decoration: BoxDecoration(
-              color: primary.withValues(alpha: 0.95),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.xl + 4),
-                topRight: Radius.circular(AppRadius.xl + 4),
-                bottomLeft: Radius.circular(AppRadius.xl + 4),
-                bottomRight: Radius.circular(AppRadius.sm),
-              ),
-              border: Border.all(
-                color: primary.withValues(alpha: 0.5),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+          builder: (context, pressState) => AnimatedScale(
+            scale: pressState.scale,
+            duration: pressState.duration,
+            curve: pressState.curve,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: pressState.onTap,
+                onHighlightChanged: pressState.onHighlightChanged,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.xl + 4),
+                  topRight: Radius.circular(AppRadius.xl + 4),
+                  bottomLeft: Radius.circular(AppRadius.xl + 4),
+                  bottomRight: Radius.circular(AppRadius.sm),
                 ),
-              ],
-            ),
-            child: Text(
-              question,
-              style: textTheme.bodyMedium?.copyWith(
-                color: onPrimary,
-                fontWeight: FontWeight.w500,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(AppRadius.xl + 4),
+                      topRight: Radius.circular(AppRadius.xl + 4),
+                      bottomLeft: Radius.circular(AppRadius.xl + 4),
+                      bottomRight: Radius.circular(AppRadius.sm),
+                    ),
+                    border: Border.all(
+                      color: primary.withValues(alpha: 0.5),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    question,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: onPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -173,6 +186,7 @@ class _ChatBubble extends StatelessWidget {
         builder: (context) => ChatDetailPage(
           article: articleEntry,
           initialPrompt: question,
+          initialPromptIsStarter: true,
         ),
       ),
     );
@@ -205,51 +219,63 @@ class _AskCustomBubble extends StatelessWidget {
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: InkWell(
+        child: PressFeedbackTap(
           onTap: () => _navigateToChat(context),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(AppRadius.xl + 4),
-            topRight: Radius.circular(AppRadius.xl + 4),
-            bottomLeft: Radius.circular(AppRadius.xl + 4),
-            bottomRight: Radius.circular(AppRadius.sm),
-          ),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.md,
-            ),
-            decoration: BoxDecoration(
+          builder: (context, pressState) => AnimatedScale(
+            scale: pressState.scale,
+            duration: pressState.duration,
+            curve: pressState.curve,
+            child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.xl + 4),
-                topRight: Radius.circular(AppRadius.xl + 4),
-                bottomLeft: Radius.circular(AppRadius.xl + 4),
-                bottomRight: Radius.circular(AppRadius.sm),
-              ),
-              border: Border.all(
-                color: primary.withValues(alpha: 0.6),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 16,
-                  color: primary.withValues(alpha: 0.9),
+              child: InkWell(
+                onTap: pressState.onTap,
+                onHighlightChanged: pressState.onHighlightChanged,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.xl + 4),
+                  topRight: Radius.circular(AppRadius.xl + 4),
+                  bottomLeft: Radius.circular(AppRadius.xl + 4),
+                  bottomRight: Radius.circular(AppRadius.sm),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Flexible(
-                  child: Text(
-                    'Ask something else...',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: primary.withValues(alpha: 0.9),
-                      fontWeight: FontWeight.w500,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(AppRadius.xl + 4),
+                      topRight: Radius.circular(AppRadius.xl + 4),
+                      bottomLeft: Radius.circular(AppRadius.xl + 4),
+                      bottomRight: Radius.circular(AppRadius.sm),
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    border: Border.all(
+                      color: primary.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 16,
+                        color: primary.withValues(alpha: 0.9),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          'Ask something else...',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: primary.withValues(alpha: 0.9),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),

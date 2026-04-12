@@ -13,6 +13,7 @@ import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/domain/feed_freshness.dart';
+import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 /// Provides a singleton [FeedRepository].
@@ -131,7 +132,8 @@ class ArticlesNotifier
     this._diagnostics,
     this._ref,
     this._articleViewThreshold,
-  ) : super(const AsyncValue.loading()) {
+  )   : _coldLaunchInitialLoad = _ref.read(articleColdLaunchPendingProvider),
+        super(const AsyncValue.loading()) {
     _loadInitial();
     _startPolling();
   }
@@ -142,6 +144,7 @@ class ArticlesNotifier
   final AppDiagnosticsController _diagnostics;
   final Ref _ref;
   final Duration _articleViewThreshold;
+  final bool _coldLaunchInitialLoad;
   final FeedSurface _surface = FeedSurface.articles;
   int _page = 1;
   bool _hasMore = true;
@@ -151,8 +154,10 @@ class ArticlesNotifier
   Future<void>? _loadMoreFuture;
   Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
+  Timer? _pushHintDebounceTimer;
   static const int _limit = 15;
-  static const Duration _pollInterval = Duration(seconds: 90);
+  static const Duration _pollInterval = Duration(minutes: 5);
+  static const Duration _pushHintDebounce = Duration(seconds: 2);
   Set<int> _newSinceLastSeenIds = <int>{};
   List<int> _currentHeadBaselineIds = const <int>[];
 
@@ -160,6 +165,8 @@ class ArticlesNotifier
   int _currentItemIndex = 0;
   bool _canContinueRemotely = true;
   String? _currentFeedVersion;
+  DateTime? _currentNewestPublishedAt;
+  DateTime? _currentNewestCreatedAt;
   String? _currentFreshnessStrategy;
   int? _currentResumeContinuationWindowMinutes;
   bool _currentResumeSnapshotAfterRemoteWindow = true;
@@ -349,6 +356,15 @@ class ArticlesNotifier
     if (!mounted) return;
     await _loadLastSeenCutoff();
 
+    if (_coldLaunchInitialLoad) {
+      final loadedFresh = await _fetchFreshSessionFromNetwork();
+      if (loadedFresh) {
+        _markFeedSeenNowInBackground();
+        _clearDirtyHint();
+        return;
+      }
+    }
+
     final restore = await _sessionStore.prepareRestore(_surface);
     if (restore.resumeSnapshot != null) {
       _applyResumedSnapshot(restore.resumeSnapshot!);
@@ -371,7 +387,7 @@ class ArticlesNotifier
         ),
       );
       _markFeedSeenNowInBackground();
-      unawaited(_refreshInBackground());
+      unawaited(_refreshInBackground(trigger: 'initial_restore'));
       return;
     }
 
@@ -454,6 +470,8 @@ class ArticlesNotifier
         hasMore: page.hasMore,
         inventoryState: page.inventoryState,
         feedVersion: page.feedVersion,
+        newestPublishedAt: page.newestPublishedAt,
+        newestCreatedAt: page.newestCreatedAt,
         freshnessStrategy: page.freshnessStrategy,
         resumeContinuationWindowMinutes: page.resumeContinuityWindowMinutes,
         resumeSnapshotAfterRemoteWindow: page.resumeSnapshotAfterRemoteWindow,
@@ -462,6 +480,7 @@ class ArticlesNotifier
       await _persistActiveSession(
         pendingNewCount: 0,
       );
+      _clearDirtyHint();
       span?.success(
         data: <String, Object?>{
           'resultCount': articles.length,
@@ -484,7 +503,9 @@ class ArticlesNotifier
     }
   }
 
-  Future<bool> _refreshInBackground() async {
+  Future<bool> _refreshInBackground({
+    String trigger = 'background',
+  }) async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null) {
@@ -495,69 +516,25 @@ class ArticlesNotifier
       'backgroundRefresh',
       data: <String, Object?>{
         'baselineCount': _currentHeadBaselineIds.length,
+        'trigger': trigger,
       },
     );
 
     try {
-      final freshPage = await _repository.previewArticlesHead(size: _limit);
-      final freshItems =
-          freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
+      final metadata = await _repository.fetchArticlesMetadata();
       if (!mounted) return false;
-      if (freshItems.isNotEmpty) {
-        _cacheInBackground(freshItems);
-        _mergeFreshArticleMetadata(freshItems);
-      }
-
-      final freshHeadIds = _headBaselineIds(freshItems, _limit);
-      final baseline = _currentHeadBaselineIds;
-      final freshFeedVersion = freshPage.feedVersion;
-      final hasPendingVersion =
-          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
-      final isNewPendingVersion =
-          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
-      final pendingNewCount = hasPendingVersion
-          ? countLeadingHeadNewItems(
-              baselineIds: baseline,
-              freshHeadIds: freshHeadIds,
-            )
-          : 0;
-      if (hasPendingVersion && pendingNewCount > 0) {
-        _pendingFeedVersion = freshFeedVersion;
-        _pendingPrefetchedPage = freshPage;
-        if (isNewPendingVersion) {
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'feed_version_changed',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-            ),
-          );
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'new_content_available',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-              count: pendingNewCount,
-            ),
-          );
-        }
+      final hasFreshHead = _metadataSuggestsNewHead(metadata);
+      if (hasFreshHead) {
+        final freshPage = await _repository.previewArticlesHead(size: _limit);
+        await _stagePendingFreshPage(freshPage);
       } else {
-        _pendingFeedVersion = null;
-        _pendingPrefetchedPage = null;
+        _clearDirtyHint();
       }
-      _setUiState(
-        _uiState.copyWith(
-          pendingNewCount: pendingNewCount,
-          pendingActionKind: PendingFeedActionKind.newItems,
-        ),
-      );
-      await _persistActiveSession(
-        pendingNewCount: pendingNewCount,
-      );
       span?.success(
         data: <String, Object?>{
-          'freshCount': freshItems.length,
-          'pendingNewCount': pendingNewCount,
+          'feedVersion': metadata.feedVersion,
+          'hasFreshHead': hasFreshHead,
+          'pendingNewCount': _uiState.pendingNewCount,
         },
       );
       return true;
@@ -569,6 +546,108 @@ class ArticlesNotifier
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  bool _metadataSuggestsNewHead(FeedHeadMetadata metadata) {
+    final referenceCreatedAt = _currentNewestCreatedAt;
+    final newestCreatedAt = metadata.newestCreatedAt;
+    if (newestCreatedAt != null && referenceCreatedAt != null) {
+      return newestCreatedAt.isAfter(referenceCreatedAt);
+    }
+
+    final latestKnownVersion = _pendingFeedVersion ?? _currentFeedVersion;
+    final freshFeedVersion = metadata.feedVersion;
+    return freshFeedVersion != null && freshFeedVersion != latestKnownVersion;
+  }
+
+  Future<void> _stagePendingFreshPage(
+    FeedPageResult<FeedEntry> freshPage,
+  ) async {
+    final freshItems =
+        freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
+    if (!mounted) return;
+    if (freshItems.isNotEmpty) {
+      _cacheInBackground(freshItems);
+      _mergeFreshArticleMetadata(freshItems);
+    }
+
+    final freshHeadIds = _headBaselineIds(freshItems, _limit);
+    final baseline = _currentHeadBaselineIds;
+    final freshFeedVersion = freshPage.feedVersion;
+    final hasPendingVersion =
+        freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+    final isNewPendingVersion =
+        hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+    final pendingNewCount = hasPendingVersion
+        ? countLeadingHeadNewItems(
+            baselineIds: baseline,
+            freshHeadIds: freshHeadIds,
+          )
+        : 0;
+    if (hasPendingVersion && pendingNewCount > 0) {
+      _pendingFeedVersion = freshFeedVersion;
+      _pendingPrefetchedPage = freshPage;
+      if (isNewPendingVersion) {
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'feed_version_changed',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+          ),
+        );
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'new_content_available',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+            count: pendingNewCount,
+          ),
+        );
+      }
+    } else {
+      _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: pendingNewCount,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    _clearDirtyHint();
+    await _persistActiveSession(
+      pendingNewCount: pendingNewCount,
+    );
+  }
+
+  Future<void> _refreshOnResumeIfNeeded() async {
+    final activeSession = await _sessionStore.getActiveSession(_surface);
+    final lastActiveAt = activeSession?.lastActiveAt.toUtc();
+    final now = DateTime.now().toUtc();
+    final age = lastActiveAt == null ? null : now.difference(lastActiveAt);
+    final hasDirtyHint = _ref.read(articleFeedDirtyAtProvider) != null;
+    if (!hasDirtyHint &&
+        age != null &&
+        age <= kArticleContinuationFreshWindow) {
+      return;
+    }
+
+    final metadata = await _repository.fetchArticlesMetadata();
+    if (!mounted) return;
+    if (!_metadataSuggestsNewHead(metadata)) {
+      _clearDirtyHint();
+      return;
+    }
+    final refreshed = await _fetchFreshSessionFromNetwork(
+      preserveVisibleState: state.hasValue,
+    );
+    if (refreshed) {
+      _clearDirtyHint();
+    }
+  }
+
+  void _clearDirtyHint() {
+    _ref.read(articleFeedDirtyAtProvider.notifier).state = null;
   }
 
   // -- public API ----------------------------------------------------------
@@ -704,11 +783,35 @@ class ArticlesNotifier
 
   /// Background refresh without spinners or index reset.
   Future<void> refreshSilently() async {
-    await _refreshInBackground();
+    await _refreshInBackground(trigger: 'silent');
+  }
+
+  Future<void> handleAppResume() async {
+    await _refreshOnResumeIfNeeded();
+  }
+
+  Future<void> handleTabActivated() async {
+    if (_ref.read(articleFeedDirtyAtProvider) != null) {
+      await _refreshInBackground(trigger: 'tab_activation');
+      return;
+    }
+    await refreshSilently();
+  }
+
+  Future<void> handlePushFreshnessHint() async {
+    _pushHintDebounceTimer?.cancel();
+    _pushHintDebounceTimer = Timer(_pushHintDebounce, () async {
+      if (!mounted || _ref.read(articleFeedDirtyAtProvider) == null) return;
+      unawaited(_refreshInBackground(trigger: 'push_hint'));
+    });
+  }
+
+  void cancelPushFreshnessHint() {
+    _pushHintDebounceTimer?.cancel();
   }
 
   Future<bool> refreshForRetap() async {
-    final ok = await _refreshInBackground();
+    final ok = await _refreshInBackground(trigger: 'retap');
     if (!ok || !mounted) return ok;
     if (_uiState.hasPendingNewItems) return true;
     final items = state.valueOrNull;
@@ -795,6 +898,8 @@ class ArticlesNotifier
           fallbackIndex: snapshot.lastViewedIndex,
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
+    _currentNewestPublishedAt = _newestPublishedAtFor(articles);
+    _currentNewestCreatedAt = _newestCreatedAtFor(articles);
     _currentFreshnessStrategy =
         snapshot.lastFreshnessStrategy ?? kFeedFreshnessStrategyCurrent;
     _currentResumeContinuationWindowMinutes =
@@ -834,6 +939,8 @@ class ArticlesNotifier
     required bool hasMore,
     required FeedInventoryState inventoryState,
     required String? feedVersion,
+    required DateTime? newestPublishedAt,
+    required DateTime? newestCreatedAt,
     required String? freshnessStrategy,
     required int? resumeContinuationWindowMinutes,
     required bool resumeSnapshotAfterRemoteWindow,
@@ -846,6 +953,9 @@ class ArticlesNotifier
     _currentHeadBaselineIds = _headBaselineIds(articles, _limit);
     _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
+    _currentNewestPublishedAt =
+        newestPublishedAt ?? _newestPublishedAtFor(articles);
+    _currentNewestCreatedAt = newestCreatedAt ?? _newestCreatedAtFor(articles);
     _currentFreshnessStrategy =
         freshnessStrategy ?? kFeedFreshnessStrategyCurrent;
     _currentResumeContinuationWindowMinutes = resumeContinuationWindowMinutes;
@@ -882,6 +992,28 @@ class ArticlesNotifier
     if (!didUpdate) return;
     state = AsyncValue.data(merged);
     _updateNewSinceLastSeen(merged);
+  }
+
+  DateTime? _newestPublishedAtFor(List<ArticleFeedEntry> items) {
+    DateTime? newest;
+    for (final item in items) {
+      final publishedAt = item.publishedAt.toUtc();
+      if (newest == null || publishedAt.isAfter(newest)) {
+        newest = publishedAt;
+      }
+    }
+    return newest;
+  }
+
+  DateTime? _newestCreatedAtFor(List<ArticleFeedEntry> items) {
+    DateTime? newest;
+    for (final item in items) {
+      final createdAt = (item.addedAt ?? item.publishedAt).toUtc();
+      if (newest == null || createdAt.isAfter(newest)) {
+        newest = createdAt;
+      }
+    }
+    return newest;
   }
 
   bool _articleNeedsRefresh(
@@ -1039,6 +1171,8 @@ class ArticlesNotifier
           hasMore: prefetchedPage.hasMore,
           inventoryState: prefetchedPage.inventoryState,
           feedVersion: prefetchedPage.feedVersion,
+          newestPublishedAt: prefetchedPage.newestPublishedAt,
+          newestCreatedAt: prefetchedPage.newestCreatedAt,
           freshnessStrategy: prefetchedPage.freshnessStrategy,
           resumeContinuationWindowMinutes:
               prefetchedPage.resumeContinuityWindowMinutes,
@@ -1059,6 +1193,7 @@ class ArticlesNotifier
   void dispose() {
     _articleViewTimer?.cancel();
     _pollTimer?.cancel();
+    _pushHintDebounceTimer?.cancel();
     super.dispose();
   }
 
