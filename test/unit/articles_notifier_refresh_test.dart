@@ -7,6 +7,7 @@ import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
+import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -40,6 +41,20 @@ Map<String, dynamic> _articlesResponse(
     'has_more': true,
     'inventory_state': 'healthy',
     'feed_version': feedVersion,
+  };
+}
+
+Map<String, dynamic> _articlesMetadataResponse({
+  String feedVersion = 'article-v1',
+  String newestPublishedAt = '2026-03-15T00:00:00Z',
+  String newestCreatedAt = '2026-03-15T00:00:00Z',
+}) {
+  return {
+    'served_at': '2026-03-15T00:05:00Z',
+    'feed_version': feedVersion,
+    'newest_published_at': newestPublishedAt,
+    'newest_created_at': newestCreatedAt,
+    'freshness_strategy': 'fresh_unseen_v1',
   };
 }
 
@@ -465,9 +480,22 @@ void main() {
     'ArticlesNotifier surfaces pending new items when feed version changes at the head',
     () async {
       var playlistCallCount = 0;
+      var metadataCallCount = 0;
       final api = FakeBackendApiClient(
         responseResolver: (method, path, queryParameters, body) async {
-          if (method != 'GET' || path != '/session/playlist') {
+          if (method != 'GET') {
+            return const <String, dynamic>{};
+          }
+          if (path == '/session/playlist/meta') {
+            metadataCallCount += 1;
+            return metadataCallCount == 1
+                ? _articlesMetadataResponse(
+                    feedVersion: 'article-v2',
+                    newestCreatedAt: '2026-03-31T12:00:00Z',
+                  )
+                : _articlesMetadataResponse();
+          }
+          if (path != '/session/playlist') {
             return const <String, dynamic>{};
           }
           playlistCallCount += 1;
@@ -508,8 +536,18 @@ void main() {
     'ArticlesNotifier opens prefetched pending content without another playlist fetch',
     () async {
       var playlistCallCount = 0;
+      var metadataCallCount = 0;
       final api = FakeBackendApiClient(
         responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist/meta') {
+            metadataCallCount += 1;
+            return metadataCallCount == 1
+                ? _articlesMetadataResponse(
+                    feedVersion: 'article-v2',
+                    newestCreatedAt: '2026-03-31T12:00:00Z',
+                  )
+                : _articlesMetadataResponse();
+          }
           if (method == 'GET' && path == '/session/playlist') {
             playlistCallCount += 1;
             if (playlistCallCount == 1) {
@@ -575,6 +613,7 @@ void main() {
           '/session/playlist': _articlesResponse(
             List<int>.generate(15, (index) => index + 1),
           ),
+          '/session/playlist/meta': _articlesMetadataResponse(),
         },
       );
 
@@ -621,9 +660,22 @@ void main() {
     'ArticlesNotifier refreshForRetap preserves new-items pill when the head changes',
     () async {
       var playlistCallCount = 0;
+      var metadataCallCount = 0;
       final api = FakeBackendApiClient(
         responseResolver: (method, path, queryParameters, body) async {
-          if (method != 'GET' || path != '/session/playlist') {
+          if (method != 'GET') {
+            return const <String, dynamic>{};
+          }
+          if (path == '/session/playlist/meta') {
+            metadataCallCount += 1;
+            return metadataCallCount == 1
+                ? _articlesMetadataResponse(
+                    feedVersion: 'article-v2',
+                    newestCreatedAt: '2026-03-31T12:00:00Z',
+                  )
+                : _articlesMetadataResponse();
+          }
+          if (path != '/session/playlist') {
             return const <String, dynamic>{};
           }
           playlistCallCount += 1;
@@ -665,6 +717,236 @@ void main() {
       expect(uiState.pendingActionKind, PendingFeedActionKind.newItems);
       expect(uiState.pendingNewCount, 1);
       expect(uiState.pendingActionLabel, '1 new item');
+    },
+  );
+
+  test(
+    'ArticlesNotifier cold launch fetches the latest head before restoring stale session cache',
+    () async {
+      final cache = FakeFeedCache();
+      final sessionStore = FeedSessionStore(cache);
+      await sessionStore.saveActiveSession(
+        FeedSessionSnapshot(
+          surface: FeedSurface.articles,
+          items: <FeedEntry>[
+            ArticleFeedEntry(
+              id: 1,
+              title: 'Old article',
+              summary: 'Old summary',
+              source: 'example.com',
+              publishedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+              url: 'https://example.com/articles/1',
+              imageUrl: null,
+              category: 'Technology',
+              readTime: 1,
+            ),
+          ],
+          currentItemId: 1,
+          lastActiveAt: DateTime.parse('2026-03-01T01:00:00Z'),
+          headBaselineIds: const [1],
+          sessionId: 'old-session',
+          continuationCursor: '1',
+          hasMore: true,
+          inventoryState: FeedInventoryState.healthy,
+        ),
+      );
+
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': _articlesResponse(
+            [99, ...List<int>.generate(14, (index) => index + 1)],
+            feedVersion: 'article-v9',
+          ),
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(cache),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final state = container.read(articlesFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value!.first.id, 99);
+    },
+  );
+
+  test(
+    'ArticlesNotifier handleAppResume auto-loads latest head after the continuity window expires',
+    () async {
+      final cache = FakeFeedCache();
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET') {
+            return const <String, dynamic>{};
+          }
+          if (path == '/session/playlist/meta') {
+            return _articlesMetadataResponse(
+              feedVersion: 'article-v2',
+              newestCreatedAt: '2026-03-31T12:00:00Z',
+            );
+          }
+          if (path == '/session/playlist') {
+            playlistCallCount += 1;
+            if (playlistCallCount == 1) {
+              return _articlesResponse(
+                List<int>.generate(15, (index) => index + 1),
+                feedVersion: 'article-v1',
+              );
+            }
+            return _articlesResponse(
+              [101, ...List<int>.generate(14, (index) => index + 1)],
+              feedVersion: 'article-v2',
+            );
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(cache),
+          articleColdLaunchPendingProvider.overrideWith((_) => false),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      final active =
+          await FeedSessionStore(cache).getActiveSession(FeedSurface.articles);
+      await FeedSessionStore(cache).saveActiveSession(
+        active!.copyWith(
+          lastActiveAt: DateTime.now().toUtc().subtract(
+              kArticleContinuationFreshWindow + const Duration(minutes: 1)),
+        ),
+      );
+
+      await container.read(articlesFeedProvider.notifier).handleAppResume();
+      await _settle();
+
+      final state = container.read(articlesFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value!.first.id, 101);
+      expect(
+        container
+            .read(feedSurfaceUiStateProvider(FeedSurface.articles))
+            .pendingNewCount,
+        0,
+      );
+    },
+  );
+
+  test(
+    'ArticlesNotifier handleAppResume keeps the dirty hint when the latest refresh fails',
+    () async {
+      final cache = FakeFeedCache();
+      var playlistCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method != 'GET') {
+            return const <String, dynamic>{};
+          }
+          if (path == '/session/playlist/meta') {
+            return _articlesMetadataResponse(
+              feedVersion: 'article-v2',
+              newestCreatedAt: '2026-03-31T12:00:00Z',
+            );
+          }
+          if (path == '/session/playlist') {
+            playlistCallCount += 1;
+            if (playlistCallCount == 1) {
+              return _articlesResponse(
+                List<int>.generate(15, (index) => index + 1),
+                feedVersion: 'article-v1',
+              );
+            }
+            throw Exception('network down');
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(cache),
+          articleColdLaunchPendingProvider.overrideWith((_) => false),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      container.read(articleFeedDirtyAtProvider.notifier).state =
+          DateTime.now();
+
+      await container.read(articlesFeedProvider.notifier).handleAppResume();
+      await _settle();
+
+      final state = container.read(articlesFeedProvider);
+      expect(state.hasValue, isTrue);
+      expect(state.value!.first.id, 1);
+      expect(container.read(articleFeedDirtyAtProvider), isNotNull);
+    },
+  );
+
+  test(
+    'ArticlesNotifier cancelPushFreshnessHint prevents a deferred push refresh',
+    () async {
+      var metadataCallCount = 0;
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) async {
+          if (method == 'GET' && path == '/session/playlist') {
+            return _articlesResponse(
+              List<int>.generate(15, (index) => index + 1),
+            );
+          }
+          if (method == 'GET' && path == '/session/playlist/meta') {
+            metadataCallCount += 1;
+            return _articlesMetadataResponse(
+              feedVersion: 'article-v2',
+              newestCreatedAt: '2026-03-31T12:00:00Z',
+            );
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+          feedCacheProvider.overrideWithValue(FakeFeedCache()),
+          articleColdLaunchPendingProvider.overrideWith((_) => false),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(articlesFeedProvider, (_, __) {});
+      addTearDown(sub.close);
+
+      await _settle();
+
+      container.read(articleFeedDirtyAtProvider.notifier).state =
+          DateTime.now();
+      final notifier = container.read(articlesFeedProvider.notifier);
+      await notifier.handlePushFreshnessHint();
+      notifier.cancelPushFreshnessHint();
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+
+      expect(metadataCallCount, 0);
     },
   );
 }

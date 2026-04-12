@@ -155,6 +155,38 @@ void main() {
     );
 
     test(
+      'fetchArticlesMetadata returns lightweight freshness metadata without touching article session state',
+      () async {
+        final api = FakeBackendApiClient(
+          responses: {
+            '/session/playlist/meta': {
+              'served_at': '2026-04-11T17:15:00Z',
+              'feed_version': 'article-v3',
+              'newest_published_at': '2026-04-11T17:10:00Z',
+              'newest_created_at': '2026-04-11T17:12:00Z',
+              'freshness_strategy': 'fresh_unseen_v1',
+            },
+          },
+        );
+
+        final repo = FeedRepository(api);
+        final metadata = await repo.fetchArticlesMetadata();
+
+        expect(api.requests, hasLength(1));
+        expect(api.requests.single.path, '/session/playlist/meta');
+        expect(api.requests.single.queryParameters?['type'], 'ARTICLE');
+        expect(metadata.feedVersion, 'article-v3');
+        expect(
+          metadata.newestCreatedAt?.toUtc().toIso8601String(),
+          '2026-04-11T17:12:00.000Z',
+        );
+        expect(metadata.freshnessStrategy, 'fresh_unseen_v1');
+        expect(repo.articleSessionId, isNull);
+        expect(repo.articleCursor, isNull);
+      },
+    );
+
+    test(
       'fetchArticlesPage and fetchVideosPage page 2 reuse session continuation state',
       () async {
         final api = FakeBackendApiClient(

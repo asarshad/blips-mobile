@@ -47,6 +47,22 @@ class FeedPageResult<T extends FeedEntry> {
   bool get isCaughtUp => inventoryState == FeedInventoryState.caughtUp;
 }
 
+class FeedHeadMetadata {
+  const FeedHeadMetadata({
+    this.servedAt,
+    this.feedVersion,
+    this.newestPublishedAt,
+    this.newestCreatedAt,
+    this.freshnessStrategy,
+  });
+
+  final DateTime? servedAt;
+  final String? feedVersion;
+  final DateTime? newestPublishedAt;
+  final DateTime? newestCreatedAt;
+  final String? freshnessStrategy;
+}
+
 const String kFeedFreshnessStrategyCurrent = 'current';
 const String kFeedFreshnessStrategyFreshUnseenV1 = 'fresh_unseen_v1';
 
@@ -77,6 +93,7 @@ class FeedRepository {
   final BackendApiClient _api;
   final AppDiagnosticsController? _diagnostics;
   static const String _sessionPlaylistPath = '/session/playlist';
+  static const String _sessionPlaylistMetaPath = '/session/playlist/meta';
   static const String _interactionPath = '/session/interactions';
   static const String _freshnessEventPath = '/events/track';
 
@@ -248,6 +265,54 @@ class FeedRepository {
       size: size,
       requestMode: requestMode,
     );
+  }
+
+  Future<FeedHeadMetadata> fetchArticlesMetadata({
+    RequestMode requestMode = RequestMode.normal,
+  }) {
+    return _fetchSessionPlaylistMetadata(
+      type: 'ARTICLE',
+      requestMode: requestMode,
+    );
+  }
+
+  Future<FeedHeadMetadata> _fetchSessionPlaylistMetadata({
+    required String type,
+    RequestMode requestMode = RequestMode.normal,
+  }) async {
+    final span = _diagnostics?.startSpan(
+      scope: 'feed.repository',
+      action: 'sessionPlaylistMeta',
+      surface: _surfaceLabelForType(type),
+      data: <String, Object?>{
+        'requestMode': requestMode.name,
+      },
+    );
+
+    try {
+      final response = await _api.get(
+        _sessionPlaylistMetaPath,
+        queryParameters: <String, dynamic>{'type': type},
+        requestMode: requestMode,
+      );
+      final metadata = FeedHeadMetadata(
+        servedAt: _parseServedAt(response['served_at']),
+        feedVersion: response['feed_version'] as String?,
+        newestPublishedAt: _parseServedAt(response['newest_published_at']),
+        newestCreatedAt: _parseServedAt(response['newest_created_at']),
+        freshnessStrategy: response['freshness_strategy'] as String?,
+      );
+      span?.success(
+        data: <String, Object?>{
+          'feedVersion': metadata.feedVersion,
+          'freshnessStrategy': metadata.freshnessStrategy,
+        },
+      );
+      return metadata;
+    } catch (error, stackTrace) {
+      span?.failure(error, stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   Future<FeedPageResult<FeedEntry>> previewVideosHead({

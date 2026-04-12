@@ -21,10 +21,18 @@ class FeedActionPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final useReversedContrast = !dark && isDarkTheme;
     final background = dark
         ? Colors.black.withValues(alpha: 0.82)
-        : colorScheme.surface.withValues(alpha: 0.96);
-    final foreground = dark ? Colors.white : colorScheme.onSurface;
+        : useReversedContrast
+            ? colorScheme.onSurface.withValues(alpha: 0.92)
+            : colorScheme.surface.withValues(alpha: 0.98);
+    final foreground = dark
+        ? Colors.white
+        : useReversedContrast
+            ? colorScheme.surface
+            : colorScheme.onSurface;
 
     final verticalPadding = switch (placement) {
       FeedActionPillPlacement.top => const EdgeInsets.only(top: 12),
@@ -44,19 +52,22 @@ class FeedActionPill extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
+                  horizontal: 18,
+                  vertical: 11,
                 ),
                 decoration: BoxDecoration(
                   color: background,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: foreground.withValues(alpha: 0.14),
+                    color: foreground.withValues(
+                        alpha: useReversedContrast ? 0.22 : 0.16),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: dark ? 0.3 : 0.12),
-                      blurRadius: 18,
+                      color: Colors.black.withValues(
+                        alpha: dark ? 0.3 : (useReversedContrast ? 0.18 : 0.12),
+                      ),
+                      blurRadius: useReversedContrast ? 20 : 18,
                       offset: const Offset(0, 8),
                     ),
                   ],
