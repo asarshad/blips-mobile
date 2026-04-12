@@ -27,7 +27,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -167,6 +167,24 @@ class FeedCache implements FeedCacheInterface {
     if (oldVersion < 7) {
       await _createSavedArticlesTable(db);
       await _createSavedVideosTable(db);
+    }
+    if (oldVersion < 8) {
+      // v8: Force one-time article cache/session reset for the shared
+      // recent-head rollout so stale article heads do not restore after
+      // upgrading to the new ordering policy.
+      await db.execute('DROP TABLE IF EXISTS articles');
+      await _createArticlesTable(db);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)',
+      );
+      await db.delete(
+        'cache_meta',
+        where: 'key = ?',
+        whereArgs: ['feed_session:articles'],
+      );
     }
   }
 

@@ -555,7 +555,9 @@ class FeedSessionStore {
       );
     }
     if (snapshot?.lastFreshnessStrategy ==
-        kFeedFreshnessStrategyFreshUnseenV1) {
+            kFeedFreshnessStrategyFreshUnseenV1 ||
+        snapshot?.lastFreshnessStrategy ==
+            kFeedFreshnessStrategyArticleRecentHeadV1) {
       return const _FeedResumePolicy(
         exactRestoreWindow: kArticleExactRestoreWindow,
         softRestoreWindow: kArticleSoftRestoreWindow,

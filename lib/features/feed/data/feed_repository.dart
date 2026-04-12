@@ -65,6 +65,8 @@ class FeedHeadMetadata {
 
 const String kFeedFreshnessStrategyCurrent = 'current';
 const String kFeedFreshnessStrategyFreshUnseenV1 = 'fresh_unseen_v1';
+const String kFeedFreshnessStrategyArticleRecentHeadV1 =
+    'article_recent_head_v1';
 
 abstract final class FeedInteractionEvent {
   static const view10s = 'VIEW_10S';

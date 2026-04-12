@@ -103,6 +103,7 @@ void main() {
       _snapshot(
         surface: FeedSurface.articles,
         lastActiveAt: now.subtract(const Duration(minutes: 8)),
+        lastFreshnessStrategy: kFeedFreshnessStrategyArticleRecentHeadV1,
       ),
     );
 
@@ -148,7 +149,7 @@ void main() {
   });
 
   test(
-      'prepareRestore keeps current article strategy continuity after 10 minutes',
+      'prepareRestore prefers latest for recent-head article sessions after 10 minutes',
       () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
@@ -158,31 +159,7 @@ void main() {
       _snapshot(
         surface: FeedSurface.articles,
         lastActiveAt: now.subtract(const Duration(minutes: 14)),
-        lastFreshnessStrategy: kFeedFreshnessStrategyCurrent,
-      ),
-    );
-
-    final decision = await store.prepareRestore(
-      FeedSurface.articles,
-      now: now,
-    );
-
-    expect(decision.resumeSnapshot, isNotNull);
-    expect(decision.preferLatestOnRefresh, isFalse);
-  });
-
-  test(
-      'prepareRestore prefers latest for fresh unseen article sessions after 10 minutes',
-      () async {
-    final cache = FakeFeedCache();
-    final store = FeedSessionStore(cache);
-    final now = DateTime.parse('2026-03-19T08:30:00Z');
-
-    await store.saveActiveSession(
-      _snapshot(
-        surface: FeedSurface.articles,
-        lastActiveAt: now.subtract(const Duration(minutes: 14)),
-        lastFreshnessStrategy: kFeedFreshnessStrategyFreshUnseenV1,
+        lastFreshnessStrategy: kFeedFreshnessStrategyArticleRecentHeadV1,
         resumeContinuationWindowMinutes: 10,
         resumeSnapshotAfterRemoteWindow: false,
       ),
@@ -202,7 +179,7 @@ void main() {
   });
 
   test(
-      'article remote continuation expires after 10 minutes for fresh unseen strategy',
+      'article remote continuation expires after 10 minutes for recent-head strategy',
       () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
@@ -210,7 +187,7 @@ void main() {
     final snapshot = _snapshot(
       surface: FeedSurface.articles,
       lastActiveAt: now.subtract(const Duration(minutes: 11)),
-      lastFreshnessStrategy: kFeedFreshnessStrategyFreshUnseenV1,
+      lastFreshnessStrategy: kFeedFreshnessStrategyArticleRecentHeadV1,
       resumeContinuationWindowMinutes: 10,
       resumeSnapshotAfterRemoteWindow: false,
     );
@@ -225,15 +202,18 @@ void main() {
     );
   });
 
-  test('article remote continuation keeps current strategy baseline window',
+  test(
+      'article remote continuation uses backend window for recent-head strategy',
       () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
     final now = DateTime.parse('2026-03-19T08:30:00Z');
     final snapshot = _snapshot(
       surface: FeedSurface.articles,
-      lastActiveAt: now.subtract(const Duration(minutes: 55)),
-      lastFreshnessStrategy: kFeedFreshnessStrategyCurrent,
+      lastActiveAt: now.subtract(const Duration(minutes: 9)),
+      lastFreshnessStrategy: kFeedFreshnessStrategyArticleRecentHeadV1,
+      resumeContinuationWindowMinutes: 10,
+      resumeSnapshotAfterRemoteWindow: false,
     );
 
     expect(
@@ -256,6 +236,7 @@ void main() {
       _snapshot(
         surface: FeedSurface.articles,
         lastActiveAt: now.subtract(const Duration(minutes: 14)),
+        lastFreshnessStrategy: kFeedFreshnessStrategyArticleRecentHeadV1,
         resumeContinuationWindowMinutes: 10,
         resumeSnapshotAfterRemoteWindow: false,
       ),
