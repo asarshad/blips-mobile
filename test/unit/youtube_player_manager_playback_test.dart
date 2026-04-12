@@ -83,6 +83,51 @@ void main() {
     });
   });
 
+  // ── overlay contract ────────────────────────────────────────────────────
+
+  group('playback overlay contract', () {
+    test('autoplay-pending ready state does not expose play affordance',
+        () async {
+      manager.setState(url0, YTPlayerState.ready);
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.autoplayPending,
+      );
+    });
+
+    test('manual pause exposes play affordance', () async {
+      await manager.playVideo(url0);
+      manager.pauseVideo(url0);
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.manualPause,
+      );
+    });
+
+    test('stalled autoplay exposes play affordance', () {
+      manager.setPlaybackOverlayState(
+        url0,
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+    });
+
+    test('playing suppresses overlays', () async {
+      await manager.playVideo(url0);
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.none,
+      );
+    });
+  });
+
   // ── pauseVideo ───────────────────────────────────────────────────────────
 
   group('pauseVideo', () {

@@ -19,12 +19,30 @@ import '../test_utils/fake_feed_cache.dart';
 /// Mock video manager for testing reel items without actual playback.
 class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   final Map<String, YTPlayerState> _mockStates = {};
+  final Map<String, YTPlaybackOverlayState> _overlayStates = {};
 
   @override
   YoutubePlayerController? getController(String url) => null;
 
   @override
   YTPlayerState getState(String url) => _mockStates[url] ?? YTPlayerState.idle;
+
+  @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final override = _overlayStates[url];
+    if (override != null) {
+      return override;
+    }
+    return switch (getState(url)) {
+      YTPlayerState.error => YTPlaybackOverlayState.error,
+      YTPlayerState.playing => YTPlaybackOverlayState.none,
+      YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
+      YTPlayerState.ready ||
+      YTPlayerState.loading ||
+      YTPlayerState.idle =>
+        YTPlaybackOverlayState.autoplayPending,
+    };
+  }
 
   @override
   YTPlayerError? getError(String url) => null;
@@ -62,6 +80,11 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   void setMockState(String url, YTPlayerState state) {
     _mockStates[url] = state;
+    notifyListeners();
+  }
+
+  void setMockOverlayState(String url, YTPlaybackOverlayState state) {
+    _overlayStates[url] = state;
     notifyListeners();
   }
 }
@@ -228,19 +251,24 @@ void main() {
       expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     });
 
-    testWidgets('shows play indicator when active and state is ready',
+    testWidgets('ready autoplay-pending reel shows spinner, not play',
         (tester) async {
       mockManager.setMockState(testReel.link, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        testReel.link,
+        YTPlaybackOverlayState.autoplayPending,
+      );
 
       await tester.pumpWidget(buildTestWidget(entry: testReel, isActive: true));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
         find.byIcon(Icons.play_arrow),
-        findsOneWidget,
+        findsNothing,
         reason:
-            'ready-but-not-playing reels should show play affordance to avoid dead UI',
+            'ready autoplay should stay in spinner-only mode until playback either starts or genuinely stalls',
       );
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('hides play indicator when state is playing', (tester) async {
@@ -253,6 +281,20 @@ void main() {
       // (Bug 2: frozen "playing" state caused indicator to disappear even
       // though the video was not actually playing).
       expect(find.byIcon(Icons.play_arrow), findsNothing);
+    });
+
+    testWidgets('stalled autoplay shows play indicator', (tester) async {
+      mockManager.setMockState(testReel.link, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        testReel.link,
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+
+      await tester.pumpWidget(buildTestWidget(entry: testReel, isActive: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
     testWidgets('tap while paused calls playVideo (not pauseVideo)',
@@ -431,6 +473,10 @@ class _TrackingYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   YTPlayerState getState(String url) => delegate.getState(url);
+
+  @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) =>
+      delegate.getPlaybackOverlayState(url);
 
   @override
   YTPlayerError? getError(String url) => delegate.getError(url);

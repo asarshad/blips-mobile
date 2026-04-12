@@ -7,6 +7,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   final Map<String, YTPlayerState> _states = {};
   final Map<String, YTPlayerError?> _errors = {};
+  final Map<String, YTPlaybackOverlayState> _overlayStates = {};
   bool _isDisposed = false;
 
   void _notifySafe() {
@@ -26,6 +27,11 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
     _notifySafe();
   }
 
+  void setPlaybackOverlayState(String url, YTPlaybackOverlayState state) {
+    _overlayStates[url] = state;
+    _notifySafe();
+  }
+
   @override
   YoutubePlayerController? getController(String url) => null;
 
@@ -34,6 +40,24 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   YTPlayerState getState(String url) => _states[url] ?? YTPlayerState.idle;
+
+  @override
+  YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final override = _overlayStates[url];
+    if (override != null) {
+      return override;
+    }
+    final state = getState(url);
+    return switch (state) {
+      YTPlayerState.error => YTPlaybackOverlayState.error,
+      YTPlayerState.playing => YTPlaybackOverlayState.none,
+      YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
+      YTPlayerState.ready ||
+      YTPlayerState.loading ||
+      YTPlayerState.idle =>
+        YTPlaybackOverlayState.autoplayPending,
+    };
+  }
 
   @override
   bool isPlaying(String url) => getState(url) == YTPlayerState.playing;
@@ -66,6 +90,7 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   @override
   Future<void> playVideo(String url) async {
     _states[url] = YTPlayerState.playing;
+    _overlayStates[url] = YTPlaybackOverlayState.none;
     _notifySafe();
   }
 
@@ -88,6 +113,7 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   @override
   void pauseVideo(String url) {
     _states[url] = YTPlayerState.paused;
+    _overlayStates[url] = YTPlaybackOverlayState.manualPause;
     _notifySafe();
   }
 
@@ -102,6 +128,9 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
     for (final url in videoUrls) {
       _states[url] =
           url == currentUrl ? YTPlayerState.playing : YTPlayerState.paused;
+      _overlayStates[url] = url == currentUrl
+          ? YTPlaybackOverlayState.none
+          : YTPlaybackOverlayState.manualPause;
     }
     _notifySafe();
   }

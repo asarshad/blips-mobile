@@ -22,6 +22,24 @@ enum YTPlayerState {
   error,
 }
 
+/// Shared overlay contract for inline video/reel playback chrome.
+enum YTPlaybackOverlayState {
+  /// No overlay should be shown.
+  none,
+
+  /// Auto-play is still being armed/recovered; show a spinner only.
+  autoplayPending,
+
+  /// User explicitly paused playback; show the play affordance.
+  manualPause,
+
+  /// Auto-play exhausted recovery and needs a manual tap to continue.
+  autoplayStalled,
+
+  /// Playback failed; show the error affordance.
+  error,
+}
+
 /// Information about an error that occurred during playback.
 class YTPlayerError {
   const YTPlayerError({required this.code, required this.message});
@@ -47,6 +65,8 @@ abstract class YoutubePlayerManagerBase extends ChangeNotifier {
   YoutubePlayerController? getController(String url);
 
   YTPlayerState getState(String url);
+
+  YTPlaybackOverlayState getPlaybackOverlayState(String url);
 
   YTPlayerError? getError(String url);
 
