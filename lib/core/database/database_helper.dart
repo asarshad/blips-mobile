@@ -2,7 +2,18 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 
-class DatabaseHelper {
+abstract interface class ChatLocalStore {
+  Future<void> insertMessage(int articleId, ChatMessage message);
+  Future<List<ChatMessage>> getMessages(int articleId);
+  Future<void> deleteChat(int articleId);
+  Future<void> deleteAllChats();
+  Future<void> deleteMessage(String id);
+  Future<List<int>> getChatArticleIds();
+  Future<String?> getLastResponseId(int articleId);
+  Future<void> setLastResponseId(int articleId, String? responseId);
+}
+
+class DatabaseHelper implements ChatLocalStore {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
@@ -20,12 +31,13 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
-  Future _createDB(Database db, int version) async {
+  Future<void> _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE messages (
         id TEXT PRIMARY KEY,
@@ -35,8 +47,26 @@ class DatabaseHelper {
         timestamp TEXT NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE chat_metadata (
+        articleId INTEGER PRIMARY KEY,
+        lastResponseId TEXT
+      )
+    ''');
   }
 
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS chat_metadata (
+          articleId INTEGER PRIMARY KEY,
+          lastResponseId TEXT
+        )
+      ''');
+    }
+  }
+
+  @override
   Future<void> insertMessage(int articleId, ChatMessage message) async {
     try {
       final db = await instance.database;
@@ -58,6 +88,7 @@ class DatabaseHelper {
     }
   }
 
+  @override
   Future<List<ChatMessage>> getMessages(int articleId) async {
     final db = await instance.database;
     final result = await db.query(
@@ -77,6 +108,7 @@ class DatabaseHelper {
         .toList();
   }
 
+  @override
   Future<void> deleteChat(int articleId) async {
     final db = await instance.database;
     await db.delete(
@@ -84,13 +116,21 @@ class DatabaseHelper {
       where: 'articleId = ?',
       whereArgs: [articleId],
     );
+    await db.delete(
+      'chat_metadata',
+      where: 'articleId = ?',
+      whereArgs: [articleId],
+    );
   }
 
+  @override
   Future<void> deleteAllChats() async {
     final db = await instance.database;
     await db.delete('messages');
+    await db.delete('chat_metadata');
   }
 
+  @override
   Future<void> deleteMessage(String id) async {
     final db = await instance.database;
     await db.delete(
@@ -100,6 +140,7 @@ class DatabaseHelper {
     );
   }
 
+  @override
   Future<List<int>> getChatArticleIds() async {
     final db = await instance.database;
     final result = await db.query(
@@ -108,5 +149,32 @@ class DatabaseHelper {
       distinct: true,
     );
     return result.map((e) => e['articleId'] as int).toList();
+  }
+
+  @override
+  Future<String?> getLastResponseId(int articleId) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'chat_metadata',
+      columns: ['lastResponseId'],
+      where: 'articleId = ?',
+      whereArgs: [articleId],
+      limit: 1,
+    );
+    if (result.isEmpty) return null;
+    return result.first['lastResponseId'] as String?;
+  }
+
+  @override
+  Future<void> setLastResponseId(int articleId, String? responseId) async {
+    final db = await instance.database;
+    await db.insert(
+      'chat_metadata',
+      {
+        'articleId': articleId,
+        'lastResponseId': responseId,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

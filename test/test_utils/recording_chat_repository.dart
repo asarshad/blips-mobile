@@ -6,16 +6,22 @@ final class RecordingChatRepository implements ChatRepository {
   RecordingChatRepository({
     List<ChatConversation> conversations = const [],
     this.remainingDaily = 10,
+    this.remainingArticle = 5,
     this.responseContent = 'This is a sample AI response for testing.',
+    this.responseId = 'resp-test-1',
+    this.usedCachedStarterResponse = false,
   }) : _conversations = List<ChatConversation>.from(conversations);
 
   final List<ChatConversation> _conversations;
   final int remainingDaily;
+  final int? remainingArticle;
   final String responseContent;
+  final String? responseId;
+  final bool usedCachedStarterResponse;
 
   final List<int> deletedArticleIds = <int>[];
-  final List<({int articleId, String message})> sentMessages =
-      <({int articleId, String message})>[];
+  final List<({int articleId, String message, bool starterPrompt})>
+      sentMessages = <({int articleId, String message, bool starterPrompt})>[];
 
   @override
   Future<List<ChatConversation>> fetchAllChats() async =>
@@ -37,11 +43,31 @@ final class RecordingChatRepository implements ChatRepository {
   Future<int> getRemainingDailyMessages() async => remainingDaily;
 
   @override
-  Future<ChatResponse> sendMessage(int articleId, String message) async {
-    sentMessages.add((articleId: articleId, message: message));
+  Future<ChatQuotaStatus> getQuotaStatus(int articleId) async =>
+      ChatQuotaStatus(
+        remainingDaily: remainingDaily,
+        remainingArticle: remainingArticle,
+      );
+
+  @override
+  Future<ChatResponse> sendMessage(
+    int articleId,
+    String message, {
+    bool starterPrompt = false,
+  }) async {
+    sentMessages.add(
+      (
+        articleId: articleId,
+        message: message,
+        starterPrompt: starterPrompt,
+      ),
+    );
     return ChatResponse(
       content: responseContent,
       remainingDaily: remainingDaily - sentMessages.length,
+      remainingArticle: remainingArticle,
+      responseId: responseId,
+      usedCachedStarterResponse: usedCachedStarterResponse,
     );
   }
 
