@@ -102,15 +102,15 @@ void main() {
     );
     await pumpUi(tester, const Duration(seconds: 2));
 
-    expect(find.text('ART 1/1+'), findsOneWidget);
+    expect(find.text('App shell article'), findsOneWidget);
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
     await pumpUi(tester);
-    expect(find.text('VID 1/1+'), findsOneWidget);
+    expect(find.text('App shell video'), findsOneWidget);
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
     await pumpUi(tester);
-    expect(find.text('REEL 1/1+'), findsOneWidget);
+    expect(find.text('App shell reel'), findsOneWidget);
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
     await pumpUi(tester);
@@ -171,7 +171,7 @@ void main() {
     await pumpUi(tester, const Duration(milliseconds: 350));
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.text('VID 1/1+'), findsOneWidget);
+    expect(find.text('App shell video'), findsOneWidget);
     expect(manager.getState(videoUrl), YTPlayerState.playing);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -313,26 +313,26 @@ void main() {
     );
     await pumpUi(tester, const Duration(seconds: 2));
 
-    expect(find.text('ART 1/15+'), findsOneWidget);
+    expect(find.text('App shell article 1'), findsOneWidget);
 
     await tester.drag(findVerticalFeedPageView().first, const Offset(0, -850));
     await pumpUi(tester, const Duration(milliseconds: 500));
     await tester.drag(findVerticalFeedPageView().first, const Offset(0, -850));
     await pumpUi(tester, const Duration(milliseconds: 500));
 
-    expect(find.text('ART 3/15+'), findsOneWidget);
+    expect(find.text('App shell article 3'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.article));
     await pumpUi(tester, const Duration(milliseconds: 900));
 
-    expect(find.text('ART 3/15+'), findsOneWidget);
+    expect(find.text('App shell article 3'), findsOneWidget);
     expect(find.text('View latest'), findsOneWidget);
 
     await tester.tap(find.text('View latest'));
     await tester.pump();
     await pumpUi(tester, const Duration(milliseconds: 400));
 
-    expect(find.text('ART 1/15+'), findsOneWidget);
+    expect(find.text('App shell article 1'), findsOneWidget);
     expect(find.text('View latest'), findsNothing);
   });
 }

@@ -50,7 +50,6 @@ void main() {
             builder: (entry, isCurrentPage) => const SizedBox.expand(),
             emptyLabel: 'No content',
             onRefresh: () {},
-            overlayLabel: 'VID',
             containsVideos: true,
             isActive: isActive,
             controller: controller,
