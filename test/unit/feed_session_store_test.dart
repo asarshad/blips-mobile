@@ -251,7 +251,7 @@ void main() {
     expect(decision.preferLatestOnRefresh, isTrue);
   });
 
-  test('prepareRestore marks reels for latest bias after longer inactivity',
+  test('prepareRestore keeps reels stable after longer inactivity',
       () async {
     final cache = FakeFeedCache();
     final store = FeedSessionStore(cache);
@@ -270,7 +270,7 @@ void main() {
     );
 
     expect(decision.resumeSnapshot, isNotNull);
-    expect(decision.preferLatestOnRefresh, isTrue);
+    expect(decision.preferLatestOnRefresh, isFalse);
     expect(
       store.isRemoteContinuationFresh(
         FeedSurface.reels,

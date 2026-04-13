@@ -3,12 +3,14 @@ import 'dart:convert';
 /// Feed surfaces supported by push notifications.
 enum NotificationSurface {
   articles,
-  videos;
+  videos,
+  reels;
 
   static NotificationSurface? tryParse(String? value) {
     return switch (value?.trim().toLowerCase()) {
       'articles' => NotificationSurface.articles,
       'videos' => NotificationSurface.videos,
+      'reels' => NotificationSurface.reels,
       _ => null,
     };
   }
@@ -16,6 +18,7 @@ enum NotificationSurface {
   int get tabIndex => switch (this) {
         NotificationSurface.articles => 0,
         NotificationSurface.videos => 1,
+        NotificationSurface.reels => 2,
       };
 }
 

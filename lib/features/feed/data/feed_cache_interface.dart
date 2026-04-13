@@ -14,6 +14,9 @@ abstract interface class FeedCacheInterface {
 
   Future<void> cacheArticles(List<ArticleFeedEntry> articles);
 
+  /// Replaces the persisted page-1 articles snapshot.
+  Future<void> replaceArticlesSnapshot(List<ArticleFeedEntry> articles);
+
   Future<List<VideoFeedEntry>> getCachedVideos({int limit = 30});
 
   Future<void> cacheVideos(List<VideoFeedEntry> videos);

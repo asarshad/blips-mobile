@@ -21,7 +21,6 @@ const Duration kVideoExactRestoreWindow = Duration(hours: 12);
 const Duration kVideoSoftRestoreWindow = Duration(hours: 48);
 const Duration kReelExactRestoreWindow = Duration(hours: 2);
 const Duration kReelSoftRestoreWindow = Duration(hours: 24);
-const Duration kReelNewestBiasThreshold = Duration(hours: 6);
 const Duration kReelContinuationFreshWindow = Duration(hours: 6);
 
 enum PendingFeedActionKind {
@@ -535,7 +534,6 @@ class FeedSessionStore {
           exactRestoreWindow: kReelExactRestoreWindow,
           softRestoreWindow: kReelSoftRestoreWindow,
           remoteContinuationWindow: kReelContinuationFreshWindow,
-          preferLatestAfter: kReelNewestBiasThreshold,
         ),
     };
   }

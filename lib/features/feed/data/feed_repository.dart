@@ -104,7 +104,8 @@ class FeedRepository {
   int? _articleCursor;
   String? _videoSessionId;
   int? _videoCursor;
-  String? _reelsCursor;
+  String? _reelSessionId;
+  int? _reelCursor;
 
   String? get articleSessionId => _articleSessionId;
 
@@ -114,7 +115,9 @@ class FeedRepository {
 
   int? get videoCursor => _videoCursor;
 
-  String? get reelsCursor => _reelsCursor;
+  String? get reelsSessionId => _reelSessionId;
+
+  int? get reelsCursor => _reelCursor;
 
   void restoreArticleSession({String? sessionId, int? cursor}) {
     _articleSessionId = sessionId;
@@ -126,8 +129,9 @@ class FeedRepository {
     _videoCursor = cursor;
   }
 
-  void restoreReelsCursor(String? cursor) {
-    _reelsCursor = cursor;
+  void restoreReelsSession({String? sessionId, int? cursor}) {
+    _reelSessionId = sessionId;
+    _reelCursor = cursor;
   }
 
   /// Fetches only article items for a given page.
@@ -184,11 +188,16 @@ class FeedRepository {
     required int size,
     RequestMode requestMode = RequestMode.normal,
     bool captureSessionState = true,
+    int? continuationCursorOverride,
   }) async {
     final query = <String, dynamic>{
       'type': type,
       'size': size,
-      if (page > 1) ..._sessionContinuationQuery(type),
+      if (page > 1)
+        ..._sessionContinuationQuery(
+          type,
+          cursorOverride: continuationCursorOverride,
+        ),
     };
     final span = _diagnostics?.startSpan(
       scope: 'feed.repository',
@@ -328,6 +337,24 @@ class FeedRepository {
     );
   }
 
+  Future<FeedHeadMetadata> fetchVideosMetadata({
+    RequestMode requestMode = RequestMode.normal,
+  }) {
+    return _fetchSessionPlaylistMetadata(
+      type: 'VIDEO',
+      requestMode: requestMode,
+    );
+  }
+
+  Future<FeedHeadMetadata> fetchReelsMetadata({
+    RequestMode requestMode = RequestMode.normal,
+  }) {
+    return _fetchSessionPlaylistMetadata(
+      type: 'REEL',
+      requestMode: requestMode,
+    );
+  }
+
   Future<FeedPageResult<FeedEntry>> _previewSessionPlaylist({
     required String type,
     required int size,
@@ -342,12 +369,32 @@ class FeedRepository {
     );
   }
 
-  Map<String, dynamic> _sessionContinuationQuery(String type) {
-    final sessionId = type == 'ARTICLE' ? _articleSessionId : _videoSessionId;
-    final cursor = type == 'ARTICLE' ? _articleCursor : _videoCursor;
+  Map<String, dynamic> _sessionContinuationQuery(
+    String type, {
+    int? cursorOverride,
+  }) {
+    String? sessionId;
+    int? cursor;
+    switch (type) {
+      case 'ARTICLE':
+        sessionId = _articleSessionId;
+        cursor = _articleCursor;
+        break;
+      case 'VIDEO':
+        sessionId = _videoSessionId;
+        cursor = _videoCursor;
+        break;
+      case 'REEL':
+        sessionId = _reelSessionId;
+        cursor = _reelCursor;
+        break;
+      default:
+        break;
+    }
+    final effectiveCursor = cursorOverride ?? cursor;
     return {
       if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
-      if (cursor != null) 'cursor': cursor,
+      if (effectiveCursor != null) 'cursor': effectiveCursor,
     };
   }
 
@@ -356,13 +403,22 @@ class FeedRepository {
     String? sessionId,
     int? cursor,
   }) {
-    if (type == 'ARTICLE') {
-      _articleSessionId = sessionId ?? _articleSessionId;
-      _articleCursor = cursor;
-      return;
+    switch (type) {
+      case 'ARTICLE':
+        _articleSessionId = sessionId ?? _articleSessionId;
+        _articleCursor = cursor;
+        return;
+      case 'VIDEO':
+        _videoSessionId = sessionId ?? _videoSessionId;
+        _videoCursor = cursor;
+        return;
+      case 'REEL':
+        _reelSessionId = sessionId ?? _reelSessionId;
+        _reelCursor = cursor;
+        return;
+      default:
+        return;
     }
-    _videoSessionId = sessionId ?? _videoSessionId;
-    _videoCursor = cursor;
   }
 
   List<FeedEntry> _parsePlaylistItems(List<Map<String, dynamic>> items) {
@@ -375,6 +431,9 @@ class FeedRepository {
       } else if (itemType == 'VIDEO') {
         final dto = _playlistVideoToDto(item);
         parsed.add(dto.toDomain());
+      } else if (itemType == 'REEL') {
+        final dto = _playlistVideoToDto(item);
+        parsed.add(dto.toReelDomain());
       }
     }
     return parsed;
@@ -463,10 +522,26 @@ class FeedRepository {
     }
   }
 
+  /// Fetches a single reel for notification-target recovery.
+  Future<ReelFeedEntry> fetchReelById(int id) async {
+    try {
+      final response = await _api.get('/videos/$id');
+      final dto = VideoDto.fromJson(response);
+      if (!dto.isReel) {
+        throw const FormatException('Notification target is not a reel');
+      }
+      return dto.toReelDomain();
+    } on DioException catch (e, stack) {
+      throw NetworkException.fromDioError(e).copyWith(stackTrace: stack);
+    } catch (e, stack) {
+      throw DataException.fromParseError(e, stack);
+    }
+  }
+
   /// Fetches recent reels (short videos).
   Future<List<ReelFeedEntry>> fetchReels({int page = 1, int limit = 20}) async {
     final result = await fetchReelsPage(
-      cursor: page <= 1 ? null : _reelsCursor,
+      cursor: page <= 1 ? null : _reelCursor?.toString(),
       limit: limit,
     );
     return result.items;
@@ -491,59 +566,42 @@ class FeedRepository {
     );
     try {
       if (captureCursorState && cursor == null) {
-        _reelsCursor = null;
+        _reelSessionId = null;
+        _reelCursor = null;
       }
 
-      final response = await _api.get(
-        '/videos/reels',
-        queryParameters: {
-          if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
-          'limit': limit,
-        },
+      final page = await _fetchSessionPlaylist(
+        type: 'REEL',
+        page: cursor == null ? 1 : 2,
+        size: limit,
         requestMode: requestMode,
+        captureSessionState: captureCursorState,
+        continuationCursorOverride: int.tryParse(cursor ?? ''),
       );
-      final videosJson = (response['items'] as List<dynamic>? ??
-              response['videos'] as List<dynamic>? ??
-              const [])
-          .cast<Map<String, dynamic>>();
-      final items = videosJson
-          .map(VideoDto.fromJson)
-          .map((dto) => dto.toReelDomain())
-          .toList(growable: false);
-      final hasMore =
-          response['has_more'] as bool? ?? videosJson.length >= limit;
-      final currentOffset = int.tryParse(cursor ?? '0') ?? 0;
-      final nextCursor = response['next_cursor'] as String? ??
-          (hasMore ? '${currentOffset + limit}' : null);
-      if (captureCursorState) {
-        _reelsCursor = nextCursor;
-      }
+      final items =
+          page.items.whereType<ReelFeedEntry>().toList(growable: false);
       span?.success(
         data: <String, Object?>{
           'itemCount': items.length,
-          'hasMore': hasMore,
-          'nextCursor': nextCursor ?? '',
-          'inventoryState': response['inventory_state'] as String? ?? 'unknown',
+          'hasMore': page.hasMore,
+          'nextCursor': page.sessionCursor?.toString() ?? '',
+          'inventoryState': page.inventoryState.name,
         },
       );
       return FeedPageResult(
         items: items,
-        hasMore: hasMore,
-        inventoryState: _parseInventoryState(
-          value: response['inventory_state'] as String?,
-          hasMore: hasMore,
-          itemCount: items.length,
-        ),
-        nextCursor: nextCursor,
-        servedAt: _parseServedAt(response['served_at']),
-        feedVersion: response['feed_version'] as String?,
-        newestPublishedAt: _parseServedAt(response['newest_published_at']),
-        newestCreatedAt: _parseServedAt(response['newest_created_at']),
-        freshnessStrategy: response['freshness_strategy'] as String?,
-        resumeContinuityWindowMinutes:
-            response['resume_continuity_window_minutes'] as int?,
-        resumeSnapshotAfterRemoteWindow:
-            response['resume_snapshot_after_remote_window'] as bool? ?? true,
+        hasMore: page.hasMore,
+        inventoryState: page.inventoryState,
+        nextCursor: page.sessionCursor?.toString(),
+        sessionId: page.sessionId,
+        sessionCursor: page.sessionCursor,
+        servedAt: page.servedAt,
+        feedVersion: page.feedVersion,
+        newestPublishedAt: page.newestPublishedAt,
+        newestCreatedAt: page.newestCreatedAt,
+        freshnessStrategy: page.freshnessStrategy,
+        resumeContinuityWindowMinutes: page.resumeContinuityWindowMinutes,
+        resumeSnapshotAfterRemoteWindow: page.resumeSnapshotAfterRemoteWindow,
       );
     } on DioException catch (e, stack) {
       span?.failure(e, stackTrace: stack);
@@ -671,6 +729,7 @@ class FeedRepository {
     return switch (type) {
       'ARTICLE' => 'articles',
       'VIDEO' => 'videos',
+      'REEL' => 'reels',
       _ => type.toLowerCase(),
     };
   }

@@ -98,6 +98,29 @@ void main() {
       );
     });
 
+    test('fetchReelById rejects non-reel payloads for notification recovery',
+        () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/videos/78': {
+            'id': 78,
+            'type': 'VIDEO',
+            'title': 'Video 78',
+            'video_url': 'https://youtube.com/watch?v=video78',
+            'source_url': 'https://youtube.com/watch?v=video78',
+            'source': 'YouTube',
+            'published_at': '2026-03-01T00:00:00Z',
+          },
+        },
+      );
+      final repo = FeedRepository(api);
+
+      expect(
+        () => repo.fetchReelById(78),
+        throwsA(isA<DataException>()),
+      );
+    });
+
     test(
       'fetchArticlesPage preserves feed version and freshness metadata from session playlist',
       () async {
@@ -301,10 +324,11 @@ void main() {
     test('fetchReelsPage parses cursor envelope and inventory state', () async {
       final api = FakeBackendApiClient(
         responses: {
-          '/videos/reels': {
+          '/session/playlist': {
             'items': [
               {
                 'id': 77,
+                'type': 'REEL',
                 'title': 'Reel',
                 'video_url': 'https://youtube.com/watch?v=reel123',
                 'source_url': 'https://youtube.com/watch?v=reel123',
@@ -313,7 +337,8 @@ void main() {
                 'duration_seconds': 42,
               },
             ],
-            'next_cursor': '20',
+            'session_id': 'reel-session',
+            'cursor': 20,
             'has_more': true,
             'inventory_state': 'healthy',
             'served_at': '2025-01-04T01:00:00Z',
@@ -328,6 +353,8 @@ void main() {
       expect(page.items.single.id, 77);
       expect(page.hasMore, isTrue);
       expect(page.nextCursor, '20');
+      expect(page.sessionId, 'reel-session');
+      expect(page.sessionCursor, 20);
       expect(page.inventoryState, FeedInventoryState.healthy);
       expect(
           page.servedAt?.toUtc().toIso8601String(), '2025-01-04T01:00:00.000Z');
@@ -476,11 +503,12 @@ void main() {
     test('previewReelsHead does not overwrite live reels cursor', () async {
       final api = FakeBackendApiClient(
         queuedResponses: {
-          '/videos/reels': [
+          '/session/playlist': [
             {
               'items': [
                 {
                   'id': 77,
+                  'type': 'REEL',
                   'title': 'Reel 77',
                   'video_url': 'https://youtube.com/watch?v=reel77',
                   'source_url': 'https://youtube.com/watch?v=reel77',
@@ -489,13 +517,15 @@ void main() {
                   'duration_seconds': 42,
                 },
               ],
-              'next_cursor': '20',
+              'session_id': 'reel-session',
+              'cursor': 20,
               'has_more': true,
             },
             {
               'items': [
                 {
                   'id': 88,
+                  'type': 'REEL',
                   'title': 'Preview reel',
                   'video_url': 'https://youtube.com/watch?v=reel88',
                   'source_url': 'https://youtube.com/watch?v=reel88',
@@ -504,13 +534,15 @@ void main() {
                   'duration_seconds': 55,
                 },
               ],
-              'next_cursor': '999',
+              'session_id': 'preview-session',
+              'cursor': 999,
               'has_more': true,
             },
             {
               'items': [
                 {
                   'id': 99,
+                  'type': 'REEL',
                   'title': 'Reel 99',
                   'video_url': 'https://youtube.com/watch?v=reel99',
                   'source_url': 'https://youtube.com/watch?v=reel99',
@@ -519,7 +551,8 @@ void main() {
                   'duration_seconds': 65,
                 },
               ],
-              'next_cursor': '40',
+              'session_id': 'reel-session',
+              'cursor': 40,
               'has_more': true,
             },
           ],
@@ -529,10 +562,45 @@ void main() {
       final repo = FeedRepository(api);
       await repo.fetchReelsPage(limit: 20);
       await repo.previewReelsHead(limit: 20);
-      await repo.fetchReelsPage(cursor: repo.reelsCursor, limit: 20);
+      await repo.fetchReelsPage(
+          cursor: repo.reelsCursor?.toString(), limit: 20);
 
       expect(api.requests.length, 3);
-      expect(api.requests[2].queryParameters?['cursor'], '20');
+      expect(api.requests[2].queryParameters?['session_id'], 'reel-session');
+      expect(api.requests[2].queryParameters?['cursor'], 20);
+    });
+
+    test('fetchReelsPage honors an explicit caller cursor override', () async {
+      final api = FakeBackendApiClient(
+        responses: {
+          '/session/playlist': {
+            'items': [
+              {
+                'id': 111,
+                'type': 'REEL',
+                'title': 'Reel 111',
+                'video_url': 'https://youtube.com/watch?v=reel111',
+                'source_url': 'https://youtube.com/watch?v=reel111',
+                'source': 'YouTube',
+                'published_at': '2025-01-07T00:00:00Z',
+                'duration_seconds': 21,
+              },
+            ],
+            'session_id': 'reel-session',
+            'cursor': 60,
+            'has_more': true,
+          },
+        },
+      );
+
+      final repo = FeedRepository(api);
+      repo.restoreReelsSession(sessionId: 'reel-session', cursor: 20);
+
+      await repo.fetchReelsPage(cursor: '40', limit: 20);
+
+      expect(
+          api.requests.single.queryParameters?['session_id'], 'reel-session');
+      expect(api.requests.single.queryParameters?['cursor'], 40);
     });
 
     test('recordInteraction posts the expected payload', () async {

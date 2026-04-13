@@ -27,7 +27,7 @@ class FeedCache implements FeedCacheInterface {
 
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -50,6 +50,7 @@ class FeedCache implements FeedCacheInterface {
         read_time INTEGER NOT NULL,
         thumbnail_url TEXT,
         conversation_starters TEXT,
+        snapshot_position INTEGER NOT NULL,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -66,6 +67,7 @@ class FeedCache implements FeedCacheInterface {
         published_at TEXT NOT NULL,
         thumbnail_url TEXT,
         conversation_starters TEXT,
+        snapshot_position INTEGER NOT NULL,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -186,6 +188,71 @@ class FeedCache implements FeedCacheInterface {
         whereArgs: ['feed_session:articles'],
       );
     }
+    if (oldVersion < 9) {
+      await db.execute('DROP TABLE IF EXISTS articles');
+      await db.execute('DROP TABLE IF EXISTS videos');
+      await db.execute('DROP TABLE IF EXISTS reels');
+      await _createArticlesTable(db);
+      await db.execute('''
+        CREATE TABLE videos (
+          id INTEGER PRIMARY KEY,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          video_url TEXT NOT NULL,
+          link TEXT NOT NULL,
+          source TEXT NOT NULL,
+          category TEXT NOT NULL,
+          published_at TEXT NOT NULL,
+          read_time INTEGER NOT NULL,
+          thumbnail_url TEXT,
+          conversation_starters TEXT,
+          snapshot_position INTEGER NOT NULL,
+          cached_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE reels (
+          id INTEGER PRIMARY KEY,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          video_url TEXT NOT NULL,
+          link TEXT NOT NULL,
+          source TEXT NOT NULL,
+          published_at TEXT NOT NULL,
+          thumbnail_url TEXT,
+          conversation_starters TEXT,
+          snapshot_position INTEGER NOT NULL,
+          cached_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_published ON videos(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_reels_published ON reels(published_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_articles_cached ON articles(cached_at)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_cached ON videos(cached_at)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_reels_cached ON reels(cached_at)',
+      );
+      await db.delete(
+        'cache_meta',
+        where: 'key IN (?, ?, ?)',
+        whereArgs: const [
+          'feed_session:articles',
+          'feed_session:videos',
+          'feed_session:reels',
+        ],
+      );
+    }
   }
 
   Future<void> _createArticlesTable(DatabaseExecutor db) async {
@@ -202,6 +269,7 @@ class FeedCache implements FeedCacheInterface {
         read_time INTEGER NOT NULL,
         tags TEXT NOT NULL,
         conversation_starters TEXT,
+        snapshot_position INTEGER NOT NULL,
         cached_at TEXT NOT NULL
       )
     ''');
@@ -300,33 +368,19 @@ class FeedCache implements FeedCacheInterface {
 
   @override
   Future<void> cacheArticles(List<ArticleFeedEntry> articles) async {
+    await replaceArticlesSnapshot(articles);
+  }
+
+  @override
+  Future<void> replaceArticlesSnapshot(List<ArticleFeedEntry> articles) async {
     final db = await database;
-    final batch = db.batch();
     final now = DateTime.now().toIso8601String();
-
-    for (final article in articles) {
-      batch.insert(
-          'articles',
-          {
-            'id': article.id,
-            'title': article.title,
-            'summary': article.summary,
-            'source': article.source,
-            'published_at': article.publishedAt.toIso8601String(),
-            'url': article.url,
-            'image_url': article.imageUrl,
-            'category': article.category,
-            'read_time': article.readTime,
-            'tags': jsonEncode(article.tags),
-            'conversation_starters': article.conversationStarters.isNotEmpty
-                ? jsonEncode(article.conversationStarters)
-                : null,
-            'cached_at': now,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
-    await batch.commit(noResult: true);
+    await db.transaction((txn) async {
+      await txn.delete('articles');
+      final batch = txn.batch();
+      _queueArticleInserts(batch, articles, now);
+      await batch.commit(noResult: true);
+    });
   }
 
   @override
@@ -334,7 +388,7 @@ class FeedCache implements FeedCacheInterface {
     final db = await database;
     final results = await db.query(
       'articles',
-      orderBy: 'published_at DESC',
+      orderBy: 'snapshot_position ASC',
       limit: limit,
     );
 
@@ -365,13 +419,7 @@ class FeedCache implements FeedCacheInterface {
 
   @override
   Future<void> cacheVideos(List<VideoFeedEntry> videos) async {
-    final db = await database;
-    final batch = db.batch();
-    final now = DateTime.now().toIso8601String();
-
-    _queueVideoInserts(batch, videos, now);
-
-    await batch.commit(noResult: true);
+    await replaceVideosSnapshot(videos);
   }
 
   @override
@@ -391,7 +439,7 @@ class FeedCache implements FeedCacheInterface {
     final db = await database;
     final results = await db.query(
       'videos',
-      orderBy: 'published_at DESC',
+      orderBy: 'snapshot_position ASC',
       limit: limit,
     );
 
@@ -420,13 +468,7 @@ class FeedCache implements FeedCacheInterface {
 
   @override
   Future<void> cacheReels(List<ReelFeedEntry> reels) async {
-    final db = await database;
-    final batch = db.batch();
-    final now = DateTime.now().toIso8601String();
-
-    _queueReelInserts(batch, reels, now);
-
-    await batch.commit(noResult: true);
+    await replaceReelsSnapshot(reels);
   }
 
   @override
@@ -446,7 +488,7 @@ class FeedCache implements FeedCacheInterface {
     final db = await database;
     final results = await db.query(
       'reels',
-      orderBy: 'published_at DESC',
+      orderBy: 'snapshot_position ASC',
       limit: limit,
     );
 
@@ -467,9 +509,37 @@ class FeedCache implements FeedCacheInterface {
     );
   }
 
+  void _queueArticleInserts(
+      Batch batch, List<ArticleFeedEntry> articles, String now) {
+    for (var index = 0; index < articles.length; index++) {
+      final article = articles[index];
+      batch.insert(
+          'articles',
+          {
+            'id': article.id,
+            'title': article.title,
+            'summary': article.summary,
+            'source': article.source,
+            'published_at': article.publishedAt.toIso8601String(),
+            'url': article.url,
+            'image_url': article.imageUrl,
+            'category': article.category,
+            'read_time': article.readTime,
+            'tags': jsonEncode(article.tags),
+            'conversation_starters': article.conversationStarters.isNotEmpty
+                ? jsonEncode(article.conversationStarters)
+                : null,
+            'snapshot_position': index,
+            'cached_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
   void _queueVideoInserts(
       Batch batch, List<VideoFeedEntry> videos, String now) {
-    for (final video in videos) {
+    for (var index = 0; index < videos.length; index++) {
+      final video = videos[index];
       batch.insert(
           'videos',
           {
@@ -486,6 +556,7 @@ class FeedCache implements FeedCacheInterface {
             'conversation_starters': video.conversationStarters.isNotEmpty
                 ? jsonEncode(video.conversationStarters)
                 : null,
+            'snapshot_position': index,
             'cached_at': now,
           },
           conflictAlgorithm: ConflictAlgorithm.replace);
@@ -493,7 +564,8 @@ class FeedCache implements FeedCacheInterface {
   }
 
   void _queueReelInserts(Batch batch, List<ReelFeedEntry> reels, String now) {
-    for (final reel in reels) {
+    for (var index = 0; index < reels.length; index++) {
+      final reel = reels[index];
       batch.insert(
           'reels',
           {
@@ -508,6 +580,7 @@ class FeedCache implements FeedCacheInterface {
             'conversation_starters': reel.conversationStarters.isNotEmpty
                 ? jsonEncode(reel.conversationStarters)
                 : null,
+            'snapshot_position': index,
             'cached_at': now,
           },
           conflictAlgorithm: ConflictAlgorithm.replace);

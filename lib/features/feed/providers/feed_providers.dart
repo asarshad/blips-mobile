@@ -132,8 +132,7 @@ class ArticlesNotifier
     this._diagnostics,
     this._ref,
     this._articleViewThreshold,
-  )   : _coldLaunchInitialLoad = _ref.read(articleColdLaunchPendingProvider),
-        super(const AsyncValue.loading()) {
+  ) : super(const AsyncValue.loading()) {
     _loadInitial();
     _startPolling();
   }
@@ -144,7 +143,6 @@ class ArticlesNotifier
   final AppDiagnosticsController _diagnostics;
   final Ref _ref;
   final Duration _articleViewThreshold;
-  final bool _coldLaunchInitialLoad;
   final FeedSurface _surface = FeedSurface.articles;
   int _page = 1;
   bool _hasMore = true;
@@ -156,7 +154,7 @@ class ArticlesNotifier
   Timer? _pollTimer;
   Timer? _pushHintDebounceTimer;
   static const int _limit = 15;
-  static const Duration _pollInterval = Duration(minutes: 5);
+  static const Duration _pollInterval = Duration(minutes: 2);
   static const Duration _pushHintDebounce = Duration(seconds: 2);
   Set<int> _newSinceLastSeenIds = <int>{};
   List<int> _currentHeadBaselineIds = const <int>[];
@@ -358,6 +356,7 @@ class ArticlesNotifier
 
     if (_coldLaunchInitialLoad) {
       final loadedFresh = await _fetchFreshSessionFromNetwork();
+      _consumeColdLaunchSurface();
       if (loadedFresh) {
         _markFeedSeenNowInBackground();
         _clearDirtyHint();
@@ -392,20 +391,7 @@ class ArticlesNotifier
     }
 
     try {
-      final shouldPreferLatestImmediately =
-          restore.resumeSnapshot == null && restore.preferLatestOnRefresh;
-      if (shouldPreferLatestImmediately) {
-        unawaited(
-          _repository.recordFreshnessEvent(
-            eventName: 'resume_path_latest_head',
-            surface: _surface.storageKey,
-            count: 1,
-          ),
-        );
-      }
-      final cached = shouldPreferLatestImmediately
-          ? const <ArticleFeedEntry>[]
-          : await _cache.getCachedArticles(limit: _limit);
+      final cached = await _cache.getCachedArticles(limit: _limit);
       if (cached.isNotEmpty && mounted) {
         state = AsyncValue.data(cached);
         _updateNewSinceLastSeen(cached);
@@ -567,7 +553,6 @@ class ArticlesNotifier
         freshPage.items.whereType<ArticleFeedEntry>().toList(growable: false);
     if (!mounted) return;
     if (freshItems.isNotEmpty) {
-      _cacheInBackground(freshItems);
       _mergeFreshArticleMetadata(freshItems);
     }
 
@@ -621,33 +606,11 @@ class ArticlesNotifier
   }
 
   Future<void> _refreshOnResumeIfNeeded() async {
-    final activeSession = await _sessionStore.getActiveSession(_surface);
-    final lastActiveAt = activeSession?.lastActiveAt.toUtc();
-    final now = DateTime.now().toUtc();
-    final age = lastActiveAt == null ? null : now.difference(lastActiveAt);
-    final hasDirtyHint = _ref.read(articleFeedDirtyAtProvider) != null;
-    if (!hasDirtyHint &&
-        age != null &&
-        age <= kArticleContinuationFreshWindow) {
-      return;
-    }
-
-    final metadata = await _repository.fetchArticlesMetadata();
-    if (!mounted) return;
-    if (!_metadataSuggestsNewHead(metadata)) {
-      _clearDirtyHint();
-      return;
-    }
-    final refreshed = await _fetchFreshSessionFromNetwork(
-      preserveVisibleState: state.hasValue,
-    );
-    if (refreshed) {
-      _clearDirtyHint();
-    }
+    await _refreshInBackground(trigger: 'resume');
   }
 
   void _clearDirtyHint() {
-    _ref.read(articleFeedDirtyAtProvider.notifier).state = null;
+    _ref.read(feedDirtyAtProvider(_surface).notifier).state = null;
   }
 
   // -- public API ----------------------------------------------------------
@@ -705,7 +668,7 @@ class ArticlesNotifier
         final merged = [...latestList, ...unique];
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
-        _cacheInBackground(nextItems);
+        _replaceCacheSnapshotInBackground(merged);
         await _persistActiveSession();
         span?.success(
           data: <String, Object?>{
@@ -791,17 +754,13 @@ class ArticlesNotifier
   }
 
   Future<void> handleTabActivated() async {
-    if (_ref.read(articleFeedDirtyAtProvider) != null) {
-      await _refreshInBackground(trigger: 'tab_activation');
-      return;
-    }
-    await refreshSilently();
+    await _refreshInBackground(trigger: 'tab_activation');
   }
 
   Future<void> handlePushFreshnessHint() async {
     _pushHintDebounceTimer?.cancel();
     _pushHintDebounceTimer = Timer(_pushHintDebounce, () async {
-      if (!mounted || _ref.read(articleFeedDirtyAtProvider) == null) return;
+      if (!mounted || _ref.read(feedDirtyAtProvider(_surface)) == null) return;
       unawaited(_refreshInBackground(trigger: 'push_hint'));
     });
   }
@@ -811,23 +770,7 @@ class ArticlesNotifier
   }
 
   Future<bool> refreshForRetap() async {
-    final ok = await _refreshInBackground(trigger: 'retap');
-    if (!ok || !mounted) return ok;
-    if (_uiState.hasPendingNewItems) return true;
-    final items = state.valueOrNull;
-    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
-      return true;
-    }
-    _setUiState(
-      _uiState.copyWith(
-        pendingNewCount: 1,
-        pendingActionKind: PendingFeedActionKind.latestBias,
-      ),
-    );
-    await _persistActiveSession(
-      pendingNewCount: 1,
-    );
-    return true;
+    return _refreshInBackground(trigger: 'retap');
   }
 
   // -- polling -------------------------------------------------------------
@@ -845,12 +788,16 @@ class ArticlesNotifier
   void _cacheInBackground(List<ArticleFeedEntry> items) {
     Future.microtask(() async {
       try {
-        await _cache.cacheArticles(items);
+        await _cache.replaceArticlesSnapshot(items);
       } catch (e) {
         logger.warning('Failed to cache articles',
             category: LogCategory.app, error: e);
       }
     });
+  }
+
+  void _replaceCacheSnapshotInBackground(List<ArticleFeedEntry> items) {
+    _cacheInBackground(items);
   }
 
   Future<void> _loadLastSeenCutoff() async {
@@ -1132,7 +1079,6 @@ class ArticlesNotifier
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
-    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -1144,13 +1090,6 @@ class ArticlesNotifier
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
-    if (pendingActionKind == PendingFeedActionKind.latestBias &&
-        prefetchedPage == null) {
-      _pendingFeedVersion = null;
-      _pendingPrefetchedPage = null;
-      _clearLatestBiasAction();
-      return true;
-    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final articles = prefetchedPage.items
           .whereType<ArticleFeedEntry>()
@@ -1179,7 +1118,7 @@ class ArticlesNotifier
           resumeSnapshotAfterRemoteWindow:
               prefetchedPage.resumeSnapshotAfterRemoteWindow,
         );
-        _cacheInBackground(articles);
+        _replaceCacheSnapshotInBackground(articles);
         await _persistActiveSession(
           pendingNewCount: 0,
         );
@@ -1210,6 +1149,15 @@ class ArticlesNotifier
     );
     unawaited(_persistActiveSession(pendingNewCount: 0));
   }
+
+  bool get _coldLaunchInitialLoad =>
+      _ref.read(coldLaunchInitialSurfaceProvider) == _surface;
+
+  void _consumeColdLaunchSurface() {
+    if (_ref.read(coldLaunchInitialSurfaceProvider) == _surface) {
+      _ref.read(coldLaunchInitialSurfaceProvider.notifier).state = null;
+    }
+  }
 }
 
 bool _stringListsEqual(List<String> left, List<String> right) {
@@ -1235,8 +1183,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     this._ref,
   ) : super(const AsyncValue.loading()) {
     _loadInitial();
-    // Stagger: videos start polling after a 45-second initial delay.
-    _startPollingWithDelay(const Duration(seconds: 45));
+    _startPolling();
   }
 
   final FeedRepository _repository;
@@ -1253,9 +1200,10 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   Future<void>? _loadMoreFuture;
   Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
-  Timer? _initialDelayTimer;
+  Timer? _pushHintDebounceTimer;
   static const int _limit = 10;
-  static const Duration _pollInterval = Duration(seconds: 90);
+  static const Duration _pollInterval = Duration(minutes: 2);
+  static const Duration _pushHintDebounce = Duration(seconds: 2);
   Set<int> _newSinceLastSeenIds = <int>{};
   List<int> _currentHeadBaselineIds = const <int>[];
 
@@ -1263,6 +1211,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   int _currentItemIndex = 0;
   bool _canContinueRemotely = true;
   String? _currentFeedVersion;
+  DateTime? _currentNewestCreatedAt;
   String? _pendingFeedVersion;
   FeedPageResult<FeedEntry>? _pendingPrefetchedPage;
 
@@ -1412,6 +1361,15 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     if (!mounted) return;
     await _loadLastSeenCutoff();
 
+    if (_coldLaunchInitialLoad) {
+      final loadedFresh = await _fetchFreshSessionFromNetwork();
+      _consumeColdLaunchSurface();
+      if (loadedFresh) {
+        _clearDirtyHint();
+        return;
+      }
+    }
+
     final restore = await _sessionStore.prepareRestore(_surface);
     if (restore.resumeSnapshot != null) {
       _applyResumedSnapshot(restore.resumeSnapshot!);
@@ -1433,7 +1391,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           count: 1,
         ),
       );
-      unawaited(_refreshInBackground());
+      unawaited(_refreshInBackground(trigger: 'initial_restore'));
       return;
     }
 
@@ -1528,7 +1486,9 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     }
   }
 
-  Future<bool> _refreshInBackground() async {
+  Future<bool> _refreshInBackground({
+    String trigger = 'background',
+  }) async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null ||
@@ -1540,68 +1500,25 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       'backgroundRefresh',
       data: <String, Object?>{
         'baselineCount': _currentHeadBaselineIds.length,
+        'trigger': trigger,
       },
     );
 
     try {
-      final freshPage = await _repository.previewVideosHead(size: _limit);
-      final freshItems =
-          freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
+      final metadata = await _repository.fetchVideosMetadata();
       if (!mounted) return false;
-
-      if (freshItems.isNotEmpty) {
-        _replaceCacheSnapshotInBackground(freshItems);
-      }
-
-      final freshHeadIds = _headBaselineIds(freshItems, _limit);
-      final freshFeedVersion = freshPage.feedVersion;
-      final hasPendingVersion =
-          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
-      final isNewPendingVersion =
-          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
-      final pendingNewCount = hasPendingVersion
-          ? countLeadingHeadNewItems(
-              baselineIds: _currentHeadBaselineIds,
-              freshHeadIds: freshHeadIds,
-            )
-          : 0;
-      if (hasPendingVersion && pendingNewCount > 0) {
-        _pendingFeedVersion = freshFeedVersion;
-        _pendingPrefetchedPage = freshPage;
-        if (isNewPendingVersion) {
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'feed_version_changed',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-            ),
-          );
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'new_content_available',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-              count: pendingNewCount,
-            ),
-          );
-        }
+      final hasFreshHead = _metadataSuggestsNewHead(metadata);
+      if (hasFreshHead) {
+        final freshPage = await _repository.previewVideosHead(size: _limit);
+        await _stagePendingFreshPage(freshPage);
       } else {
-        _pendingFeedVersion = null;
-        _pendingPrefetchedPage = null;
+        _clearDirtyHint();
       }
-      _setUiState(
-        _uiState.copyWith(
-          pendingNewCount: pendingNewCount,
-          pendingActionKind: PendingFeedActionKind.newItems,
-        ),
-      );
-      await _persistActiveSession(
-        pendingNewCount: pendingNewCount,
-      );
       span?.success(
         data: <String, Object?>{
-          'freshCount': freshItems.length,
-          'pendingNewCount': pendingNewCount,
+          'feedVersion': metadata.feedVersion,
+          'hasFreshHead': hasFreshHead,
+          'pendingNewCount': _uiState.pendingNewCount,
         },
       );
       return true;
@@ -1613,6 +1530,70 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  bool _metadataSuggestsNewHead(FeedHeadMetadata metadata) {
+    final newestCreatedAt = metadata.newestCreatedAt;
+    if (newestCreatedAt != null && _currentNewestCreatedAt != null) {
+      return newestCreatedAt.isAfter(_currentNewestCreatedAt!);
+    }
+    final latestKnownVersion = _pendingFeedVersion ?? _currentFeedVersion;
+    final freshFeedVersion = metadata.feedVersion;
+    return freshFeedVersion != null && freshFeedVersion != latestKnownVersion;
+  }
+
+  Future<void> _stagePendingFreshPage(
+    FeedPageResult<FeedEntry> freshPage,
+  ) async {
+    final freshItems =
+        freshPage.items.whereType<VideoFeedEntry>().toList(growable: false);
+    if (!mounted) return;
+    final freshHeadIds = _headBaselineIds(freshItems, _limit);
+    final freshFeedVersion = freshPage.feedVersion;
+    final hasPendingVersion =
+        freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+    final isNewPendingVersion =
+        hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+    final pendingNewCount = hasPendingVersion
+        ? countLeadingHeadNewItems(
+            baselineIds: _currentHeadBaselineIds,
+            freshHeadIds: freshHeadIds,
+          )
+        : 0;
+    if (hasPendingVersion && pendingNewCount > 0) {
+      _pendingFeedVersion = freshFeedVersion;
+      _pendingPrefetchedPage = freshPage;
+      if (isNewPendingVersion) {
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'feed_version_changed',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+          ),
+        );
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'new_content_available',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+            count: pendingNewCount,
+          ),
+        );
+      }
+    } else {
+      _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: pendingNewCount,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    _clearDirtyHint();
+    await _persistActiveSession(
+      pendingNewCount: pendingNewCount,
+    );
   }
 
   // -- public API ----------------------------------------------------------
@@ -1663,7 +1644,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
         final merged = [...latestList, ...unique];
         state = AsyncValue.data(merged);
         _updateNewSinceLastSeen(merged);
-        _cacheInBackground(nextItems);
+        _replaceCacheSnapshotInBackground(merged);
         await _persistActiveSession();
         span?.success(
           data: <String, Object?>{
@@ -1741,41 +1722,40 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   /// Background refresh without spinners or index reset.
   Future<void> refreshSilently() async {
-    await _refreshInBackground();
+    await _refreshInBackground(trigger: 'silent');
+  }
+
+  Future<void> handleAppResume() async {
+    await _refreshInBackground(trigger: 'resume');
+  }
+
+  Future<void> handleTabActivated() async {
+    await _refreshInBackground(trigger: 'tab_activation');
+  }
+
+  Future<void> handlePushFreshnessHint() async {
+    _pushHintDebounceTimer?.cancel();
+    _pushHintDebounceTimer = Timer(_pushHintDebounce, () async {
+      if (!mounted || _ref.read(feedDirtyAtProvider(_surface)) == null) return;
+      unawaited(_refreshInBackground(trigger: 'push_hint'));
+    });
+  }
+
+  void cancelPushFreshnessHint() {
+    _pushHintDebounceTimer?.cancel();
   }
 
   Future<bool> refreshForRetap() async {
-    final ok = await _refreshInBackground();
-    if (!ok || !mounted) return ok;
-    if (_uiState.hasPendingNewItems) return true;
-    final items = state.valueOrNull;
-    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
-      return true;
-    }
-    _setUiState(
-      _uiState.copyWith(
-        pendingNewCount: 1,
-        pendingActionKind: PendingFeedActionKind.latestBias,
-      ),
-    );
-    await _persistActiveSession(
-      pendingNewCount: 1,
-    );
-    return true;
+    return _refreshInBackground(trigger: 'retap');
   }
 
   // -- polling -------------------------------------------------------------
 
-  void _startPollingWithDelay(Duration initialDelay) {
-    _initialDelayTimer?.cancel();
-    _initialDelayTimer = Timer(initialDelay, () {
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
       if (!mounted) return;
       _refreshInBackground();
-      _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(_pollInterval, (_) {
-        if (!mounted) return;
-        _refreshInBackground();
-      });
     });
   }
 
@@ -1784,7 +1764,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
   void _cacheInBackground(List<VideoFeedEntry> items) {
     Future.microtask(() async {
       try {
-        await _cache.cacheVideos(items);
+        await _cache.replaceVideosSnapshot(items);
       } catch (e) {
         logger.warning('Failed to cache videos',
             category: LogCategory.app, error: e);
@@ -1821,6 +1801,17 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     );
   }
 
+  DateTime? _newestCreatedAtFor(List<VideoFeedEntry> items) {
+    DateTime? newest;
+    for (final item in items) {
+      final createdAt = (item.addedAt ?? item.publishedAt).toUtc();
+      if (newest == null || createdAt.isAfter(newest)) {
+        newest = createdAt;
+      }
+    }
+    return newest;
+  }
+
   void _applyResumedSnapshot(FeedSessionSnapshot snapshot) {
     final videos =
         snapshot.items.whereType<VideoFeedEntry>().toList(growable: false);
@@ -1839,6 +1830,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
           fallbackIndex: snapshot.lastViewedIndex,
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
+    _currentNewestCreatedAt = _newestCreatedAtFor(videos);
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
     _canContinueRemotely =
@@ -1881,6 +1873,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _currentHeadBaselineIds = _headBaselineIds(videos, _limit);
     _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
+    _currentNewestCreatedAt = _newestCreatedAtFor(videos);
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
     state = AsyncValue.data(videos);
@@ -1978,7 +1971,6 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
-    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -1990,13 +1982,6 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
-    if (pendingActionKind == PendingFeedActionKind.latestBias &&
-        prefetchedPage == null) {
-      _pendingFeedVersion = null;
-      _pendingPrefetchedPage = null;
-      _clearLatestBiasAction();
-      return true;
-    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final videos = prefetchedPage.items
           .whereType<VideoFeedEntry>()
@@ -2030,7 +2015,7 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
 
   @override
   void dispose() {
-    _initialDelayTimer?.cancel();
+    _pushHintDebounceTimer?.cancel();
     _pollTimer?.cancel();
     super.dispose();
   }
@@ -2047,6 +2032,19 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
       ),
     );
     unawaited(_persistActiveSession(pendingNewCount: 0));
+  }
+
+  void _clearDirtyHint() {
+    _ref.read(feedDirtyAtProvider(_surface).notifier).state = null;
+  }
+
+  bool get _coldLaunchInitialLoad =>
+      _ref.read(coldLaunchInitialSurfaceProvider) == _surface;
+
+  void _consumeColdLaunchSurface() {
+    if (_ref.read(coldLaunchInitialSurfaceProvider) == _surface) {
+      _ref.read(coldLaunchInitialSurfaceProvider.notifier).state = null;
+    }
   }
 }
 
@@ -2181,17 +2179,17 @@ final reelsFeedWithAdsProvider =
   final feedState = ref.watch(reelsFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
+  final repository = ref.watch(feedRepositoryProvider);
+  final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.reels));
 
-  return feedState.when(
-    data: (items) => AsyncValue.data(
-      buildFeedPageItems(
-        entries: items,
-        adsConfig: adsConfig,
-        surface: AdSurface.reels,
-      ),
-    ),
-    error: (err, stack) => AsyncValue.error(err, stack),
-    loading: () => const AsyncValue.loading(),
+  return _buildFeedItemsWithOptionalOverlay<ReelFeedEntry>(
+    feedState: feedState,
+    overlayEntry: uiState.notificationOverlayEntry is ReelFeedEntry
+        ? uiState.notificationOverlayEntry as ReelFeedEntry
+        : null,
+    adsConfig: adsConfig,
+    surface: AdSurface.reels,
+    sessionId: repository.reelsSessionId,
   );
 });
 
@@ -2228,14 +2226,17 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   Future<void>? _loadMoreFuture;
   Future<bool>? _manualRefreshFuture;
   Timer? _pollTimer;
+  Timer? _pushHintDebounceTimer;
   static const int _limit = 20;
-  static const Duration _pollInterval = Duration(seconds: 60);
+  static const Duration _pollInterval = Duration(minutes: 2);
+  static const Duration _pushHintDebounce = Duration(seconds: 2);
   List<int> _currentHeadBaselineIds = const <int>[];
   int? _currentItemId;
   int _currentItemIndex = 0;
   String? _currentFeedVersion;
   String? _pendingFeedVersion;
-  bool _preferLatestOnRefresh = false;
+  DateTime? _currentNewestCreatedAt;
+  bool _canContinueRemotely = true;
   FeedPageResult<ReelFeedEntry>? _pendingPrefetchedPage;
 
   FeedSurfaceUiState get _uiState =>
@@ -2271,6 +2272,85 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     );
   }
 
+  void clearUnavailableTargetMessage() {
+    _setUiState(
+      _uiState.copyWith(
+        clearUnavailableTargetMessage: true,
+      ),
+    );
+  }
+
+  bool _restoreResolvedNotificationTarget(int contentId) {
+    final currentItems = state.valueOrNull ?? const <ReelFeedEntry>[];
+    final existingIndex =
+        currentItems.indexWhere((entry) => entry.id == contentId);
+    if (existingIndex >= 0) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: existingIndex,
+          clearNotificationOverlayEntry: true,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is ReelFeedEntry && overlayEntry.id == contentId) {
+      _setUiState(
+        _uiState.copyWith(
+          restoreItemId: contentId,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<bool> ensureNotificationTargetLoaded(int contentId) async {
+    if (_restoreResolvedNotificationTarget(contentId)) {
+      return true;
+    }
+
+    try {
+      final reel = await _repository.fetchReelById(contentId);
+      if (!mounted) return false;
+      _setUiState(
+        _uiState.copyWith(
+          notificationOverlayEntry: reel,
+          restoreItemId: reel.id,
+          restoreApproximateIndex: 0,
+          clearUnavailableTargetMessage: true,
+        ),
+      );
+      return true;
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to recover reel notification target',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+      if (!mounted) return false;
+      if (_restoreResolvedNotificationTarget(contentId)) {
+        return true;
+      }
+      _setUiState(
+        _uiState.copyWith(
+          clearNotificationOverlayEntry: true,
+          clearRestoreItemId: true,
+          clearRestoreApproximateIndex: true,
+          unavailableTargetMessage: 'That reel is unavailable.',
+        ),
+      );
+      return false;
+    }
+  }
+
   bool get hasMore => _hasMore;
 
   FeedInventoryState get inventoryState => _inventoryState;
@@ -2300,9 +2380,17 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
   Future<void> loadInitial() async {
     if (!mounted) return;
 
+    if (_coldLaunchInitialLoad) {
+      final loadedFresh = await _fetchFreshSessionFromNetwork();
+      _consumeColdLaunchSurface();
+      if (loadedFresh) {
+        _clearDirtyHint();
+        return;
+      }
+    }
+
     final restore = await _sessionStore.prepareRestore(_surface);
     if (restore.resumeSnapshot != null) {
-      _preferLatestOnRefresh = restore.preferLatestOnRefresh;
       _applyResumedSnapshot(restore.resumeSnapshot!);
       unawaited(
         _repository.recordFreshnessEvent(
@@ -2322,7 +2410,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
           count: 1,
         ),
       );
-      unawaited(_refreshInBackground());
+      unawaited(_refreshInBackground(trigger: 'initial_restore'));
       return;
     }
 
@@ -2426,7 +2514,9 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     }
   }
 
-  Future<bool> _refreshInBackground() async {
+  Future<bool> _refreshInBackground({
+    String trigger = 'background',
+  }) async {
     if (_isRefreshing ||
         _manualRefreshFuture != null ||
         _loadMoreFuture != null ||
@@ -2438,75 +2528,25 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       'backgroundRefresh',
       data: <String, Object?>{
         'baselineCount': _currentHeadBaselineIds.length,
+        'trigger': trigger,
       },
     );
 
     try {
-      final freshPage = await _repository.previewReelsHead(limit: _limit);
-      final freshReels = freshPage.items;
+      final metadata = await _repository.fetchReelsMetadata();
       if (!mounted) return false;
-      if (freshReels.isNotEmpty) {
-        _replaceCacheSnapshotInBackground(freshReels);
-      }
-      final freshHeadIds = _headBaselineIds(freshReels, _limit);
-      final freshFeedVersion = freshPage.feedVersion;
-      final hasPendingVersion =
-          freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
-      final isNewPendingVersion =
-          hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
-      var pendingNewCount = hasPendingVersion
-          ? countLeadingHeadNewItems(
-              baselineIds: _currentHeadBaselineIds,
-              freshHeadIds: freshHeadIds,
-            )
-          : 0;
-      var pendingActionKind = PendingFeedActionKind.newItems;
-      if (_preferLatestOnRefresh &&
-          hasPendingVersion &&
-          pendingNewCount == 0 &&
-          freshReels.isNotEmpty) {
-        pendingNewCount = 1;
-        pendingActionKind = PendingFeedActionKind.latestBias;
-      }
-      if (hasPendingVersion && pendingNewCount > 0) {
-        _pendingFeedVersion = freshFeedVersion;
-        _pendingPrefetchedPage = freshPage;
-        if (isNewPendingVersion) {
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'feed_version_changed',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-            ),
-          );
-          unawaited(
-            _repository.recordFreshnessEvent(
-              eventName: 'new_content_available',
-              surface: _surface.storageKey,
-              feedVersion: freshFeedVersion,
-              count: pendingNewCount,
-            ),
-          );
-        }
+      final hasFreshHead = _metadataSuggestsNewHead(metadata);
+      if (hasFreshHead) {
+        final freshPage = await _repository.previewReelsHead(limit: _limit);
+        await _stagePendingFreshPage(freshPage);
       } else {
-        _pendingFeedVersion = null;
-        _pendingPrefetchedPage = null;
+        _clearDirtyHint();
       }
-      _setUiState(
-        _uiState.copyWith(
-          pendingNewCount: pendingNewCount,
-          pendingActionKind: pendingNewCount > 0
-              ? pendingActionKind
-              : PendingFeedActionKind.newItems,
-        ),
-      );
-      await _persistActiveSession(
-        pendingNewCount: pendingNewCount,
-      );
       span?.success(
         data: <String, Object?>{
-          'freshCount': freshReels.length,
-          'pendingNewCount': pendingNewCount,
+          'feedVersion': metadata.feedVersion,
+          'hasFreshHead': hasFreshHead,
+          'pendingNewCount': _uiState.pendingNewCount,
         },
       );
       return true;
@@ -2524,10 +2564,71 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     }
   }
 
+  bool _metadataSuggestsNewHead(FeedHeadMetadata metadata) {
+    final newestCreatedAt = metadata.newestCreatedAt;
+    if (newestCreatedAt != null && _currentNewestCreatedAt != null) {
+      return newestCreatedAt.isAfter(_currentNewestCreatedAt!);
+    }
+    final latestKnownVersion = _pendingFeedVersion ?? _currentFeedVersion;
+    final freshFeedVersion = metadata.feedVersion;
+    return freshFeedVersion != null && freshFeedVersion != latestKnownVersion;
+  }
+
+  Future<void> _stagePendingFreshPage(
+    FeedPageResult<ReelFeedEntry> freshPage,
+  ) async {
+    final freshHeadIds = _headBaselineIds(freshPage.items, _limit);
+    final freshFeedVersion = freshPage.feedVersion;
+    final hasPendingVersion =
+        freshFeedVersion != null && freshFeedVersion != _currentFeedVersion;
+    final isNewPendingVersion =
+        hasPendingVersion && freshFeedVersion != _pendingFeedVersion;
+    final pendingNewCount = hasPendingVersion
+        ? countLeadingHeadNewItems(
+            baselineIds: _currentHeadBaselineIds,
+            freshHeadIds: freshHeadIds,
+          )
+        : 0;
+    if (hasPendingVersion && pendingNewCount > 0) {
+      _pendingFeedVersion = freshFeedVersion;
+      _pendingPrefetchedPage = freshPage;
+      if (isNewPendingVersion) {
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'feed_version_changed',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+          ),
+        );
+        unawaited(
+          _repository.recordFreshnessEvent(
+            eventName: 'new_content_available',
+            surface: _surface.storageKey,
+            feedVersion: freshFeedVersion,
+            count: pendingNewCount,
+          ),
+        );
+      }
+    } else {
+      _pendingFeedVersion = null;
+      _pendingPrefetchedPage = null;
+    }
+    _setUiState(
+      _uiState.copyWith(
+        pendingNewCount: pendingNewCount,
+        pendingActionKind: PendingFeedActionKind.newItems,
+      ),
+    );
+    _clearDirtyHint();
+    await _persistActiveSession(
+      pendingNewCount: pendingNewCount,
+    );
+  }
+
   void _cacheInBackground(List<ReelFeedEntry> reels) {
     Future.microtask(() async {
       try {
-        await _cache.cacheReels(reels);
+        await _cache.replaceReelsSnapshot(reels);
       } catch (e) {
         logger.warning(
           'Failed to cache reels',
@@ -2580,10 +2681,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       },
     );
     try {
-      var nextPage = await _repository.fetchReelsPage(
-        cursor: _nextCursor,
-        limit: _limit,
-      );
+      var nextPage = _canContinueRemotely
+          ? await _repository.fetchReelsPage(
+              cursor: _nextCursor,
+              limit: _limit,
+            )
+          : await _startFreshContinuationAfterExpiry(currentList);
       var nextReels = nextPage.items;
 
       if (mounted) {
@@ -2596,6 +2699,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         var duplicateRetries = 0;
         while (uniqueNextReels.isEmpty &&
             nextPage.hasMore &&
+            _canContinueRemotely &&
             duplicateRetries < 2) {
           duplicateRetries += 1;
           nextPage = await _repository.fetchReelsPage(
@@ -2611,9 +2715,10 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         _hasMore = nextPage.hasMore;
         _nextCursor = nextPage.nextCursor;
         _inventoryState = nextPage.inventoryState;
-        state = AsyncValue.data([...latestList, ...uniqueNextReels]);
+        final merged = [...latestList, ...uniqueNextReels];
+        state = AsyncValue.data(merged);
 
-        _cacheInBackground(nextReels);
+        _replaceCacheSnapshotInBackground(merged);
         await _persistActiveSession();
         span?.success(
           data: <String, Object?>{
@@ -2667,7 +2772,6 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       _currentItemId = null;
       _currentItemIndex = 0;
       _pendingFeedVersion = null;
-      _preferLatestOnRefresh = false;
       _pendingPrefetchedPage = null;
       _setUiState(
         _uiState.copyWith(
@@ -2701,27 +2805,31 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   /// Background refresh without disrupting current playback.
   Future<void> refreshSilently() async {
-    await _refreshInBackground();
+    await _refreshInBackground(trigger: 'silent');
+  }
+
+  Future<void> handleAppResume() async {
+    await _refreshInBackground(trigger: 'resume');
+  }
+
+  Future<void> handleTabActivated() async {
+    await _refreshInBackground(trigger: 'tab_activation');
+  }
+
+  Future<void> handlePushFreshnessHint() async {
+    _pushHintDebounceTimer?.cancel();
+    _pushHintDebounceTimer = Timer(_pushHintDebounce, () async {
+      if (!mounted || _ref.read(feedDirtyAtProvider(_surface)) == null) return;
+      unawaited(_refreshInBackground(trigger: 'push_hint'));
+    });
+  }
+
+  void cancelPushFreshnessHint() {
+    _pushHintDebounceTimer?.cancel();
   }
 
   Future<bool> refreshForRetap() async {
-    final ok = await _refreshInBackground();
-    if (!ok || !mounted) return ok;
-    if (_uiState.hasPendingNewItems) return true;
-    final items = state.valueOrNull;
-    if (items == null || items.isEmpty || _currentItemIndex <= 0) {
-      return true;
-    }
-    _setUiState(
-      _uiState.copyWith(
-        pendingNewCount: 1,
-        pendingActionKind: PendingFeedActionKind.latestBias,
-      ),
-    );
-    await _persistActiveSession(
-      pendingNewCount: 1,
-    );
-    return true;
+    return _refreshInBackground(trigger: 'retap');
   }
 
   void _startPolling() {
@@ -2737,6 +2845,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         snapshot.items.whereType<ReelFeedEntry>().toList(growable: false);
     final canContinueRemotely =
         _sessionStore.isRemoteContinuationFresh(_surface, snapshot);
+    _canContinueRemotely = canContinueRemotely;
     _hasMore = snapshot.hasMore;
     _nextCursor = canContinueRemotely ? snapshot.continuationCursor : null;
     _inventoryState = snapshot.inventoryState;
@@ -2752,9 +2861,17 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
           fallbackIndex: snapshot.lastViewedIndex,
         );
     _currentFeedVersion = snapshot.lastFeedVersion;
+    _currentNewestCreatedAt = _newestCreatedAtFor(reels);
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
-    _repository.restoreReelsCursor(_nextCursor);
+    if (canContinueRemotely) {
+      _repository.restoreReelsSession(
+        sessionId: snapshot.sessionId,
+        cursor: int.tryParse(snapshot.continuationCursor ?? ''),
+      );
+    } else {
+      _repository.restoreReelsSession(sessionId: null, cursor: null);
+    }
     state = AsyncValue.data(reels);
     _setUiState(
       _uiState.copyWith(
@@ -2783,9 +2900,10 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _currentItemId = reels.isEmpty ? null : reels.first.id;
     _currentItemIndex = 0;
     _currentHeadBaselineIds = _headBaselineIds(reels, _limit);
+    _canContinueRemotely = true;
     _currentFeedVersion = feedVersion;
+    _currentNewestCreatedAt = _newestCreatedAtFor(reels);
     _pendingFeedVersion = null;
-    _preferLatestOnRefresh = false;
     _pendingPrefetchedPage = null;
     state = AsyncValue.data(reels);
     _setUiState(
@@ -2812,6 +2930,57 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     return fallbackIndex;
   }
 
+  DateTime? _newestCreatedAtFor(List<ReelFeedEntry> items) {
+    DateTime? newest;
+    for (final item in items) {
+      final createdAt = (item.addedAt ?? item.publishedAt).toUtc();
+      if (newest == null || createdAt.isAfter(newest)) {
+        newest = createdAt;
+      }
+    }
+    return newest;
+  }
+
+  Future<FeedPageResult<ReelFeedEntry>> _startFreshContinuationAfterExpiry(
+    List<ReelFeedEntry> currentList,
+  ) async {
+    unawaited(
+      _repository.recordFreshnessEvent(
+        eventName: 'resume_path_fresh_continuation',
+        surface: _surface.storageKey,
+        count: 1,
+      ),
+    );
+    final existingIds = currentList.map((entry) => entry.id).toSet();
+    var result = await _repository.fetchReelsPage(limit: _limit);
+    final collected = result.items
+        .where((entry) => !existingIds.contains(entry.id))
+        .toList(growable: true);
+
+    var pageCount = 1;
+    while (collected.isEmpty && result.hasMore && pageCount < 3) {
+      pageCount += 1;
+      result = await _repository.fetchReelsPage(
+        cursor: result.nextCursor,
+        limit: _limit,
+      );
+      collected.addAll(
+        result.items.where((entry) => !existingIds.contains(entry.id)),
+      );
+    }
+
+    _canContinueRemotely = true;
+    return FeedPageResult<ReelFeedEntry>(
+      items: collected,
+      hasMore: result.hasMore,
+      inventoryState: result.inventoryState,
+      nextCursor: result.nextCursor,
+      sessionId: result.sessionId,
+      sessionCursor: result.sessionCursor,
+      feedVersion: result.feedVersion,
+    );
+  }
+
   Future<void> _persistActiveSession({int? pendingNewCount}) async {
     final items = state.valueOrNull;
     if (items == null || items.isEmpty) return;
@@ -2830,7 +2999,8 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
         lastViewedIndex: currentItemIndex,
         lastActiveAt: DateTime.now().toUtc(),
         headBaselineIds: baseline,
-        continuationCursor: _nextCursor,
+        sessionId: _canContinueRemotely ? _repository.reelsSessionId : null,
+        continuationCursor: _canContinueRemotely ? _nextCursor : null,
         hasMore: _hasMore,
         inventoryState: _inventoryState,
         pendingNewCount: pendingNewCount ?? _uiState.pendingNewCount,
@@ -2842,7 +3012,6 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   Future<bool> openPendingNewContent() async {
     final pendingNewCount = _uiState.pendingNewCount;
-    final pendingActionKind = _uiState.pendingActionKind;
     if (pendingNewCount > 0) {
       unawaited(
         _repository.recordFreshnessEvent(
@@ -2854,18 +3023,13 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       );
     }
     final prefetchedPage = _pendingPrefetchedPage;
-    if (pendingActionKind == PendingFeedActionKind.latestBias &&
-        prefetchedPage == null) {
-      _pendingFeedVersion = null;
-      _preferLatestOnRefresh = false;
-      _pendingPrefetchedPage = null;
-      _clearLatestBiasAction();
-      return true;
-    }
     if (pendingNewCount > 0 && prefetchedPage != null) {
       final reels = prefetchedPage.items;
       if (reels.isNotEmpty) {
-        _repository.restoreReelsCursor(prefetchedPage.nextCursor);
+        _repository.restoreReelsSession(
+          sessionId: prefetchedPage.sessionId,
+          cursor: prefetchedPage.sessionCursor,
+        );
         _applyFreshReels(
           reels,
           hasMore: prefetchedPage.hasMore,
@@ -2885,6 +3049,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 
   @override
   void dispose() {
+    _pushHintDebounceTimer?.cancel();
     _pollTimer?.cancel();
     super.dispose();
   }
@@ -2901,6 +3066,19 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
       ),
     );
     unawaited(_persistActiveSession(pendingNewCount: 0));
+  }
+
+  void _clearDirtyHint() {
+    _ref.read(feedDirtyAtProvider(_surface).notifier).state = null;
+  }
+
+  bool get _coldLaunchInitialLoad =>
+      _ref.read(coldLaunchInitialSurfaceProvider) == _surface;
+
+  void _consumeColdLaunchSurface() {
+    if (_ref.read(coldLaunchInitialSurfaceProvider) == _surface) {
+      _ref.read(coldLaunchInitialSurfaceProvider.notifier).state = null;
+    }
   }
 }
 

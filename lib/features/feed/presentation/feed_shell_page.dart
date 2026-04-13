@@ -53,24 +53,33 @@ class FeedShellPage extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentIndex = useState(0);
-    final pageController = usePageController();
     final sessionStore = ref.watch(feedSessionStoreProvider);
+    final startupSurfaceFuture = useMemoized(sessionStore.getLastSurface);
+    final startupSurfaceSnapshot = useFuture(startupSurfaceFuture);
+    final startupSurfaceResolved =
+        startupSurfaceSnapshot.connectionState == ConnectionState.done;
+    final startupSurface = startupSurfaceSnapshot.data ?? FeedSurface.articles;
+    final currentIndex = useState(startupSurface.tabIndex);
+    final startupReady = useState(false);
+    final otherFeedsPreloaded = useState(false);
+    final pageController =
+        usePageController(initialPage: startupSurface.tabIndex);
 
     // Vertical page controllers for each feed surface
     final articleFeedController = usePageController();
     final videoFeedController = usePageController();
     final reelsFeedController = usePageController();
 
-    // Watch providers for current view
-    final articleFeed = ref.watch(articleFeedWithAdsProvider);
-    final videoFeed = ref.watch(videoFeedWithAdsProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
-    final articleUiState =
-        ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
-    final videoUiState =
-        ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
     final pushController = ref.watch(pushNotificationsControllerProvider);
+    final visibleFeedState = !startupReady.value
+        ? null
+        : switch (currentIndex.value) {
+            0 => ref.watch(articleFeedWithAdsProvider),
+            1 => ref.watch(videoFeedWithAdsProvider),
+            2 => ref.watch(reelsFeedWithAdsProvider),
+            _ => null,
+          };
 
     ref.listen<NotificationTarget?>(pendingNotificationTargetProvider,
         (previous, next) {
@@ -109,8 +118,17 @@ class FeedShellPage extends HookConsumerWidget {
         ref.read(videosFeedProvider.notifier).clearUnavailableTargetMessage();
       },
     );
+    ref.listen<FeedSurfaceUiState>(
+      feedSurfaceUiStateProvider(FeedSurface.reels),
+      (_, next) {
+        final message = next.unavailableTargetMessage;
+        if (message == null || !context.mounted) return;
+        _showInfoSnackbar(context, message);
+        ref.read(reelsFeedProvider.notifier).clearUnavailableTargetMessage();
+      },
+    );
     ref.listen<DateTime?>(
-      articleFeedDirtyAtProvider,
+      feedDirtyAtProvider(FeedSurface.articles),
       (previous, next) {
         if (next == null || next == previous || currentIndex.value != 0) {
           return;
@@ -122,9 +140,28 @@ class FeedShellPage extends HookConsumerWidget {
         });
       },
     );
-
-    // Warm reels data in background (controller warm-up is owned by Reels page).
-    _useBackgroundReelsWarmup(ref);
+    ref.listen<DateTime?>(
+      feedDirtyAtProvider(FeedSurface.videos),
+      (previous, next) {
+        if (next == null || next == previous || currentIndex.value != 1) {
+          return;
+        }
+        Future.microtask(() async {
+          await ref.read(videosFeedProvider.notifier).handlePushFreshnessHint();
+        });
+      },
+    );
+    ref.listen<DateTime?>(
+      feedDirtyAtProvider(FeedSurface.reels),
+      (previous, next) {
+        if (next == null || next == previous || currentIndex.value != 2) {
+          return;
+        }
+        Future.microtask(() async {
+          await ref.read(reelsFeedProvider.notifier).handlePushFreshnessHint();
+        });
+      },
+    );
 
     // Pause videos when navigating away from video tabs
     _useVideoPauseOnNavigate(currentIndex.value, videoManager);
@@ -141,21 +178,56 @@ class FeedShellPage extends HookConsumerWidget {
     useEffect(() {
       unawaited(pushController.ensureStarted());
       unawaited(pushController.onEligibleShellEntered());
-      Future.microtask(() {
-        ref.read(articleColdLaunchPendingProvider.notifier).state = false;
-      });
       return null;
     }, const []);
 
     useEffect(() {
-      Future.microtask(() async {
-        final lastSurface = await sessionStore.getLastSurface();
-        if (lastSurface != null && currentIndex.value != lastSurface.tabIndex) {
-          currentIndex.value = lastSurface.tabIndex;
+      if (!startupSurfaceResolved) {
+        return null;
+      }
+      currentIndex.value = startupSurface.tabIndex;
+      ref.read(coldLaunchInitialSurfaceProvider.notifier).state =
+          startupSurface;
+      startupReady.value = true;
+      return null;
+    }, [startupSurfaceResolved, startupSurface]);
+
+    useEffect(() {
+      if (!startupReady.value ||
+          otherFeedsPreloaded.value ||
+          visibleFeedState == null ||
+          !visibleFeedState.hasValue) {
+        return null;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (otherFeedsPreloaded.value) return;
+        otherFeedsPreloaded.value = true;
+        for (final surface in const [
+          FeedSurface.articles,
+          FeedSurface.videos,
+          FeedSurface.reels,
+        ]) {
+          if (surface == startupSurface) continue;
+          switch (surface) {
+            case FeedSurface.articles:
+              ref.read(articleFeedWithAdsProvider);
+              break;
+            case FeedSurface.videos:
+              ref.read(videoFeedWithAdsProvider);
+              break;
+            case FeedSurface.reels:
+              ref.read(reelsFeedWithAdsProvider);
+              break;
+          }
         }
       });
       return null;
-    }, const []);
+    }, [
+      startupReady.value,
+      otherFeedsPreloaded.value,
+      visibleFeedState,
+      startupSurface
+    ]);
 
     useEffect(() {
       if (currentIndex.value >= 0 && currentIndex.value <= 2) {
@@ -173,19 +245,18 @@ class FeedShellPage extends HookConsumerWidget {
           Expanded(
             child: Stack(
               children: [
-                _buildBody(
-                  pageController: pageController,
-                  currentIndex: currentIndex,
-                  articleFeed: articleFeed,
-                  videoFeed: videoFeed,
-                  articleFeedController: articleFeedController,
-                  videoFeedController: videoFeedController,
-                  reelsFeedController: reelsFeedController,
-                  articleUiState: articleUiState,
-                  videoUiState: videoUiState,
-                  ref: ref,
-                  context: context,
-                ),
+                if (startupReady.value)
+                  _buildBody(
+                    pageController: pageController,
+                    currentIndex: currentIndex,
+                    articleFeedController: articleFeedController,
+                    videoFeedController: videoFeedController,
+                    reelsFeedController: reelsFeedController,
+                    ref: ref,
+                    context: context,
+                  )
+                else
+                  const SizedBox.expand(),
                 // Debug overlay for development builds
                 if (kDebugMode) const DeviceDebugOverlay(),
               ],
@@ -262,10 +333,10 @@ class FeedShellPage extends HookConsumerWidget {
         unawaited(ref.read(articlesFeedProvider.notifier).handleTabActivated());
         break;
       case 1:
-        unawaited(ref.read(videosFeedProvider.notifier).refreshSilently());
+        unawaited(ref.read(videosFeedProvider.notifier).handleTabActivated());
         break;
       case 2:
-        unawaited(ref.read(reelsFeedProvider.notifier).refreshSilently());
+        unawaited(ref.read(reelsFeedProvider.notifier).handleTabActivated());
         break;
       case 3:
       case 4:
@@ -411,8 +482,8 @@ class FeedShellPage extends HookConsumerWidget {
           unawaited(
             Future.wait<void>([
               ref.read(articlesFeedProvider.notifier).handleAppResume(),
-              ref.read(videosFeedProvider.notifier).refreshSilently(),
-              ref.read(reelsFeedProvider.notifier).refreshSilently(),
+              ref.read(videosFeedProvider.notifier).handleAppResume(),
+              ref.read(reelsFeedProvider.notifier).handleAppResume(),
             ]),
           );
         },
@@ -436,6 +507,10 @@ class FeedShellPage extends HookConsumerWidget {
       case NotificationSurface.videos:
         return ref
             .read(videosFeedProvider.notifier)
+            .ensureNotificationTargetLoaded(target.contentId);
+      case NotificationSurface.reels:
+        return ref
+            .read(reelsFeedProvider.notifier)
             .ensureNotificationTargetLoaded(target.contentId);
     }
   }
@@ -823,121 +898,35 @@ class FeedShellPage extends HookConsumerWidget {
   Widget _buildBody({
     required PageController pageController,
     required ValueNotifier<int> currentIndex,
-    required AsyncValue<List<FeedPageItem>> articleFeed,
-    required AsyncValue<List<FeedPageItem>> videoFeed,
     required PageController articleFeedController,
     required PageController videoFeedController,
     required PageController reelsFeedController,
-    required FeedSurfaceUiState articleUiState,
-    required FeedSurfaceUiState videoUiState,
     required WidgetRef ref,
     required BuildContext context,
   }) {
     final allTabs = [
-      FeedTab<FeedPageItem>(
-        feed: articleFeed,
-        emptyLabel: 'Articles are warming up.',
+      _ArticlesFeedTab(
+        currentIndex: currentIndex.value,
         controller: articleFeedController,
-        builder: (entry, isCurrentPage) {
-          final notifier = ref.read(articlesFeedProvider.notifier);
-          if (entry is NativeAdSlotFeedPageItem) {
-            return NativeAdCard(slot: entry);
-          }
-          if (entry is SponsorCardFeedPageItem) {
-            return AdCard(entry: entry.entry);
-          }
-          final organicEntry = entry.organicEntry;
-          if (organicEntry is! ArticleFeedEntry) {
-            return const SizedBox.shrink();
-          }
-          return ArticleCard(
-            entry: organicEntry,
-            isVisible: currentIndex.value == 0 && isCurrentPage,
-            isNewSinceLastSeen:
-                notifier.isEntryNewSinceLastSeen(organicEntry.id),
-          );
-        },
         onRefresh: () =>
             _refreshArticlesManually(ref, context, articleFeedController),
-        onLoadMore: () => ref.read(articlesFeedProvider.notifier).loadMore(),
-        onPageChanged: (index, entry) => ref
-            .read(articlesFeedProvider.notifier)
-            .setCurrentViewPosition(index, entry as ArticleFeedEntry?),
-        onPrimaryVisibleEntrySettled: (entry) => unawaited(
-          ref.read(articlesFeedProvider.notifier).markExposed(entry.id),
+        onOpenPending: () => _refreshArticlesManually(
+          ref,
+          context,
+          articleFeedController,
+          fromNewItems: true,
         ),
-        isActive: currentIndex.value == 0,
-        restoreEntryId: articleUiState.restoreItemId,
-        restoreApproximateIndex: articleUiState.restoreApproximateIndex,
-        onRestoreApplied:
-            ref.read(articlesFeedProvider.notifier).consumeRestoreTarget,
-        topActionLabel: articleUiState.pendingActionLabel,
-        onTopAction: articleUiState.hasPendingAction
-            ? () => _refreshArticlesManually(
-                  ref,
-                  context,
-                  articleFeedController,
-                  fromNewItems: true,
-                )
-            : null,
       ),
-      FeedTab<FeedPageItem>(
-        feed: videoFeed,
-        emptyLabel: 'Videos are warming up.',
-        containsVideos: true,
+      _VideosFeedTab(
+        currentIndex: currentIndex.value,
         controller: videoFeedController,
-        builder: (entry, isCurrentPage) {
-          final notifier = ref.read(videosFeedProvider.notifier);
-          if (entry is NativeAdSlotFeedPageItem) {
-            return NativeAdCard(slot: entry);
-          }
-          if (entry is SponsorCardFeedPageItem) {
-            return AdCard(entry: entry.entry);
-          }
-          final organicEntry = entry.organicEntry;
-          if (organicEntry is! VideoFeedEntry) {
-            return const SizedBox.shrink();
-          }
-          return VideoCard(
-            entry: organicEntry,
-            isVisible: currentIndex.value == 1 && isCurrentPage,
-            isNewSinceLastSeen:
-                notifier.isEntryNewSinceLastSeen(organicEntry.id),
-          );
-        },
         onRefresh: () =>
             _refreshVideosManually(ref, context, videoFeedController),
-        onLoadMore: () => ref.read(videosFeedProvider.notifier).loadMore(),
-        onPageChanged: (index, entry) => ref
-            .read(videosFeedProvider.notifier)
-            .setCurrentViewPosition(index, entry as VideoFeedEntry?),
-        onPrimaryVisibleEntrySettled: (entry) => unawaited(
-          ref.read(videosFeedProvider.notifier).markExposed(entry.id),
-        ),
-        isActive: currentIndex.value == 1,
-        restoreEntryId: videoUiState.restoreItemId,
-        restoreApproximateIndex: videoUiState.restoreApproximateIndex,
-        onRestoreApplied:
-            ref.read(videosFeedProvider.notifier).consumeRestoreTarget,
-        topActionLabel: videoUiState.pendingActionLabel,
-        onTopAction: videoUiState.hasPendingAction
-            ? () => _refreshVideosManually(
-                  ref,
-                  context,
-                  videoFeedController,
-                  fromNewItems: true,
-                )
-            : null,
-        isCaughtUp: ref.read(videosFeedProvider.notifier).isCaughtUp,
-        caughtUpLabel: 'Caught up on videos for now.',
-        onCaughtUp: (entry) => unawaited(
-          ref.read(feedRepositoryProvider).recordInteraction(
-            contentItemId: entry.id,
-            eventType: FeedInteractionEvent.caughtUp,
-            extraData: const {
-              'surface': 'videos',
-            },
-          ),
+        onOpenPending: () => _refreshVideosManually(
+          ref,
+          context,
+          videoFeedController,
+          fromNewItems: true,
         ),
       ),
       // Reels tab
@@ -994,6 +983,134 @@ class _KeepAliveWrapperState extends State<_KeepAliveWrapper>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+class _ArticlesFeedTab extends ConsumerWidget {
+  const _ArticlesFeedTab({
+    required this.currentIndex,
+    required this.controller,
+    required this.onRefresh,
+    required this.onOpenPending,
+  });
+
+  final int currentIndex;
+  final PageController controller;
+  final VoidCallback onRefresh;
+  final VoidCallback onOpenPending;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feed = ref.watch(articleFeedWithAdsProvider);
+    final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
+
+    return FeedTab<FeedPageItem>(
+      feed: feed,
+      emptyLabel: 'Articles are warming up.',
+      controller: controller,
+      builder: (entry, isCurrentPage) {
+        final notifier = ref.read(articlesFeedProvider.notifier);
+        if (entry is NativeAdSlotFeedPageItem) {
+          return NativeAdCard(slot: entry);
+        }
+        if (entry is SponsorCardFeedPageItem) {
+          return AdCard(entry: entry.entry);
+        }
+        final organicEntry = entry.organicEntry;
+        if (organicEntry is! ArticleFeedEntry) {
+          return const SizedBox.shrink();
+        }
+        return ArticleCard(
+          entry: organicEntry,
+          isVisible: currentIndex == 0 && isCurrentPage,
+          isNewSinceLastSeen: notifier.isEntryNewSinceLastSeen(organicEntry.id),
+        );
+      },
+      onRefresh: onRefresh,
+      onLoadMore: () => ref.read(articlesFeedProvider.notifier).loadMore(),
+      onPageChanged: (index, entry) => ref
+          .read(articlesFeedProvider.notifier)
+          .setCurrentViewPosition(index, entry as ArticleFeedEntry?),
+      onPrimaryVisibleEntrySettled: (entry) => unawaited(
+        ref.read(articlesFeedProvider.notifier).markExposed(entry.id),
+      ),
+      isActive: currentIndex == 0,
+      restoreEntryId: uiState.restoreItemId,
+      restoreApproximateIndex: uiState.restoreApproximateIndex,
+      onRestoreApplied:
+          ref.read(articlesFeedProvider.notifier).consumeRestoreTarget,
+      topActionLabel: uiState.pendingActionLabel,
+      onTopAction: uiState.hasPendingAction ? onOpenPending : null,
+    );
+  }
+}
+
+class _VideosFeedTab extends ConsumerWidget {
+  const _VideosFeedTab({
+    required this.currentIndex,
+    required this.controller,
+    required this.onRefresh,
+    required this.onOpenPending,
+  });
+
+  final int currentIndex;
+  final PageController controller;
+  final VoidCallback onRefresh;
+  final VoidCallback onOpenPending;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feed = ref.watch(videoFeedWithAdsProvider);
+    final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
+
+    return FeedTab<FeedPageItem>(
+      feed: feed,
+      emptyLabel: 'Videos are warming up.',
+      containsVideos: true,
+      controller: controller,
+      builder: (entry, isCurrentPage) {
+        final notifier = ref.read(videosFeedProvider.notifier);
+        if (entry is NativeAdSlotFeedPageItem) {
+          return NativeAdCard(slot: entry);
+        }
+        if (entry is SponsorCardFeedPageItem) {
+          return AdCard(entry: entry.entry);
+        }
+        final organicEntry = entry.organicEntry;
+        if (organicEntry is! VideoFeedEntry) {
+          return const SizedBox.shrink();
+        }
+        return VideoCard(
+          entry: organicEntry,
+          isVisible: currentIndex == 1 && isCurrentPage,
+          isNewSinceLastSeen: notifier.isEntryNewSinceLastSeen(organicEntry.id),
+        );
+      },
+      onRefresh: onRefresh,
+      onLoadMore: () => ref.read(videosFeedProvider.notifier).loadMore(),
+      onPageChanged: (index, entry) => ref
+          .read(videosFeedProvider.notifier)
+          .setCurrentViewPosition(index, entry as VideoFeedEntry?),
+      onPrimaryVisibleEntrySettled: (entry) => unawaited(
+        ref.read(videosFeedProvider.notifier).markExposed(entry.id),
+      ),
+      isActive: currentIndex == 1,
+      restoreEntryId: uiState.restoreItemId,
+      restoreApproximateIndex: uiState.restoreApproximateIndex,
+      onRestoreApplied:
+          ref.read(videosFeedProvider.notifier).consumeRestoreTarget,
+      topActionLabel: uiState.pendingActionLabel,
+      onTopAction: uiState.hasPendingAction ? onOpenPending : null,
+      isCaughtUp: ref.read(videosFeedProvider.notifier).isCaughtUp,
+      caughtUpLabel: 'Caught up on videos for now.',
+      onCaughtUp: (entry) => unawaited(
+        ref.read(feedRepositoryProvider).recordInteraction(
+          contentItemId: entry.id,
+          eventType: FeedInteractionEvent.caughtUp,
+          extraData: const {'surface': 'videos'},
+        ),
+      ),
+    );
   }
 }
 

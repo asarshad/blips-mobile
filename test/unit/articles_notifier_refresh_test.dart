@@ -639,20 +639,9 @@ void main() {
       expect(ok, isTrue);
       final uiState =
           container.read(feedSurfaceUiStateProvider(FeedSurface.articles));
-      expect(uiState.pendingActionKind, PendingFeedActionKind.latestBias);
-      expect(uiState.pendingNewCount, 1);
-      expect(uiState.pendingActionLabel, 'View latest');
-
-      final opened = await notifier.openPendingNewContent();
-      await _settle();
-
-      expect(opened, isTrue);
-      expect(
-        container
-            .read(feedSurfaceUiStateProvider(FeedSurface.articles))
-            .pendingNewCount,
-        0,
-      );
+      expect(uiState.pendingActionKind, PendingFeedActionKind.newItems);
+      expect(uiState.pendingNewCount, 0);
+      expect(uiState.pendingActionLabel, isNull);
     },
   );
 
@@ -779,7 +768,7 @@ void main() {
   );
 
   test(
-    'ArticlesNotifier handleAppResume auto-loads latest head after the continuity window expires',
+    'ArticlesNotifier handleAppResume stages latest head behind the pill after the continuity window expires',
     () async {
       final cache = FakeFeedCache();
       var playlistCallCount = 0;
@@ -815,7 +804,7 @@ void main() {
         overrides: [
           feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
           feedCacheProvider.overrideWithValue(cache),
-          articleColdLaunchPendingProvider.overrideWith((_) => false),
+          coldLaunchInitialSurfaceProvider.overrideWith((_) => null),
         ],
       );
       addTearDown(container.dispose);
@@ -838,12 +827,12 @@ void main() {
 
       final state = container.read(articlesFeedProvider);
       expect(state.hasValue, isTrue);
-      expect(state.value!.first.id, 101);
+      expect(state.value!.first.id, 1);
       expect(
         container
             .read(feedSurfaceUiStateProvider(FeedSurface.articles))
             .pendingNewCount,
-        0,
+        1,
       );
     },
   );
@@ -882,7 +871,7 @@ void main() {
         overrides: [
           feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
           feedCacheProvider.overrideWithValue(cache),
-          articleColdLaunchPendingProvider.overrideWith((_) => false),
+          coldLaunchInitialSurfaceProvider.overrideWith((_) => null),
         ],
       );
       addTearDown(container.dispose);
@@ -891,7 +880,9 @@ void main() {
 
       await _settle();
 
-      container.read(articleFeedDirtyAtProvider.notifier).state =
+      container
+          .read(feedDirtyAtProvider(FeedSurface.articles).notifier)
+          .state =
           DateTime.now();
 
       await container.read(articlesFeedProvider.notifier).handleAppResume();
@@ -900,7 +891,7 @@ void main() {
       final state = container.read(articlesFeedProvider);
       expect(state.hasValue, isTrue);
       expect(state.value!.first.id, 1);
-      expect(container.read(articleFeedDirtyAtProvider), isNotNull);
+      expect(container.read(feedDirtyAtProvider(FeedSurface.articles)), isNotNull);
     },
   );
 
@@ -930,7 +921,7 @@ void main() {
         overrides: [
           feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
           feedCacheProvider.overrideWithValue(FakeFeedCache()),
-          articleColdLaunchPendingProvider.overrideWith((_) => false),
+          coldLaunchInitialSurfaceProvider.overrideWith((_) => null),
         ],
       );
       addTearDown(container.dispose);
@@ -939,7 +930,9 @@ void main() {
 
       await _settle();
 
-      container.read(articleFeedDirtyAtProvider.notifier).state =
+      container
+          .read(feedDirtyAtProvider(FeedSurface.articles).notifier)
+          .state =
           DateTime.now();
       final notifier = container.read(articlesFeedProvider.notifier);
       await notifier.handlePushFreshnessHint();
