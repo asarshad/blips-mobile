@@ -50,6 +50,7 @@ class FeedShellPage extends HookConsumerWidget {
 
   static const path = '/';
   static const name = 'feed';
+  static const startupLoaderKey = Key('startup-feed-loader');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,6 +73,8 @@ class FeedShellPage extends HookConsumerWidget {
 
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final pushController = ref.watch(pushNotificationsControllerProvider);
+    final coldLaunchInitialSurface =
+        ref.watch(coldLaunchInitialSurfaceProvider);
     final visibleFeedState = !startupReady.value
         ? null
         : switch (currentIndex.value) {
@@ -80,6 +83,8 @@ class FeedShellPage extends HookConsumerWidget {
             2 => ref.watch(reelsFeedWithAdsProvider),
             _ => null,
           };
+    final showStartupLoader =
+        !startupReady.value || coldLaunchInitialSurface == startupSurface;
 
     ref.listen<NotificationTarget?>(pendingNotificationTargetProvider,
         (previous, next) {
@@ -186,9 +191,11 @@ class FeedShellPage extends HookConsumerWidget {
         return null;
       }
       currentIndex.value = startupSurface.tabIndex;
-      ref.read(coldLaunchInitialSurfaceProvider.notifier).state =
-          startupSurface;
       startupReady.value = true;
+      Future.microtask(() {
+        ref.read(coldLaunchInitialSurfaceProvider.notifier).state =
+            startupSurface;
+      });
       return null;
     }, [startupSurfaceResolved, startupSurface]);
 
@@ -257,6 +264,7 @@ class FeedShellPage extends HookConsumerWidget {
                   )
                 else
                   const SizedBox.expand(),
+                if (showStartupLoader) const _StartupFeedLoader(),
                 // Debug overlay for development builds
                 if (kDebugMode) const DeviceDebugOverlay(),
               ],
@@ -583,6 +591,9 @@ class FeedShellPage extends HookConsumerWidget {
       },
     );
     final notifier = ref.read(articlesFeedProvider.notifier);
+    final scrollToTopFuture = fromTabRetap && controller.hasClients
+        ? _animateFeedToTop(controller)
+        : Future<void>.value();
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
@@ -592,10 +603,11 @@ class FeedShellPage extends HookConsumerWidget {
           .then((ok) async {
         if (fromTabRetap) {
           if (ok) {
+            await scrollToTopFuture;
             if (_isControllerAtTop(controller)) {
               await _rearmFirstReelPlayback(ref);
             }
-            span.success(data: <String, Object?>{'jumpedToTop': false});
+            span.success(data: <String, Object?>{'jumpedToTop': true});
           } else {
             span.step(
               'uiFailure',
@@ -654,6 +666,9 @@ class FeedShellPage extends HookConsumerWidget {
       },
     );
     final notifier = ref.read(videosFeedProvider.notifier);
+    final scrollToTopFuture = fromTabRetap && controller.hasClients
+        ? _animateFeedToTop(controller)
+        : Future<void>.value();
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
@@ -663,10 +678,11 @@ class FeedShellPage extends HookConsumerWidget {
           .then((ok) async {
         if (fromTabRetap) {
           if (ok) {
+            await scrollToTopFuture;
             if (_isControllerAtTop(controller)) {
               await _rearmFirstVideoPlayback(ref);
             }
-            span.success(data: <String, Object?>{'jumpedToTop': false});
+            span.success(data: <String, Object?>{'jumpedToTop': true});
           } else {
             span.step(
               'uiFailure',
@@ -725,6 +741,9 @@ class FeedShellPage extends HookConsumerWidget {
       },
     );
     final notifier = ref.read(reelsFeedProvider.notifier);
+    final scrollToTopFuture = fromTabRetap && controller.hasClients
+        ? _animateFeedToTop(controller)
+        : Future<void>.value();
     unawaited(
       (fromNewItems
               ? notifier.openPendingNewContent()
@@ -734,7 +753,8 @@ class FeedShellPage extends HookConsumerWidget {
           .then((ok) async {
         if (fromTabRetap) {
           if (ok) {
-            span.success(data: <String, Object?>{'jumpedToTop': false});
+            await scrollToTopFuture;
+            span.success(data: <String, Object?>{'jumpedToTop': true});
           } else {
             span.step(
               'uiFailure',
@@ -1200,6 +1220,22 @@ class _BottomNavBar extends StatelessWidget {
         // making the home indicator gap visually invisible (same as Inshorts).
         Container(color: scaffoldColor, height: bottomInset),
       ],
+    );
+  }
+}
+
+class _StartupFeedLoader extends StatelessWidget {
+  const _StartupFeedLoader();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: const Center(
+        child: CircularProgressIndicator(
+          key: FeedShellPage.startupLoaderKey,
+        ),
+      ),
     );
   }
 }

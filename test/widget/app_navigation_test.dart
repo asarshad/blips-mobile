@@ -19,6 +19,20 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> pumpUntilFound(
+    WidgetTester tester,
+    Finder finder, {
+    int maxTicks = 40,
+  }) async {
+    for (var i = 0; i < maxTicks; i++) {
+      if (finder.evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump();
+  }
+
   Finder findShellPageView() => find.byWidgetPredicate(
         (widget) =>
             widget is PageView && widget.scrollDirection == Axis.horizontal,
@@ -276,21 +290,39 @@ void main() {
   });
 
   testWidgets(
-      're-tapping the current feed tab keeps position and surfaces View latest until tapped',
+      're-tapping the current feed tab scrolls to top and surfaces new-items pill only when the head changes',
       (tester) async {
     tester.view.physicalSize = const Size(430, 932);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    var articlePlaylistCalls = 0;
     final api = FakeBackendApiClient(
       responseResolver: (method, path, queryParameters, body) {
+        if (method == 'GET' && path == '/session/playlist/meta') {
+          final type = queryParameters?['type'] as String?;
+          return switch (type) {
+            'ARTICLE' => <String, dynamic>{
+                'feed_version': 'article-v2',
+                'newest_created_at': '2026-03-20T12:06:00Z',
+                'newest_published_at': '2026-03-20T12:00:00Z',
+                'served_at': '2026-03-20T12:06:00Z',
+              },
+            _ => <String, dynamic>{},
+          };
+        }
         if (method == 'GET' && path == '/session/playlist') {
           final type = queryParameters?['type'] as String?;
           return switch (type) {
-            'ARTICLE' => buildArticlePlaylistResponseForIds(
-                List<int>.generate(15, (index) => index + 1),
-              ),
+            'ARTICLE' => (++articlePlaylistCalls == 1)
+                ? buildArticlePlaylistResponseForIds(
+                    List<int>.generate(15, (index) => index + 1),
+                  )
+                : buildArticlePlaylistResponseForIds(
+                    [101, ...List<int>.generate(14, (index) => index + 1)],
+                    feedVersion: 'article-v2',
+                  ),
             'VIDEO' => buildVideoPlaylistResponse(),
             _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
           };
@@ -312,6 +344,7 @@ void main() {
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));
+    await pumpUntilFound(tester, find.text('App shell article 1'));
 
     expect(find.text('App shell article 1'), findsOneWidget);
 
@@ -324,15 +357,19 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.article));
     await pumpUi(tester, const Duration(milliseconds: 900));
-
-    expect(find.text('App shell article 3'), findsOneWidget);
-    expect(find.text('View latest'), findsOneWidget);
-
-    await tester.tap(find.text('View latest'));
-    await tester.pump();
-    await pumpUi(tester, const Duration(milliseconds: 400));
+    await pumpUntilFound(tester, find.text('1 new item'));
+    await pumpUntilFound(tester, find.text('App shell article 1'));
 
     expect(find.text('App shell article 1'), findsOneWidget);
-    expect(find.text('View latest'), findsNothing);
+    expect(find.text('App shell article 3'), findsNothing);
+    expect(find.text('1 new item'), findsOneWidget);
+
+    await tester.tap(find.text('1 new item'));
+    await tester.pump();
+    await pumpUi(tester, const Duration(milliseconds: 400));
+    await pumpUntilFound(tester, find.text('App shell article 101'));
+
+    expect(find.text('App shell article 101'), findsOneWidget);
+    expect(find.text('1 new item'), findsNothing);
   });
 }
