@@ -47,6 +47,11 @@ class VideoCard extends HookConsumerWidget {
     final sessionStore = ref.read(feedSessionStoreProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
     final isSaved = ref.watch(savedVideoIdsProvider).contains(entry.id);
+    // When a share sheet is in flight, iOS doesn't block taps on the
+    // exposed area above the page sheet. Absorb any leaked taps /
+    // long-presses so the underlying card can't fire play/pause, open
+    // actions menus, or open the browser behind the share sheet.
+    final isSharing = useValueListenable(ShareService.instance.isSharing);
     final playbackUrl = _resolvePlaybackUrl(videoManager);
     final controller = videoManager.getController(playbackUrl);
     final playerState = videoManager.getState(playbackUrl);
@@ -251,63 +256,67 @@ class VideoCard extends HookConsumerWidget {
     // Releasing here causes "IOSInAppWebViewController used after disposed" errors
     // because the YoutubePlayer widget's WebView may still be unmounting.
 
-    return Stack(
-      children: [
-        FeedCardFrame(
-          // 16:9 ensures YoutubePlayer fills the media section exactly —
-          // no black bars when the inline player is active.
-          mediaAspectRatio: 16 / 9,
-          media: _VideoMedia(
-            thumbnailUrl: preview,
-            controller: controller,
-            overlayState: overlayState,
-            playerError: playerError,
-          ),
-          category: entry.category,
-          title: entry.title,
-          summary: entry.summary,
-          source: entry.source,
-          freshnessInfo: FreshnessInfo(
-            publishedAt: entry.publishedAt,
-            addedAt: entry.addedAt,
-            tier: entry.freshnessTier,
-            isNewSinceLastSeen: isNewSinceLastSeen,
-          ),
-          readTime: watchLabel,
-          onMediaTap: () => _handleTap(
-            showBubbles: showBubbles,
-            controller: controller,
-            videoManager: videoManager,
-            playbackUrl: playbackUrl,
-            playerState: playerState,
-          ),
-          onLongPress: () => _showActionsSheet(context, feedRepository),
-          onContentTap: () => _openInBrowser(
-            repository: feedRepository,
-            sessionStore: sessionStore,
-          ),
-          onChat: () => showBubbles.value = !showBubbles.value,
-          onShare: () => _shareVideo(
-            context,
-            feedRepository,
-            sessionStore,
-          ),
-          onSaveToggle: () => unawaited(
-            ref.read(savedVideosProvider.notifier).toggle(entry),
-          ),
-          isSaved: isSaved,
-        ),
-        if (showBubbles.value)
-          Positioned(
-            bottom: 60,
-            right: 16,
-            left: 16,
-            child: FloatingChatBubbles(
-              entry: entry,
-              onClose: () => showBubbles.value = false,
+    return AbsorbPointer(
+      absorbing: isSharing,
+      child: Stack(
+        children: [
+          FeedCardFrame(
+            // 16:9 ensures YoutubePlayer fills the media section exactly —
+            // no black bars when the inline player is active.
+            mediaAspectRatio: 16 / 9,
+            media: _VideoMedia(
+              thumbnailUrl: preview,
+              controller: controller,
+              overlayState: overlayState,
+              playerError: playerError,
+              hideWebView: isSharing,
             ),
+            category: entry.category,
+            title: entry.title,
+            summary: entry.summary,
+            source: entry.source,
+            freshnessInfo: FreshnessInfo(
+              publishedAt: entry.publishedAt,
+              addedAt: entry.addedAt,
+              tier: entry.freshnessTier,
+              isNewSinceLastSeen: isNewSinceLastSeen,
+            ),
+            readTime: watchLabel,
+            onMediaTap: () => _handleTap(
+              showBubbles: showBubbles,
+              controller: controller,
+              videoManager: videoManager,
+              playbackUrl: playbackUrl,
+              playerState: playerState,
+            ),
+            onLongPress: () => _showActionsSheet(context, feedRepository),
+            onContentTap: () => _openInBrowser(
+              repository: feedRepository,
+              sessionStore: sessionStore,
+            ),
+            onChat: () => showBubbles.value = !showBubbles.value,
+            onShare: () => _shareVideo(
+              context,
+              feedRepository,
+              sessionStore,
+            ),
+            onSaveToggle: () => unawaited(
+              ref.read(savedVideosProvider.notifier).toggle(entry),
+            ),
+            isSaved: isSaved,
           ),
-      ],
+          if (showBubbles.value)
+            Positioned(
+              bottom: 60,
+              right: 16,
+              left: 16,
+              child: FloatingChatBubbles(
+                entry: entry,
+                onClose: () => showBubbles.value = false,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -567,12 +576,19 @@ class _VideoMedia extends StatelessWidget {
     required this.controller,
     required this.overlayState,
     required this.playerError,
+    this.hideWebView = false,
   });
 
   final String thumbnailUrl;
   final YoutubePlayerController? controller;
   final YTPlaybackOverlayState overlayState;
   final YTPlayerError? playerError;
+
+  /// When true, skip rendering the YoutubePlayer (and its WebView). Used
+  /// while a share sheet is in flight so the native modal-backdrop can
+  /// receive tap-to-dismiss on iOS — the WebView otherwise intercepts
+  /// those taps because PlatformViews sit in their own native layer.
+  final bool hideWebView;
 
   /// Checks if controller exists and can render the underlying WebView.
   bool get _isControllerValid {
@@ -637,8 +653,11 @@ class _VideoMedia extends StatelessWidget {
                   ),
           ),
 
-          // Video player when ready and controller is valid
-          if (showPlayer)
+          // Video player when ready and controller is valid.
+          // Omitted while hideWebView is true (share sheet open) so the
+          // native WKWebView doesn't sit in front of iOS's modal-backdrop
+          // and intercept tap-to-dismiss.
+          if (showPlayer && !hideWebView)
             Positioned.fill(
               child: YoutubePlayer(
                 controller: controller!,

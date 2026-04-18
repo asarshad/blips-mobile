@@ -1,5 +1,6 @@
 import 'package:blips_mobile/core/database/database_helper.dart';
 import 'package:blips_mobile/core/diagnostics/app_diagnostics.dart';
+import 'package:blips_mobile/core/error/app_logger.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
@@ -159,8 +160,13 @@ class ChatRepository {
             response.data?['remaining_daily_messages'] as int? ?? 15,
         remainingArticle: response.data?['remaining_article_messages'] as int?,
       );
-    } catch (e) {
-      print('Repo: Failed to fetch usage: $e');
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to fetch chat usage',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
       return const ChatQuotaStatus(
         remainingDaily: 15,
         remainingArticle: null,
@@ -178,7 +184,7 @@ class ChatRepository {
     String message, {
     bool starterPrompt = false,
   }) async {
-    print('Repo: Sending message for article $articleId');
+    logger.debug('Sending message for article $articleId');
     final lastResponseId = await _db.getLastResponseId(articleId);
 
     // 1. Save user message locally
@@ -271,7 +277,7 @@ class ChatRepository {
           );
         }
       }
-      print('Repo: AI response saved');
+      logger.debug('AI response saved for article $articleId');
       span?.success(
         data: <String, Object?>{
           'statusCode': response.statusCode,
@@ -290,8 +296,13 @@ class ChatRepository {
         responseId: responseId,
         usedCachedStarterResponse: usedCachedStarterResponse,
       );
-    } catch (e) {
-      print('Repo: API call failed: $e');
+    } catch (e, stack) {
+      logger.warning(
+        'Chat API call failed',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
       final detail = e is DioException && e.response?.data is Map
           ? (e.response?.data as Map)['detail']
           : null;

@@ -60,7 +60,7 @@ Complete all items before submitting to app stores.
 - [ ] App Tracking Transparency declaration matches shipped ad/SDK behavior
 
 ### Build
-- [x] Version bumped in `pubspec.yaml` (currently 1.0.3+6)
+- [x] Version bumped in `pubspec.yaml` (currently 1.0.3+8)
 - [ ] Run `flutter build ipa --release`
 - [ ] Upload via Xcode Organizer or `xcrun altool`
 - [ ] App Store build uploaded and processed

@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -57,7 +58,17 @@ class ShareService {
   final SharePlus _sharePlus;
   final ShareCardCaptureOverride? _captureOverride;
 
-  bool _isSharing = false;
+  final ValueNotifier<bool> _isSharing = ValueNotifier<bool>(false);
+
+  /// Whether a share sheet is currently being shown.
+  ///
+  /// iOS presents the share sheet as a page sheet that does not block taps
+  /// on the exposed area above it. Widgets with background tap / long-press
+  /// handlers (play/pause overlays, card action menus, etc.) should wrap
+  /// themselves in an `AbsorbPointer` driven by this listenable so stray
+  /// taps that leak through don't trigger background interactions while the
+  /// user is mid-share.
+  ValueListenable<bool> get isSharing => _isSharing;
 
   /// Shares an article with a screenshot and URL.
   Future<void> shareArticle({
@@ -71,8 +82,10 @@ class ShareService {
     required String? imageUrl,
     required String articleUrl,
   }) async {
-    if (_isSharing) return;
-    _isSharing = true;
+    if (_isSharing.value) return;
+    _isSharing.value = true;
+    // Instant tap acknowledgment so the user knows the button registered.
+    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Starting article share for "$title"');
@@ -117,7 +130,7 @@ class ShareService {
         subject: title,
       );
     } finally {
-      _isSharing = false;
+      _isSharing.value = false;
     }
   }
 
@@ -133,8 +146,9 @@ class ShareService {
     required String thumbnailUrl,
     required String videoUrl,
   }) async {
-    if (_isSharing) return;
-    _isSharing = true;
+    if (_isSharing.value) return;
+    _isSharing.value = true;
+    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Starting video share for "$title"');
@@ -179,7 +193,7 @@ class ShareService {
         subject: title,
       );
     } finally {
-      _isSharing = false;
+      _isSharing.value = false;
     }
   }
 
@@ -188,8 +202,9 @@ class ShareService {
     required String title,
     required String videoUrl,
   }) async {
-    if (_isSharing) return;
-    _isSharing = true;
+    if (_isSharing.value) return;
+    _isSharing.value = true;
+    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Sharing reel "$title"');
@@ -198,7 +213,7 @@ class ShareService {
         subject: title,
       );
     } finally {
-      _isSharing = false;
+      _isSharing.value = false;
     }
   }
 
@@ -224,6 +239,9 @@ class ShareService {
     try {
       if (normalizedImageUrl != null && normalizedImageUrl.isNotEmpty) {
         // Pre-cache the network image when an article/video actually has one.
+        // Typically a cache hit (the user is viewing this exact image), so
+        // near-instant. On a cold network this waits for the fetch rather
+        // than rendering a placeholder — trade-off we're evaluating.
         debugPrint('ShareService: Pre-caching image: $normalizedImageUrl');
         final imageProvider = NetworkImage(normalizedImageUrl);
         await precacheImage(imageProvider, context);
@@ -261,8 +279,18 @@ class ShareService {
       overlay.insert(overlayEntry);
       debugPrint('ShareService: Overlay inserted');
 
-      // Wait for rendering and image loading
-      await Future<void>.delayed(const Duration(milliseconds: 800));
+      // Wait for the overlay to paint. Anchor the first wait to the first
+      // frame after insertion, then wait for that frame to fully finish.
+      // This avoids the race where consecutive endOfFrame awaits can both
+      // complete immediately if called after the current frame already ended.
+      final firstPostInsertFrame = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!firstPostInsertFrame.isCompleted) {
+          firstPostInsertFrame.complete();
+        }
+      });
+      await firstPostInsertFrame.future;
+      await WidgetsBinding.instance.endOfFrame;
 
       // Capture the boundary
       final boundary = boundaryKey.currentContext?.findRenderObject();

@@ -1,5 +1,6 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:blips_mobile/core/error/app_logger.dart';
 import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 
 abstract interface class ChatLocalStore {
@@ -81,9 +82,13 @@ class DatabaseHelper implements ChatLocalStore {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      print('DB: Inserted message ${message.id} for article $articleId');
-    } catch (e) {
-      print('DB Error: Failed to insert message: $e');
+      logger.debug('Inserted message ${message.id} for article $articleId');
+    } catch (e, stack) {
+      logger.error(
+        'Failed to insert chat message',
+        error: e,
+        stackTrace: stack,
+      );
       rethrow;
     }
   }

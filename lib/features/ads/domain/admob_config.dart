@@ -25,9 +25,12 @@ abstract final class AdMobConfig {
     'BLIPS_ADMOB_ANDROID_VIDEOS_NATIVE_UNIT_ID',
     defaultValue: 'ca-app-pub-1680408170724576/3131188345',
   );
+  // Reels reuses the videos native ad unit until it has its own unit provisioned.
+  // Override with --dart-define=BLIPS_ADMOB_ANDROID_REELS_NATIVE_UNIT_ID=... to
+  // split reporting in AdMob.
   static const _androidReelsNativeAdUnitId = String.fromEnvironment(
     'BLIPS_ADMOB_ANDROID_REELS_NATIVE_UNIT_ID',
-    defaultValue: _androidTestNativeAdUnitId,
+    defaultValue: 'ca-app-pub-1680408170724576/3131188345',
   );
 
   static const _iosArticlesNativeAdUnitId = String.fromEnvironment(
@@ -38,9 +41,12 @@ abstract final class AdMobConfig {
     'BLIPS_ADMOB_IOS_VIDEOS_NATIVE_UNIT_ID',
     defaultValue: 'ca-app-pub-1680408170724576/8340133053',
   );
+  // Reels reuses the videos native ad unit until it has its own unit provisioned.
+  // Override with --dart-define=BLIPS_ADMOB_IOS_REELS_NATIVE_UNIT_ID=... to
+  // split reporting in AdMob.
   static const _iosReelsNativeAdUnitId = String.fromEnvironment(
     'BLIPS_ADMOB_IOS_REELS_NATIVE_UNIT_ID',
-    defaultValue: _iosTestNativeAdUnitId,
+    defaultValue: 'ca-app-pub-1680408170724576/8340133053',
   );
 
   static bool get supportsNativeAds {
