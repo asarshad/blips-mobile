@@ -243,83 +243,100 @@ class ReelItem extends HookConsumerWidget {
     // remain on top until real playback starts.
     final showVideo = controller != null;
 
-    return AbsorbPointer(
-      absorbing: isSharing,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Video Layer
-          Stack(
-            fit: StackFit.expand,
-            children: [
-              // Video Layer - only show when ready.
-              // Hidden while sharing so the WKWebView doesn't sit in
-              // front of iOS's modal-backdrop and swallow tap-to-dismiss.
-              if (showVideo && !isSharing)
-                _YoutubeVideoLayer(controller: controller),
+    // While the iOS share sheet is open, the YouTube WebView (PlatformView)
+    // sits in its own native UIView layer and intercepts taps that would
+    // otherwise hit the page-sheet backdrop and dismiss the sheet.
+    // Solution: wrap in a GestureDetector that, while sharing, calls the
+    // native dismiss instead of letting the tap fall through to play/pause.
+    // AbsorbPointer beneath it prevents child handlers from also firing.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Main content — absorbed while sharing so no accidental gestures fire.
+        GestureDetector(
+          // Attempt programmatic native dismiss on any tap while sharing.
+          // onTap is null when not sharing → zero interference with children.
+          onTap: isSharing
+              ? () => unawaited(ShareService.instance.dismissShareSheet())
+              : null,
+          child: AbsorbPointer(
+            absorbing: isSharing,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Video Layer
+                Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Video Layer - only show when ready
+                    if (showVideo) _YoutubeVideoLayer(controller: controller),
 
-              // Thumbnail Layer. Forced visible during share so the screen
-              // doesn't go black when the WebView is temporarily removed.
-              _ThumbnailLayer(
-                thumbnailUrl: entry.thumbnailUrl,
-                isVisible: showThumbnail.value || isSharing,
-              ),
-
-              // Gradient Overlay
-              const _GradientOverlay(),
-
-              // Tap capture overlay above the PlatformView so taps always reach
-              // our play/pause handler, even when WebView swallows gestures.
-              Positioned.fill(
-                child: GestureDetector(
-                  key: const ValueKey('reel_playback_tap_overlay'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () =>
-                      _handleTap(controller, videoManager, playerState),
-                ),
-              ),
-
-              // Show the play affordance only after a user pause or when
-              // autoplay recovery has genuinely stalled.
-              if (isActive && showPlayIndicator)
-                const IgnorePointer(child: _PlayIndicator()),
-
-              // Loading Indicator
-              if (isActive && isLoading)
-                const IgnorePointer(
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                ),
-
-              // Error indicator
-              if (isError)
-                IgnorePointer(
-                  child: _ErrorIndicator(error: playerError),
-                ),
-            ],
-          ),
-
-          // Action Buttons
-          _ActionButtons(
-            isSaved: isSaved,
-            onSaveToggle: () =>
-                ref.read(savedVideosProvider.notifier).toggleReel(
-                      entry,
+                    // Thumbnail Layer
+                    _ThumbnailLayer(
+                      thumbnailUrl: entry.thumbnailUrl,
+                      isVisible: showThumbnail.value,
                     ),
-            onShare: () => _shareReel(repository, sessionStore),
-            onOpen: () => _openReel(repository, sessionStore),
-          ),
 
-          // Info Layer (not tappable for play/pause, but text is tappable for expand/collapse)
-          _InfoLayer(
-            entry: entry,
-            isTextExpanded: isTextExpanded,
+                    // Gradient Overlay
+                    const _GradientOverlay(),
+
+                    // Tap capture overlay above the PlatformView so taps always
+                    // reach our play/pause handler, even when WebView swallows.
+                    Positioned.fill(
+                      child: GestureDetector(
+                        key: const ValueKey('reel_playback_tap_overlay'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () =>
+                            _handleTap(controller, videoManager, playerState),
+                      ),
+                    ),
+
+                    // Show the play affordance only after a user pause or when
+                    // autoplay recovery has genuinely stalled.
+                    if (isActive && showPlayIndicator)
+                      const IgnorePointer(child: _PlayIndicator()),
+
+                    // Loading Indicator
+                    if (isActive && isLoading)
+                      const IgnorePointer(
+                        child: Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                      ),
+
+                    // Error indicator
+                    if (isError)
+                      IgnorePointer(
+                        child: _ErrorIndicator(error: playerError),
+                      ),
+                  ],
+                ),
+
+                // Action Buttons
+                _ActionButtons(
+                  isSaved: isSaved,
+                  onSaveToggle: () =>
+                      ref.read(savedVideosProvider.notifier).toggleReel(
+                            entry,
+                          ),
+                  onShare: () => _shareReel(repository, sessionStore),
+                  onOpen: () => _openReel(repository, sessionStore),
+                ),
+
+                // Info Layer
+                _InfoLayer(
+                  entry: entry,
+                  isTextExpanded: isTextExpanded,
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+
+      ],
     );
   }
+
 
   void _useThumbnailVisibility({
     required YoutubePlayerController? controller,

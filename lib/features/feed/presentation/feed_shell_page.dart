@@ -180,6 +180,16 @@ class FeedShellPage extends HookConsumerWidget {
     // Refresh the current surface when the app returns to foreground.
     _useResumeRefresh(ref, currentIndex.value, pushController);
 
+    // After a long background the OS may leave a feed PageController frozen
+    // mid-page (a suspended spring animation that never completed).  Snap
+    // every vertical feed controller back to its nearest integer page on each
+    // foreground so swiping always starts from a clean page boundary.
+    _useSnapFeedsOnResume(
+      articleFeedController,
+      videoFeedController,
+      reelsFeedController,
+    );
+
     useEffect(() {
       unawaited(pushController.ensureStarted());
       unawaited(pushController.onEligibleShellEntered());
@@ -498,6 +508,45 @@ class FeedShellPage extends HookConsumerWidget {
       );
       return listener.dispose;
     }, [currentIndex]);
+  }
+
+  /// Snaps every vertical feed [PageController] to its nearest integer page
+  /// whenever the app returns to the foreground.
+  ///
+  /// After a long background period the OS suspends Flutter's ticker, which
+  /// can leave an in-progress scroll animation frozen at a fractional page
+  /// value (e.g. 0.47).  [FeedPageScrollPhysics] does not self-correct without
+  /// a user gesture, so the "two cards half-visible" glitch persists until the
+  /// user restarts the app.  Calling [PageController.jumpToPage] immediately
+  /// after the first post-frame callback ensures the position is always on a
+  /// clean page boundary before the user can initiate a new swipe.
+  void _useSnapFeedsOnResume(
+    PageController articleFeedController,
+    PageController videoFeedController,
+    PageController reelsFeedController,
+  ) {
+    useEffect(() {
+      final listener = AppLifecycleListener(
+        onResume: () {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (final ctrl in [
+              articleFeedController,
+              videoFeedController,
+              reelsFeedController,
+            ]) {
+              if (!ctrl.hasClients) continue;
+              final page = ctrl.page;
+              if (page == null) continue;
+              final rounded = page.round();
+              if ((page - rounded).abs() > 0.001) {
+                ctrl.jumpToPage(rounded);
+              }
+            }
+          });
+        },
+      );
+      return listener.dispose;
+    }, const []);
   }
 
   Future<bool> _handleNotificationTarget({

@@ -55,6 +55,25 @@ class ShareService {
 
   static const _shareAttribution = 'Shared via Blips News';
 
+  static const _uiChannel = MethodChannel('blips/ui');
+
+  /// Programmatically dismisses the native share sheet.
+  ///
+  /// On iOS, screens that embed a PlatformView (YouTube WebView) cause the
+  /// WebView's native UIView to intercept taps that would otherwise hit the
+  /// page-sheet backdrop and auto-dismiss the sheet.  Call this from a
+  /// Flutter GestureDetector wrapping those screens so the user's "tap
+  /// outside" gesture still closes the share sheet.
+  Future<void> dismissShareSheet() async {
+    if (!_isSharing.value) return;
+    if (!Platform.isIOS) return;
+    try {
+      await _uiChannel.invokeMethod<void>('dismissPresentedViewController');
+    } catch (_) {
+      // Best-effort — if channel call fails the user can still swipe-down.
+    }
+  }
+
   final SharePlus _sharePlus;
   final ShareCardCaptureOverride? _captureOverride;
 

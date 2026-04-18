@@ -232,6 +232,53 @@ final class PaddingLabel: UILabel {
     )
 
     setupVideoOptimizationsChannel(engineBridge)
+    setupUIChannel(engineBridge)
+  }
+
+  /// Channel: blips/ui
+  /// dismissPresentedViewController — dismisses whatever native view controller
+  /// is currently presented over Flutter (e.g. the share sheet).  Used when
+  /// the user taps the exposed area behind an iOS page-sheet share dialog on
+  /// screens that contain a PlatformView (YouTube WebView), which otherwise
+  /// intercepts those taps and prevents the sheet from self-dismissing.
+  private func setupUIChannel(_ engineBridge: FlutterImplicitEngineBridge) {
+    let channel = FlutterMethodChannel(
+      name: "blips/ui",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+
+    channel.setMethodCallHandler { (call, result) in
+      switch call.method {
+      case "dismissPresentedViewController":
+        DispatchQueue.main.async {
+          // iOS 13+: windows are scene-managed; AppDelegate.window may be nil.
+          let keyWindow: UIWindow?
+          if #available(iOS 13.0, *) {
+            keyWindow = UIApplication.shared.connectedScenes
+              .compactMap { $0 as? UIWindowScene }
+              .flatMap { $0.windows }
+              .first { $0.isKeyWindow }
+          } else {
+            keyWindow = UIApplication.shared.keyWindow
+          }
+
+          // Walk to the topmost presented VC so we dismiss it directly.
+          var topVC = keyWindow?.rootViewController
+          while let next = topVC?.presentedViewController {
+            topVC = next
+          }
+
+          if let vc = topVC, vc.presentingViewController != nil {
+            vc.dismiss(animated: true) { result(nil) }
+          } else {
+            result(nil)
+          }
+        }
+
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   private func setupVideoOptimizationsChannel(_ engineBridge: FlutterImplicitEngineBridge) {
