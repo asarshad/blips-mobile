@@ -27,14 +27,20 @@ ReelPlaybackTapAction resolveReelPlaybackTapAction({
     return ReelPlaybackTapAction.retry;
   }
 
+  // Controller is still loading or hasn't started yet — don't tear it down,
+  // just nudge it. Retrying during loading creates a spin-loop: each rebuild
+  // races the previous one (releaseVideo clears _currentActiveUrl mid-init),
+  // the autoplay watchdog fires, and the player ends up permanently stalled.
   if (playerState == YTPlayerState.loading ||
       playerState == YTPlayerState.idle) {
-    return ReelPlaybackTapAction.retry;
+    return ReelPlaybackTapAction.play;
   }
 
+  // Buffering is transient — tearing down the controller interrupts a video
+  // that was about to play on its own. Nudge with play() at most.
   if (controllerPlayerState == PlayerState.buffering ||
       controllerPlayerState == PlayerState.unknown) {
-    return ReelPlaybackTapAction.retry;
+    return ReelPlaybackTapAction.play;
   }
 
   if (controllerPlayerState == PlayerState.playing ||

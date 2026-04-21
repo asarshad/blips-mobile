@@ -112,12 +112,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (state == YTPlayerState.error) {
       return YTPlaybackOverlayState.error;
     }
+    // User-initiated pause takes precedence over the iframe's controller state.
+    // The controller reports PlayerState changes asynchronously from the WebView;
+    // waiting for that confirmation causes a visible window where the play button
+    // doesn't appear after a tap even though the video has already been paused.
+    if (_userPausedUrls.contains(url)) {
+      return YTPlaybackOverlayState.manualPause;
+    }
     if (controllerState == PlayerState.playing ||
         state == YTPlayerState.playing) {
       return YTPlaybackOverlayState.none;
-    }
-    if (_userPausedUrls.contains(url)) {
-      return YTPlaybackOverlayState.manualPause;
     }
     if (_autoplayStalledUrls.contains(url)) {
       return YTPlaybackOverlayState.autoplayStalled;
