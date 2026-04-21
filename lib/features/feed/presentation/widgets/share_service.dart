@@ -223,7 +223,6 @@ class ShareService {
   }) async {
     if (_isSharing.value) return;
     _isSharing.value = true;
-    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Sharing reel "$title"');

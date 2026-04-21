@@ -9,6 +9,7 @@ enum ReelPlaybackTapAction {
 
 ReelPlaybackTapAction resolveReelPlaybackTapAction({
   required bool hasController,
+  required bool isAutoplayStalled,
   required YTPlayerState playerState,
   required PlayerState? controllerPlayerState,
 }) {
@@ -18,6 +19,12 @@ ReelPlaybackTapAction resolveReelPlaybackTapAction({
 
   if (!hasController) {
     return ReelPlaybackTapAction.play;
+  }
+
+  // Controller is stuck in a state where play() cannot unstick it — tear it
+  // down and rebuild so the fresh WebView can load cleanly.
+  if (isAutoplayStalled) {
+    return ReelPlaybackTapAction.retry;
   }
 
   if (playerState == YTPlayerState.loading ||

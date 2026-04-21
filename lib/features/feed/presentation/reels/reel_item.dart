@@ -286,8 +286,12 @@ class ReelItem extends HookConsumerWidget {
                       child: GestureDetector(
                         key: const ValueKey('reel_playback_tap_overlay'),
                         behavior: HitTestBehavior.opaque,
-                        onTap: () =>
-                            _handleTap(controller, videoManager, playerState),
+                        onTap: () => _handleTap(
+                          controller,
+                          videoManager,
+                          playerState,
+                          overlayState,
+                        ),
                       ),
                     ),
 
@@ -393,9 +397,12 @@ class ReelItem extends HookConsumerWidget {
     YoutubePlayerController? controller,
     YoutubePlayerManagerBase videoManager,
     YTPlayerState playerState,
+    YTPlaybackOverlayState overlayState,
   ) {
     final action = resolveReelPlaybackTapAction(
       hasController: controller != null,
+      isAutoplayStalled:
+          overlayState == YTPlaybackOverlayState.autoplayStalled,
       playerState: playerState,
       controllerPlayerState: controller?.value.playerState,
     );
