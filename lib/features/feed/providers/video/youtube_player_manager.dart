@@ -48,6 +48,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   final Map<String, YTPlayerState> _states = {};
   final Map<String, YTPlayerError?> _errors = {};
   final Set<String> _pendingInit = {};
+  final Set<String> _pendingRetry = {};
   final Set<String> _userPausedUrls = {};
   final Set<String> _autoplayStalledUrls = {};
   final Map<String, Timer> _autoplayWatchdogs = {};
@@ -793,6 +794,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _cancelAllAutoplayWatchdogs();
     _userPausedUrls.clear();
     _autoplayStalledUrls.clear();
+    _pendingRetry.clear();
     for (final entry in _controllers.entries) {
       try {
         entry.value.dispose();
@@ -810,21 +812,39 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   }
 
   /// Retries a failed video.
+  ///
+  /// Guards against concurrent calls for the same URL: a second retryVideo
+  /// while the first is in-flight would call releaseVideo mid-initController,
+  /// pulling _pendingInit out from under the active controller setup and
+  /// allowing a second concurrent initController to start — causing orphaned
+  /// listeners and a permanently stuck player.
   @override
   Future<void> retryVideo(String url) async {
-    _recordDiagnostics(
-      action: 'retryVideo',
-      stage: 'start',
-      url: url,
-      data: <String, Object?>{
-        'state': _states[url]?.name,
-        'controllerExists': _controllers.containsKey(url),
-      },
-    );
-    _clearUserPause(url);
-    _clearAutoplayStalled(url);
-    releaseVideo(url);
-    await playVideo(url);
+    if (_pendingRetry.contains(url)) {
+      if (kDebugMode) {
+        debugPrint(
+            'YoutubePlayerManager: retryVideo($url) skipped — retry in flight');
+      }
+      return;
+    }
+    _pendingRetry.add(url);
+    try {
+      _recordDiagnostics(
+        action: 'retryVideo',
+        stage: 'start',
+        url: url,
+        data: <String, Object?>{
+          'state': _states[url]?.name,
+          'controllerExists': _controllers.containsKey(url),
+        },
+      );
+      _clearUserPause(url);
+      _clearAutoplayStalled(url);
+      releaseVideo(url);
+      await playVideo(url);
+    } finally {
+      _pendingRetry.remove(url);
+    }
   }
 
   /// Manages pool size by disposing least recently used controllers.
@@ -874,6 +894,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _states.clear();
     _errors.clear();
     _pendingInit.clear();
+    _pendingRetry.clear();
     _currentActiveUrl = null;
     super.dispose();
   }

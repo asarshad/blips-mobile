@@ -399,12 +399,23 @@ class ReelItem extends HookConsumerWidget {
     YTPlayerState playerState,
     YTPlaybackOverlayState overlayState,
   ) {
+    // Always read fresh state from the manager rather than the closure-captured
+    // values. The widget may not have rebuilt between two rapid taps (because
+    // _notifySafe posts a microtask), so playerState/overlayState can be stale.
+    // Stale autoplayStalled causes every tap to resolve to retry, each one
+    // calling releaseVideo which yanks _pendingInit out from under the previous
+    // initController — creating concurrent controller creations and a permanent
+    // stuck state.
+    final freshController = videoManager.getController(entry.link);
+    final freshPlayerState = videoManager.getState(entry.link);
+    final freshOverlayState = videoManager.getPlaybackOverlayState(entry.link);
+
     final action = resolveReelPlaybackTapAction(
-      hasController: controller != null,
+      hasController: freshController != null,
       isAutoplayStalled:
-          overlayState == YTPlaybackOverlayState.autoplayStalled,
-      playerState: playerState,
-      controllerPlayerState: controller?.value.playerState,
+          freshOverlayState == YTPlaybackOverlayState.autoplayStalled,
+      playerState: freshPlayerState,
+      controllerPlayerState: freshController?.value.playerState,
     );
 
     switch (action) {
