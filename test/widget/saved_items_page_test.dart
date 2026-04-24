@@ -16,6 +16,13 @@ void main() {
   late UrlLauncherPlatform originalUrlLauncher;
   late RecordingUrlLauncherPlatform recordingUrlLauncher;
 
+  Future<void> pumpTabTransition(WidgetTester tester) async {
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pump();
+  }
+
   setUp(() {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
     originalUrlLauncher = UrlLauncherPlatform.instance;
@@ -99,8 +106,7 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(const ValueKey('nav-Saved')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await pumpTabTransition(tester);
 
     expect(find.text('Saved article title'), findsOneWidget);
     expect(find.text('Example News'), findsOneWidget);

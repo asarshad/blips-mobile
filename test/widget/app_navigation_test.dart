@@ -36,6 +36,13 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> pumpTabTransition(WidgetTester tester) async {
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pump();
+  }
+
   Finder findShellPageView() => find.byWidgetPredicate(
         (widget) =>
             widget is PageView && widget.scrollDirection == Axis.horizontal,
@@ -180,6 +187,44 @@ void main() {
     expect(find.text('Refreshing feed...'), findsOneWidget);
 
     await pumpUi(tester, const Duration(milliseconds: 700));
+  });
+
+  testWidgets('bottom nav jumps directly without exposing intermediate tabs',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      buildNavigationHarness(
+        api: buildApi(),
+      ),
+    );
+    await pumpUi(tester, const Duration(seconds: 2));
+    await pumpUntilFound(tester, find.text('App shell article'));
+
+    await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.text('App shell video'), findsNothing);
+    expect(find.text('App shell reel'), findsNothing);
+    expect(find.text('Your Conversations'), findsNothing);
+    expect(find.text('No saved articles yet'), findsNothing);
+
+    await pumpTabTransition(tester);
+    expect(find.text('Settings'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('nav-Feed')));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.text('App shell video'), findsNothing);
+    expect(find.text('App shell reel'), findsNothing);
+    expect(find.text('Your Conversations'), findsNothing);
+    expect(find.text('No saved articles yet'), findsNothing);
+
+    await pumpTabTransition(tester);
+    expect(find.text('App shell article'), findsOneWidget);
   });
 
   testWidgets('entering Videos activates the first visible video',

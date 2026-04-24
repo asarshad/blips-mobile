@@ -65,6 +65,8 @@ class FeedShellPage extends HookConsumerWidget {
     final otherFeedsPreloaded = useState(false);
     final pageController =
         usePageController(initialPage: startupSurface.tabIndex);
+    final directTabTransition = useState<_DirectTabTransition?>(null);
+    final isMounted = useIsMounted();
 
     // Vertical page controllers for each feed surface
     final articleFeedController = usePageController();
@@ -192,7 +194,11 @@ class FeedShellPage extends HookConsumerWidget {
     _useLifecycleCleanup(videoManager);
 
     // Sync page controller with bottom nav
-    _usePageControllerSync(pageController, currentIndex.value);
+    _usePageControllerSync(
+      pageController,
+      currentIndex.value,
+      isDirectTabTransitionActive: directTabTransition.value != null,
+    );
 
     // Refresh the current surface when the app returns to foreground.
     _useResumeRefresh(ref, currentIndex.value, pushController);
@@ -300,6 +306,7 @@ class FeedShellPage extends HookConsumerWidget {
                     reelsFeedController: reelsFeedController,
                     ref: ref,
                     context: context,
+                    directTabTransition: directTabTransition.value,
                   )
                 else
                   const SizedBox.expand(),
@@ -326,10 +333,93 @@ class FeedShellPage extends HookConsumerWidget {
             );
             return;
           }
-          _handleTabEntry(index, ref, currentIndex);
+          _handleDirectTabEntry(
+            index: index,
+            ref: ref,
+            currentIndex: currentIndex,
+            pageController: pageController,
+            directTabTransition: directTabTransition,
+            isMounted: isMounted,
+          );
         },
       ),
     );
+  }
+
+  void _handleDirectTabEntry({
+    required int index,
+    required WidgetRef ref,
+    required ValueNotifier<int> currentIndex,
+    required PageController pageController,
+    required ValueNotifier<_DirectTabTransition?> directTabTransition,
+    required bool Function() isMounted,
+  }) {
+    if (directTabTransition.value != null && pageController.hasClients) {
+      pageController.jumpToPage(currentIndex.value);
+      directTabTransition.value = null;
+    }
+
+    final previousIndex = currentIndex.value;
+    if (previousIndex == index) {
+      return;
+    }
+
+    if (!pageController.hasClients) {
+      _handleTabEntry(index, ref, currentIndex);
+      return;
+    }
+
+    final step = index > previousIndex ? 1 : -1;
+    final proxyPage = previousIndex + step;
+    directTabTransition.value = _DirectTabTransition(
+      targetIndex: index,
+      proxyPage: proxyPage,
+    );
+    _handleTabEntry(index, ref, currentIndex);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        _animateDirectTabTransition(
+          targetIndex: index,
+          proxyPage: proxyPage,
+          currentIndex: currentIndex,
+          pageController: pageController,
+          directTabTransition: directTabTransition,
+          isMounted: isMounted,
+        ),
+      );
+    });
+  }
+
+  Future<void> _animateDirectTabTransition({
+    required int targetIndex,
+    required int proxyPage,
+    required ValueNotifier<int> currentIndex,
+    required PageController pageController,
+    required ValueNotifier<_DirectTabTransition?> directTabTransition,
+    required bool Function() isMounted,
+  }) async {
+    try {
+      if (pageController.hasClients) {
+        await pageController.animateToPage(
+          proxyPage,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } finally {
+      if (!isMounted()) {
+        return;
+      }
+      final activeTransition = directTabTransition.value;
+      if (activeTransition?.targetIndex != targetIndex) {
+        return;
+      }
+      if (pageController.hasClients && currentIndex.value == targetIndex) {
+        pageController.jumpToPage(targetIndex);
+      }
+      directTabTransition.value = null;
+    }
   }
 
   void _handleTabEntry(
@@ -469,8 +559,15 @@ class FeedShellPage extends HookConsumerWidget {
     }, []);
   }
 
-  void _usePageControllerSync(PageController controller, int currentIndex) {
+  void _usePageControllerSync(
+    PageController controller,
+    int currentIndex, {
+    required bool isDirectTabTransitionActive,
+  }) {
     useEffect(() {
+      if (isDirectTabTransitionActive) {
+        return null;
+      }
       if (controller.hasClients && controller.page?.round() != currentIndex) {
         controller.animateToPage(
           currentIndex,
@@ -479,7 +576,7 @@ class FeedShellPage extends HookConsumerWidget {
         );
       }
       return null;
-    }, [currentIndex]);
+    }, [currentIndex, isDirectTabTransitionActive]);
   }
 
   void _useResumeRefresh(
@@ -1001,6 +1098,7 @@ class FeedShellPage extends HookConsumerWidget {
     required PageController reelsFeedController,
     required WidgetRef ref,
     required BuildContext context,
+    required _DirectTabTransition? directTabTransition,
   }) {
     final allTabs = [
       _ArticlesFeedTab(
@@ -1050,11 +1148,43 @@ class FeedShellPage extends HookConsumerWidget {
 
     return PageView(
       controller: pageController,
-      onPageChanged: (index) => _handleTabEntry(index, ref, currentIndex),
-      children: allTabs
-          .map((tab) => _KeepAliveWrapper(child: ErrorBoundary(child: tab)))
-          .toList(),
+      onPageChanged: (index) {
+        if (directTabTransition != null) {
+          return;
+        }
+        _handleTabEntry(index, ref, currentIndex);
+      },
+      children: List.generate(allTabs.length, (pageIndex) {
+        final tabIndex =
+            directTabTransition?.tabIndexForPage(pageIndex) ?? pageIndex;
+        return _KeepAliveWrapper(
+          key: ValueKey('shell-page-$pageIndex-tab-$tabIndex'),
+          child: ErrorBoundary(child: allTabs[tabIndex]),
+        );
+      }),
     );
+  }
+}
+
+class _DirectTabTransition {
+  const _DirectTabTransition({
+    required this.targetIndex,
+    required this.proxyPage,
+  });
+
+  final int targetIndex;
+  final int proxyPage;
+
+  int tabIndexForPage(int pageIndex) {
+    // Swap instead of duplicating so feed tabs never attach one PageController
+    // to two PageViews during the direct slide.
+    if (pageIndex == proxyPage) {
+      return targetIndex;
+    }
+    if (proxyPage != targetIndex && pageIndex == targetIndex) {
+      return proxyPage;
+    }
+    return pageIndex;
   }
 }
 
@@ -1064,7 +1194,7 @@ class FeedShellPage extends HookConsumerWidget {
 /// Without this, swiping between tabs would destroy each tab's widget tree
 /// (including its [PageController]), resetting scroll position to 0.
 class _KeepAliveWrapper extends StatefulWidget {
-  const _KeepAliveWrapper({required this.child});
+  const _KeepAliveWrapper({required this.child, super.key});
 
   final Widget child;
 
