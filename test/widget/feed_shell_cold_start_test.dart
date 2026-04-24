@@ -10,6 +10,8 @@ import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/presentation/feed_shell_page.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
+import 'package:blips_mobile/features/notifications/domain/notification_target.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -22,14 +24,6 @@ import '../test_utils/fake_feed_cache.dart';
 import '../test_utils/fake_youtube_player_manager.dart';
 
 void main() {
-  Future<void> pumpUi(
-    WidgetTester tester, [
-    Duration duration = const Duration(seconds: 1),
-  ]) async {
-    await tester.pump(duration);
-    await tester.pump();
-  }
-
   Future<void> pumpUntil(
     WidgetTester tester,
     bool Function() condition, {
@@ -107,6 +101,91 @@ void main() {
 
       expect(find.byKey(FeedShellPage.startupLoaderKey), findsNothing);
       expect(find.text('App shell article'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'cold startup opens a notification target that was already pending',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) {
+          if (method == 'GET' && path == '/session/playlist') {
+            final type = queryParameters?['type'] as String?;
+            return switch (type) {
+              'ARTICLE' => buildArticlePlaylistResponse(),
+              'VIDEO' => buildVideoPlaylistResponse(),
+              _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
+            };
+          }
+          if (method == 'GET' && path == '/videos/reels') {
+            return buildReelsResponse();
+          }
+          if (method == 'GET' && path == '/videos/999') {
+            return const <String, dynamic>{
+              'id': 999,
+              'type': 'VIDEO',
+              'title': 'Tapped notification video',
+              'video_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+              'source_url': 'https://www.theverge.com/2026/03/20/target',
+              'source': 'YouTube',
+              'summary': 'Video opened from a cold-start notification.',
+              'image_url': 'https://example.com/target-video.jpg',
+              'duration': 120,
+              'published_at': '2026-03-20T12:10:00Z',
+              'created_at': '2026-03-20T12:15:00Z',
+              'topics': ['Technology'],
+              'conversation_starters': <String, Object>{
+                'starters': <String>['What is the main point?'],
+              },
+            };
+          }
+          if (method == 'POST' && path == '/session/interactions') {
+            return const <String, dynamic>{};
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adsConfigProvider.overrideWith((ref) async => const AdsConfig()),
+            feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
+            feedCacheProvider.overrideWithValue(FakeFeedCache()),
+            chatRepositoryProvider.overrideWithValue(FakeChatRepository()),
+            youtubePlayerManagerProvider.overrideWith(
+              (ref) => FakeYoutubePlayerManager(),
+            ),
+            pendingNotificationTargetProvider.overrideWith(
+              (_) => const NotificationTarget(
+                surface: NotificationSurface.videos,
+                contentId: 999,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: FeedShellPage(),
+          ),
+        ),
+      );
+
+      await pumpUntil(
+        tester,
+        () => find.text('Tapped notification video').evaluate().isNotEmpty,
+      );
+
+      expect(find.text('Tapped notification video'), findsOneWidget);
+      expect(
+        api.requests.any(
+          (request) => request.method == 'GET' && request.path == '/videos/999',
+        ),
+        isTrue,
+      );
     },
   );
 }

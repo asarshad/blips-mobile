@@ -32,7 +32,9 @@ class NotificationTarget {
 
   factory NotificationTarget.fromJson(Map<String, dynamic> json) {
     final surface = NotificationSurface.tryParse(json['surface']?.toString());
-    final contentId = int.tryParse(json['contentId']?.toString() ?? '');
+    final contentId = int.tryParse(
+      (json['contentId'] ?? json['content_id'])?.toString() ?? '',
+    );
     final payloadVersion = int.tryParse(
           json['payloadVersion']?.toString() ??
               json['payload_version']?.toString() ??
@@ -56,6 +58,10 @@ class NotificationTarget {
   }
 
   static NotificationTarget? tryFromMessageData(Map<String, dynamic> data) {
+    if (!data.containsKey('payloadVersion') &&
+        !data.containsKey('payload_version')) {
+      return null;
+    }
     try {
       return NotificationTarget.fromJson(data);
     } on FormatException {

@@ -61,7 +61,7 @@ class FeedShellPage extends HookConsumerWidget {
         startupSurfaceSnapshot.connectionState == ConnectionState.done;
     final startupSurface = startupSurfaceSnapshot.data ?? FeedSurface.articles;
     final currentIndex = useState(startupSurface.tabIndex);
-    final startupReady = useState(false);
+    final startupReady = startupSurfaceResolved;
     final otherFeedsPreloaded = useState(false);
     final pageController =
         usePageController(initialPage: startupSurface.tabIndex);
@@ -75,7 +75,7 @@ class FeedShellPage extends HookConsumerWidget {
     final pushController = ref.watch(pushNotificationsControllerProvider);
     final coldLaunchInitialSurface =
         ref.watch(coldLaunchInitialSurfaceProvider);
-    final visibleFeedState = !startupReady.value
+    final visibleFeedState = !startupReady
         ? null
         : switch (currentIndex.value) {
             0 => ref.watch(articleFeedWithAdsProvider),
@@ -83,26 +83,43 @@ class FeedShellPage extends HookConsumerWidget {
             2 => ref.watch(reelsFeedWithAdsProvider),
             _ => null,
           };
-    final showStartupLoader =
-        !startupReady.value || coldLaunchInitialSurface == startupSurface;
+    final showStartupLoader = !startupReady ||
+        coldLaunchInitialSurface == startupSurface ||
+        (coldLaunchInitialSurface != null &&
+            currentIndex.value != startupSurface.tabIndex);
+    final notificationTargetInFlight = useRef<NotificationTarget?>(null);
+
+    void processPendingNotificationTarget(NotificationTarget target) {
+      if (!startupReady || notificationTargetInFlight.value == target) {
+        return;
+      }
+      notificationTargetInFlight.value = target;
+      Future.microtask(() async {
+        try {
+          final handled = await _handleNotificationTarget(
+            target: target,
+            ref: ref,
+            currentIndex: currentIndex,
+          );
+          if (!handled) {
+            logger.info(
+              'Notification target fell back to surface head',
+              category: LogCategory.lifecycle,
+            );
+          }
+          pushController.consumePendingTarget(target);
+        } finally {
+          if (notificationTargetInFlight.value == target) {
+            notificationTargetInFlight.value = null;
+          }
+        }
+      });
+    }
 
     ref.listen<NotificationTarget?>(pendingNotificationTargetProvider,
         (previous, next) {
       if (next == null || next == previous) return;
-      Future.microtask(() async {
-        final handled = await _handleNotificationTarget(
-          target: next,
-          ref: ref,
-          currentIndex: currentIndex,
-        );
-        if (!handled) {
-          logger.info(
-            'Notification target fell back to surface head',
-            category: LogCategory.lifecycle,
-          );
-        }
-        pushController.consumePendingTarget(next);
-      });
+      processPendingNotificationTarget(next);
     });
 
     ref.listen<FeedSurfaceUiState>(
@@ -200,17 +217,29 @@ class FeedShellPage extends HookConsumerWidget {
       if (!startupSurfaceResolved) {
         return null;
       }
-      currentIndex.value = startupSurface.tabIndex;
-      startupReady.value = true;
       Future.microtask(() {
-        ref.read(coldLaunchInitialSurfaceProvider.notifier).state =
-            startupSurface;
+        if (ref.read(coldLaunchInitialSurfaceProvider) != null) {
+          ref.read(coldLaunchInitialSurfaceProvider.notifier).state =
+              startupSurface;
+        }
+        currentIndex.value = startupSurface.tabIndex;
       });
       return null;
     }, [startupSurfaceResolved, startupSurface]);
 
     useEffect(() {
-      if (!startupReady.value ||
+      if (!startupReady) {
+        return null;
+      }
+      final target = ref.read(pendingNotificationTargetProvider);
+      if (target != null) {
+        processPendingNotificationTarget(target);
+      }
+      return null;
+    }, [startupReady]);
+
+    useEffect(() {
+      if (!startupReady ||
           otherFeedsPreloaded.value ||
           visibleFeedState == null ||
           !visibleFeedState.hasValue) {
@@ -240,7 +269,7 @@ class FeedShellPage extends HookConsumerWidget {
       });
       return null;
     }, [
-      startupReady.value,
+      startupReady,
       otherFeedsPreloaded.value,
       visibleFeedState,
       startupSurface
@@ -262,7 +291,7 @@ class FeedShellPage extends HookConsumerWidget {
           Expanded(
             child: Stack(
               children: [
-                if (startupReady.value)
+                if (startupReady)
                   _buildBody(
                     pageController: pageController,
                     currentIndex: currentIndex,

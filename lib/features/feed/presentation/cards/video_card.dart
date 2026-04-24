@@ -299,6 +299,7 @@ class VideoCard extends HookConsumerWidget {
                     videoManager: videoManager,
                     playbackUrl: playbackUrl,
                     playerState: playerState,
+                    overlayState: overlayState,
                   ),
                   onLongPress: () => _showActionsSheet(context, feedRepository),
                   onContentTap: () => _openInBrowser(
@@ -330,7 +331,6 @@ class VideoCard extends HookConsumerWidget {
             ),
           ),
         ),
-
       ],
     );
   }
@@ -341,14 +341,21 @@ class VideoCard extends HookConsumerWidget {
     required YoutubePlayerManagerBase videoManager,
     required String playbackUrl,
     required YTPlayerState playerState,
+    required YTPlaybackOverlayState overlayState,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
       return;
     }
 
-    if (playerState == YTPlayerState.error) {
+    if (playerState == YTPlayerState.error ||
+        overlayState == YTPlaybackOverlayState.error ||
+        overlayState == YTPlaybackOverlayState.autoplayStalled) {
       await videoManager.retryVideo(playbackUrl);
+      return;
+    }
+
+    if (overlayState == YTPlaybackOverlayState.autoplayPending) {
       return;
     }
 
@@ -749,7 +756,6 @@ class _VideoErrorOverlay extends StatelessWidget {
     );
   }
 }
-
 
 class _PlayButton extends StatelessWidget {
   @override

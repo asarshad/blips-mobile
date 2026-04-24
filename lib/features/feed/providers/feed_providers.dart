@@ -288,6 +288,12 @@ class ArticlesNotifier
     try {
       final article = await _repository.fetchArticleById(contentId);
       if (!mounted) return false;
+      final currentItems = state.valueOrNull;
+      if (currentItems != null) {
+        state = AsyncValue.data(
+          [article, ...currentItems.where((entry) => entry.id != article.id)],
+        );
+      }
       _setUiState(
         _uiState.copyWith(
           notificationOverlayEntry: article,
@@ -881,6 +887,19 @@ class ArticlesNotifier
     );
   }
 
+  List<ArticleFeedEntry> _withNotificationOverlay(
+    List<ArticleFeedEntry> articles,
+  ) {
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is! ArticleFeedEntry) {
+      return articles;
+    }
+    return [
+      overlayEntry,
+      ...articles.where((entry) => entry.id != overlayEntry.id),
+    ];
+  }
+
   void _applyFreshArticles(
     List<ArticleFeedEntry> articles, {
     required bool hasMore,
@@ -892,10 +911,11 @@ class ArticlesNotifier
     required int? resumeContinuationWindowMinutes,
     required bool resumeSnapshotAfterRemoteWindow,
   }) {
+    final visibleArticles = _withNotificationOverlay(articles);
     _page = 1;
     _hasMore = hasMore;
     _inventoryState = inventoryState;
-    _currentItemId = articles.firstOrNull?.id;
+    _currentItemId = visibleArticles.firstOrNull?.id;
     _currentItemIndex = 0;
     _currentHeadBaselineIds = _headBaselineIds(articles, _limit);
     _canContinueRemotely = true;
@@ -909,8 +929,8 @@ class ArticlesNotifier
     _currentResumeSnapshotAfterRemoteWindow = resumeSnapshotAfterRemoteWindow;
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
-    state = AsyncValue.data(articles);
-    _updateNewSinceLastSeen(articles);
+    state = AsyncValue.data(visibleArticles);
+    _updateNewSinceLastSeen(visibleArticles);
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,
@@ -1295,6 +1315,12 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     try {
       final video = await _repository.fetchVideoById(contentId);
       if (!mounted) return false;
+      final currentItems = state.valueOrNull;
+      if (currentItems != null) {
+        state = AsyncValue.data(
+          [video, ...currentItems.where((entry) => entry.id != video.id)],
+        );
+      }
       _setUiState(
         _uiState.copyWith(
           notificationOverlayEntry: video,
@@ -1859,16 +1885,30 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     );
   }
 
+  List<VideoFeedEntry> _withNotificationOverlay(
+    List<VideoFeedEntry> videos,
+  ) {
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is! VideoFeedEntry) {
+      return videos;
+    }
+    return [
+      overlayEntry,
+      ...videos.where((entry) => entry.id != overlayEntry.id),
+    ];
+  }
+
   void _applyFreshVideos(
     List<VideoFeedEntry> videos, {
     required bool hasMore,
     required FeedInventoryState inventoryState,
     required String? feedVersion,
   }) {
+    final visibleVideos = _withNotificationOverlay(videos);
     _page = 1;
     _hasMore = hasMore;
     _inventoryState = inventoryState;
-    _currentItemId = videos.isEmpty ? null : videos.first.id;
+    _currentItemId = visibleVideos.isEmpty ? null : visibleVideos.first.id;
     _currentItemIndex = 0;
     _currentHeadBaselineIds = _headBaselineIds(videos, _limit);
     _canContinueRemotely = true;
@@ -1876,8 +1916,8 @@ class VideosNotifier extends StateNotifier<AsyncValue<List<VideoFeedEntry>>> {
     _currentNewestCreatedAt = _newestCreatedAtFor(videos);
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
-    state = AsyncValue.data(videos);
-    _updateNewSinceLastSeen(videos);
+    state = AsyncValue.data(visibleVideos);
+    _updateNewSinceLastSeen(visibleVideos);
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,
@@ -2319,6 +2359,12 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     try {
       final reel = await _repository.fetchReelById(contentId);
       if (!mounted) return false;
+      final currentItems = state.valueOrNull;
+      if (currentItems != null) {
+        state = AsyncValue.data(
+          [reel, ...currentItems.where((entry) => entry.id != reel.id)],
+        );
+      }
       _setUiState(
         _uiState.copyWith(
           notificationOverlayEntry: reel,
@@ -2887,6 +2933,19 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     );
   }
 
+  List<ReelFeedEntry> _withNotificationOverlay(
+    List<ReelFeedEntry> reels,
+  ) {
+    final overlayEntry = _uiState.notificationOverlayEntry;
+    if (overlayEntry is! ReelFeedEntry) {
+      return reels;
+    }
+    return [
+      overlayEntry,
+      ...reels.where((entry) => entry.id != overlayEntry.id),
+    ];
+  }
+
   void _applyFreshReels(
     List<ReelFeedEntry> reels, {
     required bool hasMore,
@@ -2894,10 +2953,11 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     required FeedInventoryState inventoryState,
     required String? feedVersion,
   }) {
+    final visibleReels = _withNotificationOverlay(reels);
     _hasMore = hasMore;
     _nextCursor = nextCursor;
     _inventoryState = inventoryState;
-    _currentItemId = reels.isEmpty ? null : reels.first.id;
+    _currentItemId = visibleReels.isEmpty ? null : visibleReels.first.id;
     _currentItemIndex = 0;
     _currentHeadBaselineIds = _headBaselineIds(reels, _limit);
     _canContinueRemotely = true;
@@ -2905,7 +2965,7 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
     _currentNewestCreatedAt = _newestCreatedAtFor(reels);
     _pendingFeedVersion = null;
     _pendingPrefetchedPage = null;
-    state = AsyncValue.data(reels);
+    state = AsyncValue.data(visibleReels);
     _setUiState(
       _uiState.copyWith(
         pendingNewCount: 0,

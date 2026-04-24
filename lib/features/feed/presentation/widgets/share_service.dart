@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -103,8 +103,6 @@ class ShareService {
   }) async {
     if (_isSharing.value) return;
     _isSharing.value = true;
-    // Instant tap acknowledgment so the user knows the button registered.
-    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Starting article share for "$title"');
@@ -167,7 +165,6 @@ class ShareService {
   }) async {
     if (_isSharing.value) return;
     _isSharing.value = true;
-    unawaited(HapticFeedback.selectionClick());
 
     try {
       debugPrint('ShareService: Starting video share for "$title"');

@@ -292,6 +292,63 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('tap on stalled autoplay retries instead of replaying WebView',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      mockManager.calls.clear();
+
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls,
+        contains('retry:${videoEntry.videoUrl}'),
+        reason: 'A stalled video tap must rebuild the WebView, not reuse it.',
+      );
+      expect(
+        mockManager.calls,
+        isNot(contains('play:${videoEntry.videoUrl}')),
+        reason: 'playVideo clears the stalled flag and can keep the wedged '
+            'controller stuck behind the play button.',
+      );
+    });
+
+    testWidgets('tap during autoplay pending does not reset recovery',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.loading);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.autoplayPending,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      mockManager.calls.clear();
+
+      await tester.tap(find.byType(CircularProgressIndicator));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls,
+        isNot(contains('play:${videoEntry.videoUrl}')),
+        reason: 'Repeated taps while loading should not keep restarting the '
+            'autoplay watchdog.',
+      );
+      expect(
+        mockManager.calls,
+        isNot(contains('retry:${videoEntry.videoUrl}')),
+      );
+    });
+
     testWidgets('falls back to source link when pausing a non-YouTube videoUrl',
         (tester) async {
       final fallbackEntry = VideoFeedEntry(

@@ -1,6 +1,7 @@
 @Tags(['widget'])
 library app_navigation_test;
 
+import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,8 +14,10 @@ import '../test_utils/fake_youtube_player_manager.dart';
 void main() {
   const videoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
-  Future<void> pumpUi(WidgetTester tester,
-      [Duration duration = const Duration(seconds: 1)]) async {
+  Future<void> pumpUi(
+    WidgetTester tester, [
+    Duration duration = const Duration(seconds: 1),
+  ]) async {
     await tester.pump(duration);
     await tester.pump();
   }
@@ -83,6 +86,7 @@ void main() {
           return switch (type) {
             'ARTICLE' => buildArticlePlaylistResponse(),
             'VIDEO' => buildVideoPlaylistResponse(),
+            'REEL' => buildReelsResponse(),
             _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
           };
         }
@@ -97,6 +101,19 @@ void main() {
     );
   }
 
+  Widget buildNavigationHarness({
+    required FakeBackendApiClient api,
+    YoutubePlayerManagerBase? youtubeManager,
+  }) {
+    return buildAppUiHarness(
+      api: api,
+      youtubeManager: youtubeManager,
+      overrides: [
+        coldLaunchInitialSurfaceProvider.overrideWith((_) => null),
+      ],
+    );
+  }
+
   setUp(() {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
   });
@@ -108,13 +125,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final api = buildApi();
     await tester.pumpWidget(
-      buildAppUiHarness(
-        api: buildApi(),
-        onboardingDone: true,
+      buildNavigationHarness(
+        api: api,
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));
+    await pumpUntilFound(tester, find.text('App shell article'));
 
     expect(find.text('App shell article'), findsOneWidget);
 
@@ -124,6 +142,7 @@ void main() {
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
     await pumpUi(tester);
+    await pumpUntilFound(tester, find.text('App shell reel'));
     expect(find.text('App shell reel'), findsOneWidget);
 
     await tester.drag(findShellPageView(), const Offset(-500, 0));
@@ -149,9 +168,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      buildAppUiHarness(
+      buildNavigationHarness(
         api: buildApi(),
-        onboardingDone: true,
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));
@@ -173,9 +191,8 @@ void main() {
 
     final manager = FakeYoutubePlayerManager();
     await tester.pumpWidget(
-      buildAppUiHarness(
+      buildNavigationHarness(
         api: buildApi(),
-        onboardingDone: true,
         youtubeManager: manager,
       ),
     );
@@ -201,9 +218,8 @@ void main() {
 
     final api = buildApi();
     await tester.pumpWidget(
-      buildAppUiHarness(
+      buildNavigationHarness(
         api: api,
-        onboardingDone: true,
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));
@@ -219,7 +235,9 @@ void main() {
     int reelRequests() => api.requests
         .where(
           (request) =>
-              request.method == 'GET' && request.path == '/videos/reels',
+              request.method == 'GET' &&
+              request.path == '/session/playlist' &&
+              request.queryParameters?['type'] == 'REEL',
         )
         .length;
 
@@ -246,9 +264,8 @@ void main() {
 
     final api = buildApi();
     await tester.pumpWidget(
-      buildAppUiHarness(
+      buildNavigationHarness(
         api: api,
-        onboardingDone: true,
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));
@@ -272,7 +289,9 @@ void main() {
     int reelRequests() => api.requests
         .where(
           (request) =>
-              request.method == 'GET' && request.path == '/videos/reels',
+              request.method == 'GET' &&
+              request.path == '/session/playlist' &&
+              request.queryParameters?['type'] == 'REEL',
         )
         .length;
 
@@ -290,8 +309,8 @@ void main() {
   });
 
   testWidgets(
-      're-tapping the current feed tab scrolls to top and surfaces new-items pill only when the head changes',
-      (tester) async {
+      're-tapping the current feed tab scrolls to top and surfaces new-items '
+      'pill only when the head changes', (tester) async {
     tester.view.physicalSize = const Size(430, 932);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -324,6 +343,7 @@ void main() {
                     feedVersion: 'article-v2',
                   ),
             'VIDEO' => buildVideoPlaylistResponse(),
+            'REEL' => buildReelsResponse(),
             _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
           };
         }
@@ -338,9 +358,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      buildAppUiHarness(
+      buildNavigationHarness(
         api: api,
-        onboardingDone: true,
       ),
     );
     await pumpUi(tester, const Duration(seconds: 2));

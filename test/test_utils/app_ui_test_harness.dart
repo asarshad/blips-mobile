@@ -98,6 +98,7 @@ Map<String, dynamic> buildReelsResponse() {
     'items': [
       {
         'id': 303,
+        'type': 'REEL',
         'title': 'App shell reel',
         'video_url': 'https://www.youtube.com/shorts/jcxgwl9NYFE',
         'source_url': 'https://example.com/reel-source',

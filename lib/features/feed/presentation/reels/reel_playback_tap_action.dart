@@ -27,10 +27,16 @@ ReelPlaybackTapAction resolveReelPlaybackTapAction({
     return ReelPlaybackTapAction.retry;
   }
 
+  // A controller that is still loading while the iframe reports buffering is
+  // usually wedged. Rebuild it so a tap gives the WebView a fresh load.
+  if (playerState == YTPlayerState.loading &&
+      controllerPlayerState == PlayerState.buffering) {
+    return ReelPlaybackTapAction.retry;
+  }
+
   // Controller is still loading or hasn't started yet — don't tear it down,
-  // just nudge it. Retrying during loading creates a spin-loop: each rebuild
-  // races the previous one (releaseVideo clears _currentActiveUrl mid-init),
-  // the autoplay watchdog fires, and the player ends up permanently stalled.
+  // just nudge it. Retrying every idle/loading tap creates a spin-loop: each
+  // rebuild races the previous one and can leave playback permanently stalled.
   if (playerState == YTPlayerState.loading ||
       playerState == YTPlayerState.idle) {
     return ReelPlaybackTapAction.play;
