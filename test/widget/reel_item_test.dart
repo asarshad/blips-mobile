@@ -297,6 +297,70 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('tap on stalled autoplay plays before retry fallback',
+        (tester) async {
+      final calls = <String>[];
+      final trackingManager = _TrackingYoutubePlayerManager(
+        delegate: mockManager,
+        onPlayVideo: (url) => calls.add('play:$url'),
+        onRetryVideo: (url) => calls.add('retry:$url'),
+      );
+      mockManager.setMockState(testReel.link, YTPlayerState.ready);
+      mockManager.setMockOverlayState(
+        testReel.link,
+        YTPlaybackOverlayState.autoplayStalled,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            youtubePlayerManagerProvider.overrideWith((ref) => trackingManager),
+            feedRepositoryProvider.overrideWithValue(
+              FeedRepository(
+                FakeBackendApiClient(
+                  responses: const {
+                    '/session/interactions': {'success': true},
+                  },
+                ),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                height: 600,
+                child: ReelItem(
+                  entry: testReel,
+                  isActive: true,
+                  isVisible: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      calls.clear();
+
+      await tester.tap(find.byKey(const ValueKey('reel_playback_tap_overlay')));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        calls,
+        contains('play:${testReel.link}'),
+        reason: 'A visible play button must first use the user tap to play.',
+      );
+
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      expect(
+        calls,
+        contains('retry:${testReel.link}'),
+        reason: 'If the manual play nudge still has not produced playback, '
+            'fall back to a rebuild.',
+      );
+    });
+
     testWidgets('tap while paused calls playVideo (not pauseVideo)',
         (tester) async {
       // Track method calls.

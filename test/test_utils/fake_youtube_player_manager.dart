@@ -43,19 +43,26 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final state = getState(url);
+    if (state == YTPlayerState.error) {
+      return YTPlaybackOverlayState.error;
+    }
+    if (state == YTPlayerState.playing) {
+      return YTPlaybackOverlayState.none;
+    }
     final override = _overlayStates[url];
     if (override != null) {
       return override;
     }
-    final state = getState(url);
     return switch (state) {
-      YTPlayerState.error => YTPlaybackOverlayState.error,
-      YTPlayerState.playing => YTPlaybackOverlayState.none,
       YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
       YTPlayerState.ready ||
       YTPlayerState.loading ||
       YTPlayerState.idle =>
         YTPlaybackOverlayState.autoplayPending,
+      YTPlayerState.error ||
+      YTPlayerState.playing =>
+        YTPlaybackOverlayState.none,
     };
   }
 

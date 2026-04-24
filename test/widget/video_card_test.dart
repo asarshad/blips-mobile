@@ -44,18 +44,26 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    final state = getState(url);
+    if (state == YTPlayerState.error) {
+      return YTPlaybackOverlayState.error;
+    }
+    if (state == YTPlayerState.playing) {
+      return YTPlaybackOverlayState.none;
+    }
     final override = _overlayStates[url];
     if (override != null) {
       return override;
     }
-    return switch (getState(url)) {
-      YTPlayerState.error => YTPlaybackOverlayState.error,
-      YTPlayerState.playing => YTPlaybackOverlayState.none,
+    return switch (state) {
       YTPlayerState.paused => YTPlaybackOverlayState.manualPause,
       YTPlayerState.ready ||
       YTPlayerState.loading ||
       YTPlayerState.idle =>
         YTPlaybackOverlayState.autoplayPending,
+      YTPlayerState.error ||
+      YTPlayerState.playing =>
+        YTPlaybackOverlayState.none,
     };
   }
 
@@ -292,7 +300,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
-    testWidgets('tap on stalled autoplay retries instead of replaying WebView',
+    testWidgets('tap on stalled autoplay plays before retry fallback',
         (tester) async {
       mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
       mockManager.setMockOverlayState(
@@ -310,18 +318,21 @@ void main() {
 
       expect(
         mockManager.calls,
-        contains('retry:${videoEntry.videoUrl}'),
-        reason: 'A stalled video tap must rebuild the WebView, not reuse it.',
+        contains('play:${videoEntry.videoUrl}'),
+        reason: 'A visible play button must first use the user tap to play.',
       );
+
+      await tester.pump(const Duration(milliseconds: 1200));
+
       expect(
         mockManager.calls,
-        isNot(contains('play:${videoEntry.videoUrl}')),
-        reason: 'playVideo clears the stalled flag and can keep the wedged '
-            'controller stuck behind the play button.',
+        contains('retry:${videoEntry.videoUrl}'),
+        reason: 'If the manual play nudge still has not produced playback, '
+            'fall back to a rebuild.',
       );
     });
 
-    testWidgets('tap during autoplay pending does not reset recovery',
+    testWidgets('tap during autoplay pending reissues play without waiting',
         (tester) async {
       mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.loading);
       mockManager.setMockOverlayState(
@@ -339,13 +350,17 @@ void main() {
 
       expect(
         mockManager.calls,
-        isNot(contains('play:${videoEntry.videoUrl}')),
-        reason: 'Repeated taps while loading should not keep restarting the '
-            'autoplay watchdog.',
+        contains('play:${videoEntry.videoUrl}'),
+        reason: 'A user tap during a spinner should still try to play now.',
       );
+
+      await tester.pump(const Duration(milliseconds: 1200));
+
       expect(
         mockManager.calls,
-        isNot(contains('retry:${videoEntry.videoUrl}')),
+        contains('retry:${videoEntry.videoUrl}'),
+        reason: 'If the manual play nudge still has not produced playback, '
+            'fall back to a rebuild.',
       );
     });
 

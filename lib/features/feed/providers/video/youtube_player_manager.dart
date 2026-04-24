@@ -113,6 +113,12 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (state == YTPlayerState.error) {
       return YTPlaybackOverlayState.error;
     }
+    // The manager state is authoritative for play/pause intent. If the iframe
+    // has reported playing, stale pause/stall flags must not keep chrome over
+    // a video that is already moving.
+    if (state == YTPlayerState.playing) {
+      return YTPlaybackOverlayState.none;
+    }
     // User-initiated pause takes precedence over the iframe's controller state.
     // The controller reports PlayerState changes asynchronously from the WebView;
     // waiting for that confirmation causes a visible window where the play button
@@ -120,8 +126,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (_userPausedUrls.contains(url)) {
       return YTPlaybackOverlayState.manualPause;
     }
-    if (controllerState == PlayerState.playing ||
-        state == YTPlayerState.playing) {
+    if (controllerState == PlayerState.playing) {
       return YTPlaybackOverlayState.none;
     }
     if (_autoplayStalledUrls.contains(url)) {
@@ -390,6 +395,14 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
           : previousState ?? YTPlayerState.loading,
     };
 
+    final hadUserPause = _userPausedUrls.contains(url);
+    final hadAutoplayStall = _autoplayStalledUrls.contains(url);
+
+    if (newState == YTPlayerState.playing) {
+      _clearUserPause(url);
+      _clearAutoplayStalled(url);
+    }
+
     if (previousState != newState) {
       _states[url] = newState;
       _recordDiagnostics(
@@ -404,11 +417,13 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
         },
       );
       _notifySafe();
+    } else if (newState == YTPlayerState.playing &&
+        (hadUserPause || hadAutoplayStall)) {
+      _notifySafe();
     }
 
     if (newState == YTPlayerState.playing && _currentActiveUrl == url) {
       _cancelAutoplayWatchdog(url);
-      _clearAutoplayStalled(url);
       _cancelRecovery();
     }
 
@@ -718,6 +733,18 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       if (_isDisposed || _currentActiveUrl != currentUrl) return;
 
       final state = _states[currentUrl] ?? YTPlayerState.idle;
+      final controllerState = _controllers[currentUrl]?.value.playerState;
+      if (controllerState == PlayerState.playing) {
+        if (state != YTPlayerState.playing) {
+          _states[currentUrl] = YTPlayerState.playing;
+        }
+        _clearUserPause(currentUrl);
+        _clearAutoplayStalled(currentUrl);
+        _cancelAutoplayWatchdog(currentUrl);
+        _cancelRecovery();
+        _notifySafe();
+        return;
+      }
       final action = resolveReelAutoplayRecoveryAction(
         isCurrentActive: _currentActiveUrl == currentUrl,
         controllerExists: _controllers.containsKey(currentUrl),

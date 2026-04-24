@@ -126,6 +126,36 @@ void main() {
         YTPlaybackOverlayState.none,
       );
     });
+
+    test('playing suppresses stale manual-pause affordance', () {
+      manager
+        ..setPlaybackOverlayState(
+          url0,
+          YTPlaybackOverlayState.manualPause,
+        )
+        ..setState(url0, YTPlayerState.playing);
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.none,
+        reason: 'a stale pause flag must not render over active playback',
+      );
+    });
+
+    test('playing suppresses stale autoplay-stalled affordance', () {
+      manager
+        ..setPlaybackOverlayState(
+          url0,
+          YTPlaybackOverlayState.autoplayStalled,
+        )
+        ..setState(url0, YTPlayerState.playing);
+
+      expect(
+        manager.getPlaybackOverlayState(url0),
+        YTPlaybackOverlayState.none,
+        reason: 'a stale stall flag must not render over active playback',
+      );
+    });
   });
 
   // ── pauseVideo ───────────────────────────────────────────────────────────

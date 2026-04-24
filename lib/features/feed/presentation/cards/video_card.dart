@@ -295,11 +295,9 @@ class VideoCard extends HookConsumerWidget {
                   readTime: watchLabel,
                   onMediaTap: () => _handleTap(
                     showBubbles: showBubbles,
-                    controller: controller,
                     videoManager: videoManager,
                     playbackUrl: playbackUrl,
-                    playerState: playerState,
-                    overlayState: overlayState,
+                    isVisible: isVisible,
                   ),
                   onLongPress: () => _showActionsSheet(context, feedRepository),
                   onContentTap: () => _openInBrowser(
@@ -337,38 +335,62 @@ class VideoCard extends HookConsumerWidget {
 
   Future<void> _handleTap({
     required ValueNotifier<bool> showBubbles,
-    required YoutubePlayerController? controller,
     required YoutubePlayerManagerBase videoManager,
     required String playbackUrl,
-    required YTPlayerState playerState,
-    required YTPlaybackOverlayState overlayState,
+    required bool isVisible,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
       return;
     }
 
-    if (playerState == YTPlayerState.error ||
-        overlayState == YTPlaybackOverlayState.error ||
-        overlayState == YTPlaybackOverlayState.autoplayStalled) {
+    final freshController = videoManager.getController(playbackUrl);
+    final freshPlayerState = videoManager.getState(playbackUrl);
+    final freshOverlayState = videoManager.getPlaybackOverlayState(playbackUrl);
+    final controllerState = freshController?.value.playerState;
+
+    if (freshPlayerState == YTPlayerState.error ||
+        freshOverlayState == YTPlaybackOverlayState.error) {
       await videoManager.retryVideo(playbackUrl);
       return;
     }
 
-    if (overlayState == YTPlaybackOverlayState.autoplayPending) {
+    if (freshPlayerState == YTPlayerState.playing ||
+        controllerState == PlayerState.playing) {
+      videoManager.pauseVideo(playbackUrl);
       return;
     }
 
-    if (controller != null) {
-      if (controller.value.playerState == PlayerState.playing) {
-        videoManager.pauseVideo(playbackUrl);
-      } else {
-        videoManager.playVideo(playbackUrl);
-      }
-    } else {
-      // No controller yet, start loading and playing
-      await videoManager.playVideo(playbackUrl);
-    }
+    final shouldRetryIfStuck =
+        freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
+            freshOverlayState == YTPlaybackOverlayState.autoplayPending;
+    _playFromUserTap(
+      videoManager: videoManager,
+      playbackUrl: playbackUrl,
+      isVisible: isVisible,
+      retryIfStuck: shouldRetryIfStuck,
+    );
+  }
+
+  void _playFromUserTap({
+    required YoutubePlayerManagerBase videoManager,
+    required String playbackUrl,
+    required bool isVisible,
+    required bool retryIfStuck,
+  }) {
+    unawaited(videoManager.playVideo(playbackUrl));
+    if (!retryIfStuck) return;
+
+    Timer(const Duration(milliseconds: 1200), () {
+      if (!isVisible) return;
+      final state = videoManager.getState(playbackUrl);
+      final controllerState =
+          videoManager.getController(playbackUrl)?.value.playerState;
+      final isPlaying = state == YTPlayerState.playing ||
+          controllerState == PlayerState.playing;
+      if (isPlaying || state == YTPlayerState.error) return;
+      unawaited(videoManager.retryVideo(playbackUrl));
+    });
   }
 
   String _resolvePlaybackUrl(YoutubePlayerManagerBase videoManager) {

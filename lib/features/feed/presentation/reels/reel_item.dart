@@ -336,11 +336,9 @@ class ReelItem extends HookConsumerWidget {
             ),
           ),
         ),
-
       ],
     );
   }
-
 
   void _useThumbnailVisibility({
     required YoutubePlayerController? controller,
@@ -425,8 +423,33 @@ class ReelItem extends HookConsumerWidget {
       case ReelPlaybackTapAction.pause:
         videoManager.pauseVideo(entry.link);
       case ReelPlaybackTapAction.play:
-        videoManager.playVideo(entry.link);
+        final shouldRetryIfStuck =
+            freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
+                freshOverlayState == YTPlaybackOverlayState.autoplayPending;
+        _playFromUserTap(
+          videoManager,
+          retryIfStuck: shouldRetryIfStuck,
+        );
     }
+  }
+
+  void _playFromUserTap(
+    YoutubePlayerManagerBase videoManager, {
+    required bool retryIfStuck,
+  }) {
+    unawaited(videoManager.playVideo(entry.link));
+    if (!retryIfStuck) return;
+
+    Timer(const Duration(milliseconds: 1200), () {
+      if (!isActive || !isVisible) return;
+      final state = videoManager.getState(entry.link);
+      final controllerState =
+          videoManager.getController(entry.link)?.value.playerState;
+      final isPlaying = state == YTPlayerState.playing ||
+          controllerState == PlayerState.playing;
+      if (isPlaying || state == YTPlayerState.error) return;
+      unawaited(videoManager.retryVideo(entry.link));
+    });
   }
 
   Future<void> _shareReel(

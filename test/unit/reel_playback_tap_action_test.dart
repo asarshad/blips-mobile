@@ -19,8 +19,7 @@ void main() {
       expect(action, ReelPlaybackTapAction.retry);
     });
 
-    test('retries when a controller exists but playback is stalled loading',
-        () {
+    test('plays when a controller is buffering during startup', () {
       final action = resolveReelPlaybackTapAction(
         hasController: true,
         isAutoplayStalled: false,
@@ -28,7 +27,7 @@ void main() {
         controllerPlayerState: PlayerState.buffering,
       );
 
-      expect(action, ReelPlaybackTapAction.retry);
+      expect(action, ReelPlaybackTapAction.play);
     });
 
     test('plays when no controller exists yet', () {
@@ -71,11 +70,7 @@ void main() {
       expect(pausedAction, ReelPlaybackTapAction.play);
     });
 
-    test('retries when autoplay has stalled regardless of controller state',
-        () {
-      // This is the loop-breaker: a stuck controller (e.g. unStarted/ready)
-      // would previously return .play, re-using the same stuck WebView.
-      // Now it returns .retry so the controller is torn down and rebuilt.
+    test('uses the user tap as a play gesture when autoplay has stalled', () {
       for (final controllerState in [
         PlayerState.unStarted,
         PlayerState.cued,
@@ -90,7 +85,7 @@ void main() {
         );
         expect(
           action,
-          ReelPlaybackTapAction.retry,
+          ReelPlaybackTapAction.play,
           reason: 'controllerState=$controllerState',
         );
       }
