@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-const _loadMoreOrganicRemainingThreshold = 5;
+const _loadMoreOrganicRemainingThreshold = 10;
 
 /// Generic vertical-scrolling feed tab with pagination support.
 ///
