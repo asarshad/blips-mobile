@@ -9,7 +9,7 @@ enum ReelPlaybackTapAction {
 
 ReelPlaybackTapAction resolveReelPlaybackTapAction({
   required bool hasController,
-  required bool isAutoplayStalled,
+  required bool showsPlayAffordance,
   required YTPlayerState playerState,
   required PlayerState? controllerPlayerState,
 }) {
@@ -30,10 +30,10 @@ ReelPlaybackTapAction resolveReelPlaybackTapAction({
     return ReelPlaybackTapAction.play;
   }
 
-  // When the UI shows a play affordance, the user's tap must first be used as
-  // a real play gesture against the existing WebView. Rebuilding first can
-  // move the eventual play() outside the gesture and leave iOS stuck.
-  if (isAutoplayStalled) {
+  // When the UI shows a play affordance, the user's tap must be treated as a
+  // play/recovery gesture even if the iframe still reports a stale playing
+  // state. Otherwise the play button can become a no-op pause command.
+  if (showsPlayAffordance) {
     return ReelPlaybackTapAction.play;
   }
 

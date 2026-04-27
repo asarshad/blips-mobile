@@ -11,7 +11,7 @@ void main() {
     test('retries when the reel is in error state', () {
       final action = resolveReelPlaybackTapAction(
         hasController: true,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.error,
         controllerPlayerState: PlayerState.unknown,
       );
@@ -22,7 +22,7 @@ void main() {
     test('plays when a controller is buffering during startup', () {
       final action = resolveReelPlaybackTapAction(
         hasController: true,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.loading,
         controllerPlayerState: PlayerState.buffering,
       );
@@ -33,7 +33,7 @@ void main() {
     test('plays when no controller exists yet', () {
       final action = resolveReelPlaybackTapAction(
         hasController: false,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.idle,
         controllerPlayerState: null,
       );
@@ -44,7 +44,7 @@ void main() {
     test('pauses when the reel is already playing', () {
       final action = resolveReelPlaybackTapAction(
         hasController: true,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.playing,
         controllerPlayerState: PlayerState.playing,
       );
@@ -55,13 +55,13 @@ void main() {
     test('plays when the reel is ready or paused but not yet playing', () {
       final readyAction = resolveReelPlaybackTapAction(
         hasController: true,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.ready,
         controllerPlayerState: PlayerState.paused,
       );
       final pausedAction = resolveReelPlaybackTapAction(
         hasController: true,
-        isAutoplayStalled: false,
+        showsPlayAffordance: false,
         playerState: YTPlayerState.paused,
         controllerPlayerState: PlayerState.paused,
       );
@@ -79,7 +79,7 @@ void main() {
       ]) {
         final action = resolveReelPlaybackTapAction(
           hasController: true,
-          isAutoplayStalled: true,
+          showsPlayAffordance: true,
           playerState: YTPlayerState.ready,
           controllerPlayerState: controllerState,
         );
@@ -89,6 +89,22 @@ void main() {
           reason: 'controllerState=$controllerState',
         );
       }
+    });
+
+    test('visible play affordance wins over stale playing controller state',
+        () {
+      final action = resolveReelPlaybackTapAction(
+        hasController: true,
+        showsPlayAffordance: true,
+        playerState: YTPlayerState.paused,
+        controllerPlayerState: PlayerState.playing,
+      );
+
+      expect(
+        action,
+        ReelPlaybackTapAction.play,
+        reason: 'a visible play button must never become a no-op pause tap',
+      );
     });
   });
 }

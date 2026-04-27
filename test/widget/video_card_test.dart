@@ -93,6 +93,12 @@ class MockYoutubePlayerManager extends YoutubePlayerManagerBase {
   }
 
   @override
+  Future<void> ensurePlayback(String url) async {
+    calls.add('ensure:$url');
+    await playVideo(url);
+  }
+
+  @override
   Future<void> retryVideo(String url) async {
     calls.add('retry:$url');
   }
@@ -173,7 +179,7 @@ void main() {
         (tester) async {
       // Default state is idle — card should self-arm to handle push-notification
       // and scroll-restore paths where FeedTab's onPageChanged fires before the
-      // card is mounted. play() is issued synchronously on the first effect run.
+      // card is mounted. Playback is routed through the manager recovery entrypoint.
       await tester
           .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
       await tester.pump();
@@ -185,8 +191,7 @@ void main() {
             'to cover push-notification and restore-scroll entry paths.',
       );
 
-      // Drain the 1500 ms fallback retry timer so the test harness is clean.
-      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pump();
     });
 
     testWidgets('visible card does not arm autoplay when already playing',
@@ -300,7 +305,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
-    testWidgets('tap on stalled autoplay plays before retry fallback',
+    testWidgets('tap on stalled autoplay uses manager recovery entrypoint',
         (tester) async {
       mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
       mockManager.setMockOverlayState(
@@ -318,17 +323,17 @@ void main() {
 
       expect(
         mockManager.calls,
-        contains('play:${videoEntry.videoUrl}'),
-        reason: 'A visible play button must first use the user tap to play.',
+        contains('ensure:${videoEntry.videoUrl}'),
+        reason: 'A visible play button must use the centralized recovery path.',
       );
 
       await tester.pump(const Duration(milliseconds: 1200));
 
       expect(
         mockManager.calls,
-        contains('retry:${videoEntry.videoUrl}'),
-        reason: 'If the manual play nudge still has not produced playback, '
-            'fall back to a rebuild.',
+        isNot(contains('retry:${videoEntry.videoUrl}')),
+        reason: 'Widget-level delayed retry timers should not compete with '
+            'YoutubePlayerManager recovery.',
       );
     });
 
@@ -350,17 +355,17 @@ void main() {
 
       expect(
         mockManager.calls,
-        contains('play:${videoEntry.videoUrl}'),
-        reason: 'A user tap during a spinner should still try to play now.',
+        contains('ensure:${videoEntry.videoUrl}'),
+        reason: 'A user tap during a spinner should use manager recovery.',
       );
 
       await tester.pump(const Duration(milliseconds: 1200));
 
       expect(
         mockManager.calls,
-        contains('retry:${videoEntry.videoUrl}'),
-        reason: 'If the manual play nudge still has not produced playback, '
-            'fall back to a rebuild.',
+        isNot(contains('retry:${videoEntry.videoUrl}')),
+        reason: 'Widget-level delayed retry timers should not compete with '
+            'YoutubePlayerManager recovery.',
       );
     });
 
@@ -514,10 +519,7 @@ void main() {
       await tester.pumpWidget(
         buildTestWidget(entry: videoEntry, isVisible: true),
       );
-      // Drain the initial self-arm: play() fires synchronously, but the
-      // 1.5 s fallback retry timer is still pending — pump past it so the
-      // harness is clean before testing lifecycle events.
-      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Clear calls from initial self-arm; this test is about lifecycle cycles.
       mockManager.calls.clear();

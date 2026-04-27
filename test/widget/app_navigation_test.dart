@@ -13,6 +13,8 @@ import '../test_utils/fake_youtube_player_manager.dart';
 
 void main() {
   const videoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const firstReelUrl = 'https://www.youtube.com/shorts/jcxgwl9NYFE';
+  const secondReelUrl = 'https://www.youtube.com/shorts/ScMzIvxBSi4';
 
   Future<void> pumpUi(
     WidgetTester tester, [
@@ -106,6 +108,37 @@ void main() {
         return const <String, dynamic>{};
       },
     );
+  }
+
+  Map<String, dynamic> buildTwoReelsResponse() {
+    Map<String, Object?> item({
+      required int id,
+      required String title,
+      required String videoUrl,
+    }) {
+      return {
+        'id': id,
+        'type': 'REEL',
+        'title': title,
+        'video_url': videoUrl,
+        'source_url': 'https://example.com/reel-source/$id',
+        'source': 'Creator',
+        'summary': 'Reel summary for shell navigation testing.',
+        'thumbnail_url': 'https://example.com/reel_$id.jpg',
+        'duration_seconds': 45,
+        'published_at': '2026-03-20T12:20:00Z',
+        'created_at': '2026-03-20T12:25:00Z',
+      };
+    }
+
+    return {
+      'items': [
+        item(id: 303, title: 'App shell reel 1', videoUrl: firstReelUrl),
+        item(id: 304, title: 'App shell reel 2', videoUrl: secondReelUrl),
+      ],
+      'has_more': false,
+      'next_cursor': null,
+    };
   }
 
   Widget buildNavigationHarness({
@@ -252,6 +285,62 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('swiping Reels activates new reel and pauses previous audio',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final manager = FakeYoutubePlayerManager();
+    final api = FakeBackendApiClient(
+      responseResolver: (method, path, queryParameters, body) {
+        if (method == 'GET' && path == '/session/playlist') {
+          final type = queryParameters?['type'] as String?;
+          return switch (type) {
+            'ARTICLE' => buildArticlePlaylistResponse(),
+            'VIDEO' => buildVideoPlaylistResponse(),
+            'REEL' => buildTwoReelsResponse(),
+            _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
+          };
+        }
+        if (method == 'GET' && path == '/videos/reels') {
+          return buildTwoReelsResponse();
+        }
+        if (method == 'POST' && path == '/session/interactions') {
+          return const <String, dynamic>{};
+        }
+        return const <String, dynamic>{};
+      },
+    );
+
+    await tester.pumpWidget(
+      buildNavigationHarness(
+        api: api,
+        youtubeManager: manager,
+      ),
+    );
+    await pumpUi(tester, const Duration(seconds: 2));
+
+    await tester.tap(find.byIcon(Icons.movie_filter_outlined));
+    await pumpTabTransition(tester);
+    await pumpUi(tester, const Duration(seconds: 2));
+    await pumpUntilFound(tester, find.text('App shell reel 1'));
+
+    expect(manager.getState(firstReelUrl), YTPlayerState.playing);
+
+    final reelsPageView = find.ancestor(
+      of: find.text('App shell reel 1'),
+      matching: findVerticalFeedPageView(),
+    );
+    await tester.fling(reelsPageView, const Offset(0, -700), 2000);
+    await pumpUi(tester, const Duration(seconds: 1));
+    await pumpUntilFound(tester, find.text('App shell reel 2'));
+
+    expect(manager.getState(firstReelUrl), YTPlayerState.paused);
+    expect(manager.getState(secondReelUrl), YTPlayerState.playing);
   });
 
   testWidgets('entering Videos and Reels triggers a fresh backend revalidation',

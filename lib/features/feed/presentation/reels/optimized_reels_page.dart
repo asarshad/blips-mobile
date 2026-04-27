@@ -11,30 +11,19 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
+import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 const _loadMoreOrganicRemainingThreshold = 10;
 
-/// Shared player flags for every pre-warmed controller in the pool.
-///
-/// Mirrors the flags used inside [ReelItem] so there is no visible difference
-/// when a pooled controller is adopted by the widget.
-const _kReelPlayerFlags = YoutubePlayerFlags(
-  hideControls: true,
-  autoPlay: false,
-  loop: false,
-  disableDragSeek: true,
-  enableCaption: false,
-);
-
 /// Reels page — vertical PageView of [ReelItem] widgets.
 ///
-/// Each [ReelItem] owns its own [YoutubePlayerController]; this page only
-/// tracks pagination, analytics, and caught-up state. No video pool needed.
+/// Playback controllers are owned by YoutubePlayerManager; this page only
+/// tracks pagination, analytics, and caught-up state.
 class OptimizedReelsPage extends HookConsumerWidget {
   const OptimizedReelsPage({
     super.key,
@@ -64,95 +53,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final isMounted = useIsMounted();
     final autoRetryInProgress = useState(false);
     final autoRetryAttempts = useRef(0);
-
-    // ── Controller pool ───────────────────────────────────────────────────────
-    // Keyed by ReelFeedEntry.id so controllers survive feed refreshes that
-    // insert / reorder entries without changing content ids.
-    final pool = useRef<Map<int, YoutubePlayerController>>({});
-
-    // Incrementing this triggers a widget rebuild so itemBuilder picks up
-    // controllers that were just added to the pool.
-    final poolVersion = useState(0);
-
-    // Close every pooled controller when this widget is disposed.
-    useEffect(() {
-      return () {
-        for (final c in pool.value.values) {
-          c.dispose();
-        }
-        pool.value.clear();
-      };
-    }, const []);
-
-    // Maintain the pool window as the user scrolls.
-    useEffect(() {
-      final pageItems = reelsFeed.valueOrNull;
-      if (pageItems == null || pageItems.isEmpty) return null;
-
-      // Build an ordered list of (pageIndex, entry) pairs for all organic reels.
-      final organicReels = <(int, ReelFeedEntry)>[];
-      for (var i = 0; i < pageItems.length; i++) {
-        final organic = pageItems[i].organicEntry;
-        if (organic is ReelFeedEntry) organicReels.add((i, organic));
-      }
-      if (organicReels.isEmpty) return null;
-
-      // Find which organic position corresponds to the current page index.
-      // Walk forward: the last organic entry whose page index ≤ currentIndex.
-      var currentOrganicPos = 0;
-      for (var i = 0; i < organicReels.length; i++) {
-        if (organicReels[i].$1 <= currentIndex.value) {
-          currentOrganicPos = i;
-        } else {
-          break;
-        }
-      }
-
-      // Compute the desired window around the current organic position.
-      final windowStart = (currentOrganicPos - MemoryConfig.reelPreloadBehind)
-          .clamp(0, organicReels.length - 1);
-      final windowEnd = (currentOrganicPos + MemoryConfig.reelPreloadAhead)
-          .clamp(0, organicReels.length - 1);
-
-      // Collect the entry ids that should be in the pool.
-      final desiredIds = <int>{
-        for (var i = windowStart; i <= windowEnd; i++) organicReels[i].$2.id,
-      };
-
-      var changed = false;
-
-      // Create controllers for entries entering the window.
-      for (var i = windowStart; i <= windowEnd; i++) {
-        final entry = organicReels[i].$2;
-        if (pool.value.containsKey(entry.id)) continue;
-
-        final videoId = YoutubePlayer.convertUrlToId(entry.link);
-        if (videoId == null) continue;
-
-        pool.value[entry.id] = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: _kReelPlayerFlags,
-        );
-        changed = true;
-      }
-
-      // Evict and close controllers for entries leaving the window.
-      final staleIds =
-          pool.value.keys.where((id) => !desiredIds.contains(id)).toList();
-      for (final id in staleIds) {
-        pool.value.remove(id)?.dispose();
-        changed = true;
-      }
-
-      // Trigger a rebuild so itemBuilder sees the updated pool.
-      if (changed) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (isMounted()) poolVersion.value++;
-        });
-      }
-
-      return null;
-    }, [reelsFeed.valueOrNull, currentIndex.value]);
 
     // Clear auto-retry counter when data arrives.
     useEffect(() {
@@ -226,7 +126,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
           isCaughtUp: reelsNotifier.isCaughtUp,
           uiState: uiState,
           ref: ref,
-          pool: pool,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => autoRetryInProgress.value
@@ -367,7 +266,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
     required bool isCaughtUp,
     required FeedSurfaceUiState uiState,
     required WidgetRef ref,
-    required ObjectRef<Map<int, YoutubePlayerController>> pool,
   }) {
     if (entries.isEmpty) {
       return Theme(
@@ -399,6 +297,10 @@ class OptimizedReelsPage extends HookConsumerWidget {
     final boundedIndex = currentIndex.value.clamp(0, entries.length - 1);
     final currentOrganicIndex =
         _organicIndexForPageIndex(entries, boundedIndex);
+    final videoManager = ref.read(youtubePlayerManagerProvider);
+    final reelUrls = organicEntries
+        .map((entry) => _resolveReelPlaybackUrl(entry, videoManager))
+        .toList(growable: false);
     final showCaughtUpBanner = isCaughtUp &&
         currentOrganicIndex != null &&
         currentOrganicIndex >= organicEntries.length - 1;
@@ -425,6 +327,16 @@ class OptimizedReelsPage extends HookConsumerWidget {
               ref
                   .read(reelsFeedProvider.notifier)
                   .setCurrentViewPosition(organicIndex, organicEntry);
+              if (isVisible &&
+                  _resolveReelPlaybackUrl(organicEntry, videoManager)
+                      .isNotEmpty &&
+                  reelUrls.isNotEmpty) {
+                videoManager.onPageChanged(
+                  currentIndex: organicIndex,
+                  videoUrls: reelUrls,
+                  preloadAhead: MemoryConfig.reelPreloadCount,
+                );
+              }
             }
 
             if (_shouldLoadMore(entries, index)) {
@@ -453,9 +365,6 @@ class OptimizedReelsPage extends HookConsumerWidget {
               entry: organicEntry,
               isActive: index == currentIndex.value,
               isVisible: isVisible,
-              // Provide the pre-warmed controller if the pool has one ready.
-              // When null, ReelItem falls back to creating its own controller.
-              externalController: pool.value[organicEntry.id],
             );
           },
         ),
@@ -537,4 +446,15 @@ int? _pageIndexForOrganicIndex(
     }
   }
   return null;
+}
+
+String _resolveReelPlaybackUrl(
+  ReelFeedEntry entry,
+  YoutubePlayerManagerBase videoManager,
+) {
+  final preferred = entry.videoUrl.trim();
+  if (preferred.isNotEmpty && videoManager.extractVideoId(preferred) != null) {
+    return preferred;
+  }
+  return entry.link.trim();
 }

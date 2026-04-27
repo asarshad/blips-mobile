@@ -45,10 +45,11 @@ class ReelItem extends HookConsumerWidget {
     final repository = ref.read(feedRepositoryProvider);
     final sessionStore = ref.read(feedSessionStoreProvider);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
-    final controller = videoManager.getController(entry.link);
-    final playerState = videoManager.getState(entry.link);
-    final overlayState = videoManager.getPlaybackOverlayState(entry.link);
-    final playerError = videoManager.getError(entry.link);
+    final playbackUrl = _resolvePlaybackUrl(videoManager);
+    final controller = videoManager.getController(playbackUrl);
+    final playerState = videoManager.getState(playbackUrl);
+    final overlayState = videoManager.getPlaybackOverlayState(playbackUrl);
+    final playerError = videoManager.getError(playbackUrl);
     final isSaved = ref.watch(savedVideoIdsProvider).contains(entry.id);
     // While the native share sheet is open, iOS doesn't block taps in the
     // exposed area above a page sheet. Absorb any leaked taps so the
@@ -65,7 +66,6 @@ class ReelItem extends HookConsumerWidget {
     final sentSkip = useRef(false);
     final startedAt = useRef<DateTime?>(null);
     final lastPositionMs = useRef(0);
-    final loadingRecoveryArmed = useRef(false);
 
     // Track when video is actually playing to hide thumbnail
     _useThumbnailVisibility(
@@ -80,7 +80,7 @@ class ReelItem extends HookConsumerWidget {
     useEffect(
       () {
         if (isActive && isVisible) {
-          unawaited(videoManager.playVideo(entry.link));
+          unawaited(videoManager.ensurePlayback(playbackUrl));
         } else {
           unawaited(
             _recordEarlySkipIfNeeded(
@@ -98,7 +98,7 @@ class ReelItem extends HookConsumerWidget {
         }
         return null;
       },
-      [entry.link, isActive, isVisible],
+      [playbackUrl, isActive, isVisible],
     );
 
     useEffect(() {
@@ -220,24 +220,6 @@ class ReelItem extends HookConsumerWidget {
         overlayState == YTPlaybackOverlayState.manualPause ||
             overlayState == YTPlaybackOverlayState.autoplayStalled;
 
-    useEffect(() {
-      if (!isActive || !isVisible || !isLoading) {
-        loadingRecoveryArmed.value = false;
-        return null;
-      }
-      if (loadingRecoveryArmed.value) {
-        return null;
-      }
-      loadingRecoveryArmed.value = true;
-      final timer = Timer(const Duration(milliseconds: 900), () {
-        final state = videoManager.getState(entry.link);
-        if (state == YTPlayerState.loading || state == YTPlayerState.idle) {
-          unawaited(videoManager.retryVideo(entry.link));
-        }
-      });
-      return timer.cancel;
-    }, [entry.link, isActive, isVisible, isLoading]);
-
     // Mount the player whenever a controller exists so iframe initialization
     // can progress while state is still loading. Thumbnail/spinner overlays
     // remain on top until real playback starts.
@@ -289,6 +271,7 @@ class ReelItem extends HookConsumerWidget {
                         onTap: () => _handleTap(
                           controller,
                           videoManager,
+                          playbackUrl,
                           playerState,
                           overlayState,
                         ),
@@ -394,6 +377,7 @@ class ReelItem extends HookConsumerWidget {
   void _handleTap(
     YoutubePlayerController? controller,
     YoutubePlayerManagerBase videoManager,
+    String playbackUrl,
     YTPlayerState playerState,
     YTPlaybackOverlayState overlayState,
   ) {
@@ -404,52 +388,37 @@ class ReelItem extends HookConsumerWidget {
     // calling releaseVideo which yanks _pendingInit out from under the previous
     // initController — creating concurrent controller creations and a permanent
     // stuck state.
-    final freshController = videoManager.getController(entry.link);
-    final freshPlayerState = videoManager.getState(entry.link);
-    final freshOverlayState = videoManager.getPlaybackOverlayState(entry.link);
+    final freshController = videoManager.getController(playbackUrl);
+    final freshPlayerState = videoManager.getState(playbackUrl);
+    final freshOverlayState = videoManager.getPlaybackOverlayState(playbackUrl);
 
     final action = resolveReelPlaybackTapAction(
       hasController: freshController != null,
-      isAutoplayStalled:
-          freshOverlayState == YTPlaybackOverlayState.autoplayStalled,
+      showsPlayAffordance:
+          freshOverlayState == YTPlaybackOverlayState.manualPause ||
+              freshOverlayState == YTPlaybackOverlayState.autoplayStalled,
       playerState: freshPlayerState,
       controllerPlayerState: freshController?.value.playerState,
     );
 
     switch (action) {
       case ReelPlaybackTapAction.retry:
-        debugPrint('Retrying reel playback: ${entry.link}');
-        videoManager.retryVideo(entry.link);
+        debugPrint('Retrying reel playback: $playbackUrl');
+        videoManager.retryVideo(playbackUrl);
       case ReelPlaybackTapAction.pause:
-        videoManager.pauseVideo(entry.link);
+        videoManager.pauseVideo(playbackUrl);
       case ReelPlaybackTapAction.play:
-        final shouldRetryIfStuck =
-            freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
-                freshOverlayState == YTPlaybackOverlayState.autoplayPending;
-        _playFromUserTap(
-          videoManager,
-          retryIfStuck: shouldRetryIfStuck,
-        );
+        unawaited(videoManager.ensurePlayback(playbackUrl));
     }
   }
 
-  void _playFromUserTap(
-    YoutubePlayerManagerBase videoManager, {
-    required bool retryIfStuck,
-  }) {
-    unawaited(videoManager.playVideo(entry.link));
-    if (!retryIfStuck) return;
-
-    Timer(const Duration(milliseconds: 1200), () {
-      if (!isActive || !isVisible) return;
-      final state = videoManager.getState(entry.link);
-      final controllerState =
-          videoManager.getController(entry.link)?.value.playerState;
-      final isPlaying = state == YTPlayerState.playing ||
-          controllerState == PlayerState.playing;
-      if (isPlaying || state == YTPlayerState.error) return;
-      unawaited(videoManager.retryVideo(entry.link));
-    });
+  String _resolvePlaybackUrl(YoutubePlayerManagerBase videoManager) {
+    final preferred = entry.videoUrl.trim();
+    if (preferred.isNotEmpty &&
+        videoManager.extractVideoId(preferred) != null) {
+      return preferred;
+    }
+    return entry.link.trim();
   }
 
   Future<void> _shareReel(

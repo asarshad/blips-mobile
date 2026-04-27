@@ -132,6 +132,12 @@ final class FakeYoutubePlayerManager extends YoutubePlayerManagerBase {
   }) {
     if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
     final currentUrl = videoUrls[currentIndex];
+    for (final entry in _states.entries.toList()) {
+      if (entry.key != currentUrl && entry.value == YTPlayerState.playing) {
+        _states[entry.key] = YTPlayerState.paused;
+        _overlayStates[entry.key] = YTPlaybackOverlayState.manualPause;
+      }
+    }
     for (final url in videoUrls) {
       _states[url] =
           url == currentUrl ? YTPlayerState.playing : YTPlayerState.paused;

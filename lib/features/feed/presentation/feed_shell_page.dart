@@ -21,7 +21,6 @@ import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
-import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:blips_mobile/features/notifications/data/push_notifications_controller.dart';
@@ -1007,7 +1006,7 @@ class FeedShellPage extends HookConsumerWidget {
       preloadAhead: MemoryConfig.videoPreloadCount,
     );
     if (videoManager.getState(firstUrl) != YTPlayerState.loading) {
-      await nudgePrimaryPlayback(videoManager, firstUrl);
+      await videoManager.ensurePlayback(firstUrl);
     }
   }
 
@@ -1016,7 +1015,13 @@ class FeedShellPage extends HookConsumerWidget {
     if (entries == null || entries.isEmpty) return;
 
     final videoManager = ref.read(youtubePlayerManagerProvider);
-    final urls = entries.map((entry) => entry.link).toList(growable: false);
+    // Use the same URL resolution as ReelItem so the manager's keys match
+    // what the widget reads back via getController/getState.
+    final urls = entries
+        .map((entry) => _resolveReelPlaybackUrl(entry, videoManager))
+        .where((url) => url.isNotEmpty)
+        .toList(growable: false);
+    if (urls.isEmpty) return;
     final firstUrl = urls.first;
     videoManager.onPageChanged(
       currentIndex: 0,
@@ -1024,8 +1029,20 @@ class FeedShellPage extends HookConsumerWidget {
       preloadAhead: MemoryConfig.reelPreloadCount,
     );
     if (videoManager.getState(firstUrl) != YTPlayerState.loading) {
-      await nudgePrimaryPlayback(videoManager, firstUrl);
+      await videoManager.ensurePlayback(firstUrl);
     }
+  }
+
+  String _resolveReelPlaybackUrl(
+    ReelFeedEntry entry,
+    YoutubePlayerManagerBase videoManager,
+  ) {
+    final preferred = entry.videoUrl.trim();
+    if (preferred.isNotEmpty &&
+        videoManager.extractVideoId(preferred) != null) {
+      return preferred;
+    }
+    return entry.link.trim();
   }
 
   String _resolveVideoPlaybackUrl(

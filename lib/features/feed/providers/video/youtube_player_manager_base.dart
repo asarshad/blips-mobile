@@ -80,6 +80,12 @@ abstract class YoutubePlayerManagerBase extends ChangeNotifier {
 
   Future<void> playVideo(String url);
 
+  /// Ensures the given URL is the active playback target.
+  ///
+  /// Implementations may issue one or more play/retry nudges as needed, but
+  /// callers should use this as the single recovery-oriented play entrypoint.
+  Future<void> ensurePlayback(String url) => playVideo(url);
+
   Future<void> retryVideo(String url);
 
   void pauseVideo(String url);

@@ -8,7 +8,6 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
-import 'package:blips_mobile/features/feed/providers/video/playback_rearm.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:flutter/material.dart';
@@ -85,7 +84,7 @@ class VideoCard extends HookConsumerWidget {
         onResume: () {
           if (!resumeRecoveryArmed.value) return;
           resumeRecoveryArmed.value = false;
-          unawaited(nudgePrimaryPlayback(videoManager, playbackUrl));
+          unawaited(videoManager.ensurePlayback(playbackUrl));
         },
       );
       return listener.dispose;
@@ -110,28 +109,12 @@ class VideoCard extends HookConsumerWidget {
       } else {
         // Self-arm playback when this card becomes visible. FeedTab is the
         // primary owner via onPageChanged, but that path can be missed when
-        // navigating from a push notification or restoring scroll position
-        // after the tab's isActive effect already fired. Only issue the play
-        // request when the video is idle or paused — not when it is already
-        // loading or playing, to avoid duplicate play commands.
+        // navigating from a push notification or restoring scroll position.
         final state = videoManager.getState(playbackUrl);
         if (state == YTPlayerState.idle ||
             state == YTPlayerState.paused ||
             state == YTPlayerState.ready) {
-          unawaited(videoManager.playVideo(playbackUrl));
-          // On iOS, controller.play() may be silently ignored if the WebView
-          // hasn't fully re-entered the viewport yet (common after a tab
-          // switch). If the video is still paused after 1.5 s, restart the
-          // controller so the YouTube iframe gets a fresh play opportunity.
-          // The Timer is cancelled automatically (via effect cleanup) if the
-          // user navigates away before the 1.5 s window elapses.
-          final retryTimer = Timer(const Duration(milliseconds: 1500), () {
-            final s = videoManager.getState(playbackUrl);
-            if (s == YTPlayerState.paused || s == YTPlayerState.idle) {
-              unawaited(videoManager.retryVideo(playbackUrl));
-            }
-          });
-          return retryTimer.cancel;
+          unawaited(videoManager.ensurePlayback(playbackUrl));
         }
       }
       return null;
@@ -297,7 +280,6 @@ class VideoCard extends HookConsumerWidget {
                     showBubbles: showBubbles,
                     videoManager: videoManager,
                     playbackUrl: playbackUrl,
-                    isVisible: isVisible,
                   ),
                   onLongPress: () => _showActionsSheet(context, feedRepository),
                   onContentTap: () => _openInBrowser(
@@ -337,7 +319,6 @@ class VideoCard extends HookConsumerWidget {
     required ValueNotifier<bool> showBubbles,
     required YoutubePlayerManagerBase videoManager,
     required String playbackUrl,
-    required bool isVisible,
   }) async {
     if (showBubbles.value) {
       showBubbles.value = false;
@@ -355,42 +336,20 @@ class VideoCard extends HookConsumerWidget {
       return;
     }
 
+    if (freshOverlayState == YTPlaybackOverlayState.manualPause ||
+        freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
+        freshOverlayState == YTPlaybackOverlayState.autoplayPending) {
+      unawaited(videoManager.ensurePlayback(playbackUrl));
+      return;
+    }
+
     if (freshPlayerState == YTPlayerState.playing ||
         controllerState == PlayerState.playing) {
       videoManager.pauseVideo(playbackUrl);
       return;
     }
 
-    final shouldRetryIfStuck =
-        freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
-            freshOverlayState == YTPlaybackOverlayState.autoplayPending;
-    _playFromUserTap(
-      videoManager: videoManager,
-      playbackUrl: playbackUrl,
-      isVisible: isVisible,
-      retryIfStuck: shouldRetryIfStuck,
-    );
-  }
-
-  void _playFromUserTap({
-    required YoutubePlayerManagerBase videoManager,
-    required String playbackUrl,
-    required bool isVisible,
-    required bool retryIfStuck,
-  }) {
-    unawaited(videoManager.playVideo(playbackUrl));
-    if (!retryIfStuck) return;
-
-    Timer(const Duration(milliseconds: 1200), () {
-      if (!isVisible) return;
-      final state = videoManager.getState(playbackUrl);
-      final controllerState =
-          videoManager.getController(playbackUrl)?.value.playerState;
-      final isPlaying = state == YTPlayerState.playing ||
-          controllerState == PlayerState.playing;
-      if (isPlaying || state == YTPlayerState.error) return;
-      unawaited(videoManager.retryVideo(playbackUrl));
-    });
+    unawaited(videoManager.ensurePlayback(playbackUrl));
   }
 
   String _resolvePlaybackUrl(YoutubePlayerManagerBase videoManager) {

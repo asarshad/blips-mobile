@@ -297,12 +297,12 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
-    testWidgets('tap on stalled autoplay plays before retry fallback',
+    testWidgets('tap on stalled autoplay uses manager recovery entrypoint',
         (tester) async {
       final calls = <String>[];
       final trackingManager = _TrackingYoutubePlayerManager(
         delegate: mockManager,
-        onPlayVideo: (url) => calls.add('play:$url'),
+        onEnsurePlayback: (url) => calls.add('ensure:$url'),
         onRetryVideo: (url) => calls.add('retry:$url'),
       );
       mockManager.setMockState(testReel.link, YTPlayerState.ready);
@@ -347,27 +347,27 @@ void main() {
 
       expect(
         calls,
-        contains('play:${testReel.link}'),
-        reason: 'A visible play button must first use the user tap to play.',
+        contains('ensure:${testReel.link}'),
+        reason: 'A visible play button must use the centralized recovery path.',
       );
 
       await tester.pump(const Duration(milliseconds: 1200));
 
       expect(
         calls,
-        contains('retry:${testReel.link}'),
-        reason: 'If the manual play nudge still has not produced playback, '
-            'fall back to a rebuild.',
+        isNot(contains('retry:${testReel.link}')),
+        reason: 'Widget-level delayed retry timers should not compete with '
+            'YoutubePlayerManager recovery.',
       );
     });
 
-    testWidgets('tap while paused calls playVideo (not pauseVideo)',
+    testWidgets('tap while paused calls ensurePlayback (not pauseVideo)',
         (tester) async {
       // Track method calls.
       final calls = <String>[];
       final trackingManager = _TrackingYoutubePlayerManager(
         delegate: mockManager,
-        onPlayVideo: (url) => calls.add('play:$url'),
+        onEnsurePlayback: (url) => calls.add('ensure:$url'),
         onPauseVideo: (url) => calls.add('pause:$url'),
       );
       mockManager.setMockState(testReel.link, YTPlayerState.paused);
@@ -409,8 +409,9 @@ void main() {
       // When paused, tap must trigger play — not pause.
       expect(
         calls,
-        contains(startsWith('play:')),
-        reason: 'tapping a paused reel must call playVideo, not pauseVideo',
+        contains(startsWith('ensure:')),
+        reason:
+            'tapping a paused reel must call ensurePlayback, not pauseVideo',
       );
       expect(
         calls,
@@ -468,12 +469,12 @@ void main() {
     });
 
     testWidgets(
-        'active visible reel arms autoplay by calling playVideo on mount',
+        'active visible reel arms autoplay through manager recovery on mount',
         (tester) async {
       final calls = <String>[];
       final trackingManager = _TrackingYoutubePlayerManager(
         delegate: mockManager,
-        onPlayVideo: (url) => calls.add('play:$url'),
+        onEnsurePlayback: (url) => calls.add('ensure:$url'),
       );
 
       await tester.pumpWidget(
@@ -507,10 +508,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
-        calls.where((c) => c == 'play:${testReel.link}'),
+        calls.where((c) => c == 'ensure:${testReel.link}'),
         isNotEmpty,
         reason:
-            'When reel is active + visible, ReelItem should explicitly arm autoplay',
+            'When reel is active + visible, ReelItem should explicitly arm autoplay through the manager',
       );
     });
   });
@@ -521,13 +522,13 @@ void main() {
 class _TrackingYoutubePlayerManager extends YoutubePlayerManagerBase {
   _TrackingYoutubePlayerManager({
     required this.delegate,
-    this.onPlayVideo,
+    this.onEnsurePlayback,
     this.onPauseVideo,
     this.onRetryVideo,
   });
 
   final MockYoutubePlayerManager delegate;
-  final void Function(String url)? onPlayVideo;
+  final void Function(String url)? onEnsurePlayback;
   final void Function(String url)? onPauseVideo;
   final void Function(String url)? onRetryVideo;
 
@@ -560,8 +561,14 @@ class _TrackingYoutubePlayerManager extends YoutubePlayerManagerBase {
 
   @override
   Future<void> playVideo(String url) async {
-    onPlayVideo?.call(url);
     await delegate.playVideo(url);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> ensurePlayback(String url) async {
+    onEnsurePlayback?.call(url);
+    await delegate.ensurePlayback(url);
     notifyListeners();
   }
 

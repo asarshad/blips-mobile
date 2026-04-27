@@ -54,6 +54,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   final Map<String, Timer> _autoplayWatchdogs = {};
   Timer? _recoveryTimer;
   final AppDiagnosticsController? _diagnostics;
+  int _ensurePlaybackGeneration = 0;
 
   /// The single URL that is currently intended to be playing.
   ///
@@ -108,26 +109,32 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   @override
   YTPlaybackOverlayState getPlaybackOverlayState(String url) {
     final state = getState(url);
-    final controllerState = _controllers[url]?.value.playerState;
+    final controller = _controllers[url];
+    final controllerState = controller?.value.playerState;
 
     if (state == YTPlayerState.error) {
       return YTPlaybackOverlayState.error;
     }
-    // The manager state is authoritative for play/pause intent. If the iframe
-    // has reported playing, stale pause/stall flags must not keep chrome over
-    // a video that is already moving.
-    if (state == YTPlayerState.playing) {
+    // If the iframe has reported playing, stale pause/stall flags must not keep
+    // chrome over a video that is already moving. The controller state check
+    // deliberately comes before _userPausedUrls; otherwise a pause command that
+    // the WebView ignored can leave a permanent play button over live audio.
+    if (state == YTPlayerState.playing ||
+        controllerState == PlayerState.playing) {
       return YTPlaybackOverlayState.none;
     }
-    // User-initiated pause takes precedence over the iframe's controller state.
-    // The controller reports PlayerState changes asynchronously from the WebView;
-    // waiting for that confirmation causes a visible window where the play button
-    // doesn't appear after a tap even though the video has already been paused.
+    // The iframe sometimes renders frames before its `playing` event arrives,
+    // and during background ads it can report `buffering` while audio plays.
+    // If position has advanced past the first quarter-second and the user
+    // hasn't paused, the video is actively playing — overlay must hide.
+    if (!_userPausedUrls.contains(url) &&
+        controllerState != PlayerState.paused &&
+        controllerState != PlayerState.ended &&
+        (controller?.value.position.inMilliseconds ?? 0) > 250) {
+      return YTPlaybackOverlayState.none;
+    }
     if (_userPausedUrls.contains(url)) {
       return YTPlaybackOverlayState.manualPause;
-    }
-    if (controllerState == PlayerState.playing) {
-      return YTPlaybackOverlayState.none;
     }
     if (_autoplayStalledUrls.contains(url)) {
       return YTPlaybackOverlayState.autoplayStalled;
@@ -190,10 +197,22 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
         return;
       }
       final state = _states[url] ?? YTPlayerState.idle;
-      final controllerState = _controllers[url]?.value.playerState;
+      final controller = _controllers[url];
+      final controllerState = controller?.value.playerState;
+      final positionMs = controller?.value.position.inMilliseconds ?? 0;
+      // Treat any of: a `playing` event, or position past the first
+      // quarter-second, as proof of real playback. iOS sometimes renders
+      // frames before the `playing` event arrives — without this check
+      // the watchdog flags healthy videos as stalled.
       final alreadyPlaying = state == YTPlayerState.playing ||
-          controllerState == PlayerState.playing;
+          controllerState == PlayerState.playing ||
+          positionMs > 250;
       if (alreadyPlaying || state == YTPlayerState.error) {
+        if (state != YTPlayerState.playing && positionMs > 250) {
+          _states[url] = YTPlayerState.playing;
+          _clearAutoplayStalled(url);
+          _notifySafe();
+        }
         return;
       }
       _autoplayStalledUrls.add(url);
@@ -553,6 +572,83 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     }
   }
 
+  @override
+  Future<void> ensurePlayback(String url) async {
+    if (_isDisposed || url.isEmpty) return;
+
+    final generation = _ensurePlaybackGeneration + 1;
+    _ensurePlaybackGeneration = generation;
+    _currentActiveUrl = url;
+    _cancelRecovery();
+    _armAutoplayAttempt(url);
+
+    bool isStale() {
+      return _isDisposed ||
+          _ensurePlaybackGeneration != generation ||
+          _currentActiveUrl != url;
+    }
+
+    _recordDiagnostics(
+      action: 'ensurePlayback',
+      stage: 'start',
+      url: url,
+      data: <String, Object?>{
+        'controllerExists': _controllers.containsKey(url),
+        'pendingInit': _pendingInit.contains(url),
+        'state': _states[url]?.name,
+      },
+    );
+
+    await initController(url);
+    if (isStale()) return;
+
+    await playVideo(url);
+    if (isStale()) return;
+
+    const delays = <Duration>[
+      Duration(milliseconds: 220),
+      Duration(milliseconds: 520),
+      Duration(milliseconds: 1100),
+    ];
+
+    for (var index = 0; index < delays.length; index += 1) {
+      await Future<void>.delayed(delays[index]);
+      if (isStale()) return;
+
+      final state = _states[url] ?? YTPlayerState.idle;
+      final controller = _controllers[url];
+      final controllerState = controller?.value.playerState;
+      final positionMs = controller?.value.position.inMilliseconds ?? 0;
+      final isPlaying = state == YTPlayerState.playing ||
+          controllerState == PlayerState.playing ||
+          positionMs > 250;
+      if (isPlaying) {
+        if (state != YTPlayerState.playing) {
+          _states[url] = YTPlayerState.playing;
+        }
+        _clearUserPause(url);
+        _clearAutoplayStalled(url);
+        _cancelAutoplayWatchdog(url);
+        _cancelRecovery();
+        _notifySafe();
+        return;
+      }
+
+      final shouldRetry = state == YTPlayerState.error ||
+          (index == delays.length - 1 &&
+              (state == YTPlayerState.idle ||
+                  state == YTPlayerState.loading ||
+                  state == YTPlayerState.ready ||
+                  state == YTPlayerState.paused));
+      if (shouldRetry) {
+        await retryVideo(url);
+      } else {
+        await playVideo(url);
+      }
+      if (isStale()) return;
+    }
+  }
+
   /// Pauses a video.
   @override
   void pauseVideo(String url) {
@@ -671,12 +767,40 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _armAutoplayAttempt(currentUrl);
     _cancelRecovery();
 
-    // Pause all other controllers synchronously to prevent audio bleed.
+    // Compute the keep-window so we can release controllers outside it
+    // synchronously. Pause-only on iOS occasionally fails to actually stop
+    // audio (the WebView ignores the JS bridge's pause command), and any
+    // delay before disposal lets the old controller bleed audio over the
+    // new reel/video. Disposing now is the only reliable way to silence it.
+    var preloadAheadCount = preloadAhead ?? MemoryConfig.reelPreloadCount;
+    final maxAhead = maxControllers > 0 ? maxControllers - 1 : 0;
+    if (preloadAheadCount < 0) preloadAheadCount = 0;
+    if (preloadAheadCount > maxAhead) preloadAheadCount = maxAhead;
+    var keepBehind = maxControllers - preloadAheadCount - 1;
+    if (keepBehind < 0) keepBehind = 0;
+
+    final keepUrls = <String>{currentUrl};
+    for (var i = 1; i <= preloadAheadCount; i++) {
+      final next = currentIndex + i;
+      if (next >= 0 && next < videoUrls.length) keepUrls.add(videoUrls[next]);
+    }
+    for (var i = 1; i <= keepBehind; i++) {
+      final prev = currentIndex - i;
+      if (prev >= 0 && prev < videoUrls.length) keepUrls.add(videoUrls[prev]);
+    }
+
+    final urlsToRelease = <String>[];
     for (final entry in _controllers.entries) {
-      if (entry.key != currentUrl) {
+      if (entry.key == currentUrl) continue;
+      if (keepUrls.contains(entry.key)) {
         entry.value.pause();
         _states[entry.key] = YTPlayerState.paused;
+      } else {
+        urlsToRelease.add(entry.key);
       }
+    }
+    for (final url in urlsToRelease) {
+      releaseVideo(url);
     }
 
     // Always arm playback through playVideo(). This avoids a stale path where a
