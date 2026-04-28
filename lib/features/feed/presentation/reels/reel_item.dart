@@ -214,7 +214,6 @@ class ReelItem extends HookConsumerWidget {
       };
     }, const []);
 
-    final isLoading = overlayState == YTPlaybackOverlayState.autoplayPending;
     final isError = overlayState == YTPlaybackOverlayState.error;
     final showPlayIndicator =
         overlayState == YTPlaybackOverlayState.manualPause ||
@@ -282,14 +281,6 @@ class ReelItem extends HookConsumerWidget {
                     // autoplay recovery has genuinely stalled.
                     if (isActive && showPlayIndicator)
                       const IgnorePointer(child: _PlayIndicator()),
-
-                    // Loading Indicator
-                    if (isActive && isLoading)
-                      const IgnorePointer(
-                        child: Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                      ),
 
                     // Error indicator
                     if (isError)

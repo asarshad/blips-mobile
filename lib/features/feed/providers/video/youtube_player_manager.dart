@@ -16,7 +16,8 @@ YoutubePlayerController _defaultFactory(String videoId) {
   return YoutubePlayerController(
     initialVideoId: videoId,
     flags: const YoutubePlayerFlags(
-      autoPlay: false,
+      autoPlay: true,
+      mute: true,
       hideControls: true,
       hideThumbnail: true,
       showLiveFullscreenButton: false,
@@ -35,6 +36,8 @@ class _Slot {
   final String url;
   DateTime lastTouched = DateTime.now();
   VoidCallback? listener;
+  // True while we muted for autoplay; cleared once playing so we can unmute.
+  bool mutedForAutoplay = false;
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────
@@ -126,6 +129,14 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       if (isPlaying) {
         _stalledUrls.remove(url);
         _userPausedUrls.remove(url);
+        // Unmute now that playback has started — we muted to satisfy iOS's
+        // requirement that the first programmatic play be muted.
+        if (slot.mutedForAutoplay) {
+          slot.mutedForAutoplay = false;
+          try {
+            controller.unMute();
+          } catch (_) {}
+        }
       }
 
       // Re-issue play() when the iframe becomes ready for the active URL.
@@ -315,6 +326,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (_isDisposed || _currentActiveUrl != url) return;
 
     if (slot != null) {
+      slot.mutedForAutoplay = true;
       try {
         slot.controller.play();
       } catch (e) {
@@ -408,9 +420,19 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       if (!keepUrls.contains(url)) {
         _releaseSlot(url);
       } else if (url != currentUrl) {
-        try {
-          _slotByUrl[url]?.controller.pause();
-        } catch (_) {}
+        final s = _slotByUrl[url];
+        if (s != null) {
+          final ps = s.controller.value.playerState;
+          // Only pause controllers that are actively playing/buffering.
+          // Preloaded controllers in unStarted/cued state must stay there —
+          // iOS blocks muted programmatic play from paused state when no
+          // media session has ever been established.
+          if (ps == PlayerState.playing || ps == PlayerState.buffering) {
+            try {
+              s.controller.pause();
+            } catch (_) {}
+          }
+        }
       }
     }
 

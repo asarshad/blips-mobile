@@ -596,7 +596,6 @@ class _VideoMedia extends StatelessWidget {
     final showPlayer = _isControllerValid;
     final showPlayButton = overlayState == YTPlaybackOverlayState.manualPause ||
         overlayState == YTPlaybackOverlayState.autoplayStalled;
-    final showLoading = overlayState == YTPlaybackOverlayState.autoplayPending;
     final showError = overlayState == YTPlaybackOverlayState.error;
 
     return ClipRect(
@@ -675,9 +674,6 @@ class _VideoMedia extends StatelessWidget {
 
           // Play button only appears after a user pause or a genuine autoplay stall.
           if (showPlayButton) _PlayButton(),
-
-          if (showLoading)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
         ],
       ),
     );
