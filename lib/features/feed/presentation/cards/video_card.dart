@@ -500,6 +500,11 @@ class VideoCard extends HookConsumerWidget {
           eventType: FeedInteractionEvent.lessFromCreator,
           extraData: {'surface': 'videos', 'source': entry.source},
         ));
+        unawaited(repository.reportContent(
+          contentItemId: entry.id,
+          surface: 'videos',
+          reason: 'blocked_source',
+        ));
         if (context.mounted) {
           _showFeedback(
               context, '${entry.source} blocked and removed from your feed.');

@@ -508,6 +508,11 @@ class ReelItem extends HookConsumerWidget {
       eventType: FeedInteractionEvent.lessFromCreator,
       extraData: {'surface': 'reels', 'source': entry.source},
     ));
+    unawaited(repository.reportContent(
+      contentItemId: entry.id,
+      surface: 'reels',
+      reason: 'blocked_source',
+    ));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

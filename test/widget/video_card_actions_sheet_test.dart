@@ -27,6 +27,7 @@ void main() {
     api = FakeBackendApiClient(
       responses: const {
         '/session/interactions': <String, dynamic>{},
+        '/session/reports': <String, dynamic>{},
       },
     );
     video = VideoFeedEntry(
@@ -67,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final body = api.requests
-        .lastWhere((request) => request.method == 'POST')
+        .lastWhere((r) => r.method == 'POST' && r.path == '/session/interactions')
         .body as Map<String, dynamic>?;
     expect(body, isNotNull);
     expect(body!['event_type'], 'LESS_FROM_CREATOR');

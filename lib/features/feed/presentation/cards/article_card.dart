@@ -265,6 +265,11 @@ class ArticleCard extends HookConsumerWidget {
           eventType: FeedInteractionEvent.lessFromCreator,
           extraData: {'surface': 'articles', 'source': entry.source},
         ));
+        unawaited(repository.reportContent(
+          contentItemId: entry.id,
+          surface: 'articles',
+          reason: 'blocked_source',
+        ));
         if (context.mounted) {
           _showFeedback(
               context, '${entry.source} blocked and removed from your feed.');
