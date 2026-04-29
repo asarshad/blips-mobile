@@ -665,7 +665,10 @@ class FeedRepository {
   /// [reason] is a short machine key, e.g. 'hateful', 'spam', 'explicit',
   ///   'violence', 'misinformation', 'other'.
   /// [messageId] optionally identifies a specific AI chat response.
-  Future<void> reportContent({
+  ///
+  /// Returns `true` if the report was accepted by the server, `false` on any
+  /// network or server error so callers can surface a meaningful failure message.
+  Future<bool> reportContent({
     required int contentItemId,
     required String surface,
     required String reason,
@@ -681,6 +684,7 @@ class FeedRepository {
           if (messageId != null) 'message_id': messageId,
         },
       );
+      return true;
     } on DioException catch (e, stack) {
       logger.warning(
         'Failed to submit content report',
@@ -688,6 +692,7 @@ class FeedRepository {
         error: e,
         stackTrace: stack,
       );
+      return false;
     } catch (e, stack) {
       logger.warning(
         'Failed to submit content report',
@@ -695,6 +700,7 @@ class FeedRepository {
         error: e,
         stackTrace: stack,
       );
+      return false;
     }
   }
 

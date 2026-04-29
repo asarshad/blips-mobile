@@ -86,10 +86,12 @@ class _RouterNotifier extends ChangeNotifier {
     // Either gate still loading — don't redirect, stay put.
     if (termsAsync.isLoading || onboardingAsync.isLoading) return null;
 
-    // Fail open on errors: skip the gate rather than show a blocking spinner.
+    // Terms gate: fail CLOSED on errors so users cannot bypass via a
+    // SharedPreferences init failure. Onboarding gate: fail open (preference,
+    // not a legal requirement) so a storage error doesn't hard-block the feed.
     final termsAccepted = termsAsync.maybeWhen(
       data: (v) => v,
-      orElse: () => true,
+      orElse: () => false,
     );
     final onboardingDone = onboardingAsync.maybeWhen(
       data: (v) => v,

@@ -9,6 +9,7 @@ import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_action_button.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_playback_tap_action.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/blocked_sources_provider.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -300,8 +301,8 @@ class ReelItem extends HookConsumerWidget {
                   onShare: () => _shareReel(repository, sessionStore),
                   onOpen: () => _openReel(repository, sessionStore),
                   onLessFromCreator: () =>
-                      _lessFromCreator(context, repository),
-                  onReport: () => _reportReel(context, repository),
+                      _lessFromCreator(context, ref, repository),
+                  onReport: () => _reportReel(context, ref, repository),
                 ),
 
                 // Info Layer
@@ -498,17 +499,19 @@ class ReelItem extends HookConsumerWidget {
 
   Future<void> _lessFromCreator(
     BuildContext context,
+    WidgetRef ref,
     FeedRepository repository,
   ) async {
-    await repository.recordInteraction(
+    await ref.read(blockedSourcesProvider.notifier).block(entry.source);
+    unawaited(repository.recordInteraction(
       contentItemId: entry.id,
       eventType: FeedInteractionEvent.lessFromCreator,
       extraData: {'surface': 'reels', 'source': entry.source},
-    );
+    ));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('We will show less from ${entry.source}.'),
+          content: Text('${entry.source} blocked and removed from your feed.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -517,19 +520,22 @@ class ReelItem extends HookConsumerWidget {
 
   Future<void> _reportReel(
     BuildContext context,
+    WidgetRef ref,
     FeedRepository repository,
   ) async {
     final reason = await ContentReportSheet.show(context);
     if (reason == null || !context.mounted) return;
-    await repository.reportContent(
+    final ok = await repository.reportContent(
       contentItemId: entry.id,
       surface: 'reels',
       reason: reason,
     );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Thanks — we\'ll review this content.'),
+        SnackBar(
+          content: Text(ok
+              ? 'Thanks — we\'ll review this content.'
+              : 'Couldn\'t submit your report. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -720,8 +726,8 @@ class _ActionButtons extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           ReelActionButton(
-            icon: Icons.visibility_off_outlined,
-            label: 'Less',
+            icon: Icons.block_outlined,
+            label: 'Block',
             onTap: () => unawaited(onLessFromCreator()),
           ),
           const SizedBox(height: 12),

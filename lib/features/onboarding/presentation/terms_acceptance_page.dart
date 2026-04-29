@@ -21,8 +21,8 @@ class TermsAcceptancePage extends ConsumerStatefulWidget {
   static const path = '/terms';
   static const name = 'terms';
 
-  static const termsUrl = 'https://blips.tech/terms';
-  static const privacyUrl = 'https://blips.tech/privacy';
+  static const termsUrl = 'https://blips.tech/terms.html';
+  static const privacyUrl = 'https://blips.tech/privacy.html';
 
   @override
   ConsumerState<TermsAcceptancePage> createState() =>

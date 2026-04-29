@@ -10,6 +10,7 @@ import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/reels/reel_item.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/blocked_sources_provider.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
@@ -43,7 +44,15 @@ class OptimizedReelsPage extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reelsFeed = ref.watch(reelsFeedWithAdsProvider);
+    final rawReelsFeed = ref.watch(reelsFeedWithAdsProvider);
+    final blocked = ref.watch(blockedSourcesProvider);
+    final reelsFeed = blocked.isEmpty
+        ? rawReelsFeed
+        : rawReelsFeed.whenData(
+            (items) => items
+                .where((item) => !blocked.contains(item.organicEntry?.source))
+                .toList(growable: false),
+          );
     final fallbackController = usePageController();
     final effectiveController = controller ?? fallbackController;
     final currentIndex = useState(0);

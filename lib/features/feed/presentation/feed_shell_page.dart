@@ -20,6 +20,7 @@ import 'package:blips_mobile/features/feed/presentation/saved/saved_items_page.d
 import 'package:blips_mobile/features/feed/presentation/tabs/tabs.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
 import 'package:blips_mobile/features/feed/providers/article_feed_freshness.dart';
+import 'package:blips_mobile/features/feed/providers/blocked_sources_provider.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
@@ -1246,7 +1247,15 @@ class _ArticlesFeedTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feed = ref.watch(articleFeedWithAdsProvider);
+    final rawFeed = ref.watch(articleFeedWithAdsProvider);
+    final blocked = ref.watch(blockedSourcesProvider);
+    final feed = blocked.isEmpty
+        ? rawFeed
+        : rawFeed.whenData(
+            (items) => items
+                .where((item) => !blocked.contains(item.organicEntry?.source))
+                .toList(growable: false),
+          );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
 
     return FeedTab<FeedPageItem>(
@@ -1305,7 +1314,15 @@ class _VideosFeedTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final feed = ref.watch(videoFeedWithAdsProvider);
+    final rawFeed = ref.watch(videoFeedWithAdsProvider);
+    final blocked = ref.watch(blockedSourcesProvider);
+    final feed = blocked.isEmpty
+        ? rawFeed
+        : rawFeed.whenData(
+            (items) => items
+                .where((item) => !blocked.contains(item.organicEntry?.source))
+                .toList(growable: false),
+          );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
     return FeedTab<FeedPageItem>(

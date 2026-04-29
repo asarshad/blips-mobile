@@ -405,35 +405,69 @@ class ChatDetailPage extends HookConsumerWidget {
                       ),
                     ),
                   );
+                  Future<void> reportAiMessage() async {
+                    final feedRepo = ref.read(feedRepositoryProvider);
+                    final reason =
+                        await ContentReportSheet.show(context);
+                    if (reason == null || !context.mounted) return;
+                    final ok = await feedRepo.reportContent(
+                      contentItemId: article.id,
+                      surface: 'chat',
+                      reason: reason,
+                      messageId: msg.id,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(ok
+                              ? 'Thanks — we\'ll review this response.'
+                              : 'Couldn\'t submit your report. Please try again.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+
                   return Align(
                     alignment:
                         isUser ? Alignment.centerRight : Alignment.centerLeft,
                     child: isUser
                         ? bubble
-                        : GestureDetector(
-                            onLongPress: () async {
-                              final feedRepo =
-                                  ref.read(feedRepositoryProvider);
-                              final reason =
-                                  await ContentReportSheet.show(context);
-                              if (reason == null || !context.mounted) return;
-                              await feedRepo.reportContent(
-                                contentItemId: article.id,
-                                surface: 'chat',
-                                reason: reason,
-                                messageId: msg.id,
-                              );
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Thanks — we\'ll review this response.'),
-                                    behavior: SnackBarBehavior.floating,
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              bubble,
+                              GestureDetector(
+                                onTap: reportAiMessage,
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    left: AppSpacing.sm,
+                                    bottom: AppSpacing.sm,
                                   ),
-                                );
-                              }
-                            },
-                            child: bubble,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.flag_outlined,
+                                        size: 13,
+                                        color: colorScheme.onSurface
+                                            .withValues(alpha: 0.35),
+                                      ),
+                                      SizedBox(width: AppSpacing.xs),
+                                      Text(
+                                        'Report',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: colorScheme.onSurface
+                                              .withValues(alpha: 0.35),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                   );
                 },

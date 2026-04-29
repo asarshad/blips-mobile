@@ -52,7 +52,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Save video'), findsNothing);
-    expect(find.text('Less from Creator Name'), findsOneWidget);
+    expect(find.text('Block Creator Name'), findsOneWidget);
   });
 
   testWidgets('long press and choose less from creator records interaction',
@@ -63,7 +63,7 @@ void main() {
     await tester.longPress(find.byType(VideoCard));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Less from Creator Name'));
+    await tester.tap(find.text('Block Creator Name'));
     await tester.pumpAndSettle();
 
     final body = api.requests
@@ -71,6 +71,9 @@ void main() {
         .body as Map<String, dynamic>?;
     expect(body, isNotNull);
     expect(body!['event_type'], 'LESS_FROM_CREATOR');
-    expect(find.text('We will show less from Creator Name.'), findsOneWidget);
+    expect(
+      find.text('Creator Name blocked and removed from your feed.'),
+      findsOneWidget,
+    );
   });
 }

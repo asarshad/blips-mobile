@@ -1,5 +1,6 @@
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
+import 'package:blips_mobile/features/feed/providers/blocked_sources_provider.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
@@ -10,6 +11,14 @@ import 'fake_backend_api_client.dart';
 import 'fake_chat_repository.dart';
 import 'fake_feed_cache.dart';
 import 'fake_youtube_player_manager.dart';
+
+/// In-memory stand-in for [BlockedSourcesNotifier] that avoids SharedPreferences.
+class FakeBlockedSourcesNotifier extends BlockedSourcesNotifier {
+  FakeBlockedSourcesNotifier() : super.empty();
+
+  @override
+  Future<void> block(String source) async => state = {...state, source};
+}
 
 Widget buildFeedInteractionHarness({
   required Widget child,
@@ -28,6 +37,8 @@ Widget buildFeedInteractionHarness({
       chatRepositoryProvider
           .overrideWithValue(chatRepository ?? FakeChatRepository()),
       youtubePlayerManagerProvider.overrideWith((ref) => manager),
+      blockedSourcesProvider
+          .overrideWith((ref) => FakeBlockedSourcesNotifier()),
     ],
     child: MaterialApp(
       home: Scaffold(

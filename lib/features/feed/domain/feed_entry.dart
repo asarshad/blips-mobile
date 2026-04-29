@@ -37,6 +37,10 @@ sealed class FeedEntry {
 
   /// Pre-generated conversation starter questions.
   List<String> get conversationStarters;
+
+  /// Publisher or creator name (e.g. "BBC News", "Linus Tech Tips").
+  /// Used for block-source filtering across all surfaces.
+  String get source;
 }
 
 /// Article variant shown for written stories.
@@ -352,6 +356,11 @@ class AdFeedEntry extends FeedEntry {
 
   @override
   List<String> get conversationStarters => const <String>[];
+
+  /// Ads are never subject to source blocking — use sponsorName as a no-op
+  /// implementation of the contract.
+  @override
+  String get source => sponsorName;
 }
 
 /// Pattern-matching helper that replaces the Freezed `when` utility.

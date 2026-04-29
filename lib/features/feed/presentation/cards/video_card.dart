@@ -6,6 +6,7 @@ import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/feed/domain/external_video_url.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/widgets.dart';
+import 'package:blips_mobile/features/feed/providers/blocked_sources_provider.dart';
 import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/saved_items_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
@@ -281,7 +282,7 @@ class VideoCard extends HookConsumerWidget {
                     videoManager: videoManager,
                     playbackUrl: playbackUrl,
                   ),
-                  onLongPress: () => _showActionsSheet(context, feedRepository),
+                  onLongPress: () => _showActionsSheet(context, ref, feedRepository),
                   onContentTap: () => _openInBrowser(
                     repository: feedRepository,
                     sessionStore: sessionStore,
@@ -459,6 +460,7 @@ class VideoCard extends HookConsumerWidget {
 
   Future<void> _showActionsSheet(
     BuildContext context,
+    WidgetRef ref,
     FeedRepository repository,
   ) async {
     final action = await showModalBottomSheet<_VideoCardAction>(
@@ -469,10 +471,10 @@ class VideoCard extends HookConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.visibility_off_outlined),
-              title: Text('Less from ${entry.source}'),
-              subtitle:
-                  const Text('De-prioritize this creator in future ranking.'),
+              leading: const Icon(Icons.block_outlined),
+              title: Text('Block ${entry.source}'),
+              subtitle: const Text(
+                  'Remove all content from this source immediately.'),
               onTap: () =>
                   Navigator.of(ctx).pop(_VideoCardAction.lessFromCreator),
             ),
@@ -491,28 +493,32 @@ class VideoCard extends HookConsumerWidget {
 
     switch (action) {
       case _VideoCardAction.lessFromCreator:
-        await repository.recordInteraction(
+        await ref.read(blockedSourcesProvider.notifier).block(entry.source);
+        unawaited(repository.recordInteraction(
           contentItemId: entry.id,
           eventType: FeedInteractionEvent.lessFromCreator,
-          extraData: {
-            'surface': 'videos',
-            'source': entry.source,
-          },
-        );
+          extraData: {'surface': 'videos', 'source': entry.source},
+        ));
         if (context.mounted) {
-          _showFeedback(context, 'We will show less from ${entry.source}.');
+          _showFeedback(
+              context, '${entry.source} blocked and removed from your feed.');
         }
       case _VideoCardAction.report:
         if (!context.mounted) return;
         final reason = await ContentReportSheet.show(context);
         if (reason == null || !context.mounted) return;
-        await repository.reportContent(
+        final ok = await repository.reportContent(
           contentItemId: entry.id,
           surface: 'videos',
           reason: reason,
         );
         if (context.mounted) {
-          _showFeedback(context, 'Thanks — we\'ll review this content.');
+          _showFeedback(
+            context,
+            ok
+                ? 'Thanks — we\'ll review this content.'
+                : 'Couldn\'t submit your report. Please try again.',
+          );
         }
     }
   }
