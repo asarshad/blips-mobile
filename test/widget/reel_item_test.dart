@@ -251,8 +251,11 @@ void main() {
       expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     });
 
-    testWidgets('ready autoplay-pending reel shows spinner, not play',
+    testWidgets('ready autoplay-pending reel hides play indicator',
         (tester) async {
+      // While autoplay is pending we deliberately render no play indicator
+      // and no spinner — the thumbnail bridges the gap so users don't see a
+      // single-frame flash of either control.
       mockManager.setMockState(testReel.link, YTPlayerState.ready);
       mockManager.setMockOverlayState(
         testReel.link,
@@ -266,9 +269,8 @@ void main() {
         find.byIcon(Icons.play_arrow),
         findsNothing,
         reason:
-            'ready autoplay should stay in spinner-only mode until playback either starts or genuinely stalls',
+            'play indicator only appears after manual pause or autoplay stall',
       );
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('hides play indicator when state is playing', (tester) async {

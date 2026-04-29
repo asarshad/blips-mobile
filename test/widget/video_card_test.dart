@@ -258,21 +258,26 @@ void main() {
       );
     });
 
-    testWidgets('autoplay-pending ready state shows spinner, not play button',
-        (tester) async {
-      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
-      mockManager.setMockOverlayState(
-        videoEntry.videoUrl,
-        YTPlaybackOverlayState.autoplayPending,
-      );
+    testWidgets(
+      'autoplay-pending ready state hides play button (thumbnail bridges gap)',
+      (tester) async {
+        // During autoplayPending the thumbnail covers the player while
+        // playback ramps up; we deliberately render no play button and no
+        // spinner — surfacing either would flash for a frame and feel janky.
+        // The play button only appears after manualPause or autoplayStalled.
+        mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.ready);
+        mockManager.setMockOverlayState(
+          videoEntry.videoUrl,
+          YTPlaybackOverlayState.autoplayPending,
+        );
 
-      await tester
-          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
-      await tester.pump(const Duration(milliseconds: 100));
+        await tester
+            .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    });
+        expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      },
+    );
 
     testWidgets('manual pause shows play button', (tester) async {
       mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.paused);
@@ -350,7 +355,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       mockManager.calls.clear();
 
-      await tester.tap(find.byType(CircularProgressIndicator));
+      // No play button or spinner is visible during autoplayPending — the
+      // thumbnail covers the media area. Tap the media region directly so
+      // the underlying onMediaTap handler fires.
+      final card = tester.getTopLeft(find.byType(VideoCard));
+      await tester.tapAt(card.translate(200, 80));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(

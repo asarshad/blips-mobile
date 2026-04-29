@@ -12,7 +12,7 @@ Future<void> main() async {
       (options) {
         options
           ..dsn = _sentryDsn
-          ..tracesSampleRate = 0.2
+          ..tracesSampleRate = 0.02
           ..environment = kReleaseMode ? 'production' : 'staging';
       },
       appRunner: bootstrap,

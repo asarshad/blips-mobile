@@ -60,7 +60,7 @@ Complete all items before submitting to app stores.
 - [ ] App Tracking Transparency declaration matches shipped ad/SDK behavior
 
 ### Build
-- [x] Version bumped in `pubspec.yaml` (currently 1.0.3+8)
+- [x] Version bumped in `pubspec.yaml` (currently 1.0.3+13)
 - [ ] Run `flutter build ipa --release`
 - [ ] Upload via Xcode Organizer or `xcrun altool`
 - [ ] App Store build uploaded and processed
@@ -103,7 +103,7 @@ Complete all items before submitting to app stores.
 - [ ] Ads and SDK data collection disclosures match the shipped build
 
 ### Build
-- [ ] Version bumped in `pubspec.yaml` (currently 1.0.2+3)
+- [ ] Version bumped in `pubspec.yaml` (currently 1.0.3+13)
 - [ ] Run `flutter build appbundle --release`
 - [ ] Upload AAB to internal testing track
 - [ ] Internal testing track reviewed and published

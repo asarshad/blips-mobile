@@ -60,7 +60,13 @@ class NativeAdCard extends HookConsumerWidget {
       final ad = NativeAd(
         adUnitId: adUnitId,
         factoryId: AdMobConfig.nativeFactoryId,
-        request: const AdRequest(),
+        // Non-personalized ads only — the app declares NSPrivacyTracking=false
+        // and does not present an ATT prompt. `npa=1` opts the request into
+        // Google's non-personalized ad serving, matching that declaration.
+        request: const AdRequest(
+          nonPersonalizedAds: true,
+          extras: <String, String>{'npa': '1'},
+        ),
         customOptions: <String, Object>{
           'surface': slot.surface.name,
           'slot_index': slot.slotIndex,
