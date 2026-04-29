@@ -675,7 +675,7 @@ class FeedRepository {
     String? messageId,
   }) async {
     try {
-      await _api.post(
+      final response = await _api.post(
         _reportsPath,
         data: {
           'content_item_id': contentItemId,
@@ -684,7 +684,14 @@ class FeedRepository {
           if (messageId != null) 'message_id': messageId,
         },
       );
-      return true;
+      final body = response.data;
+      if (body is Map && body['success'] == true) return true;
+      logger.warning(
+        'Report endpoint returned success:false',
+        category: LogCategory.network,
+        error: body,
+      );
+      return false;
     } on DioException catch (e, stack) {
       logger.warning(
         'Failed to submit content report',
