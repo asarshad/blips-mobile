@@ -675,7 +675,7 @@ class FeedRepository {
     String? messageId,
   }) async {
     try {
-      final response = await _api.post(
+      final body = await _api.post(
         _reportsPath,
         data: {
           'content_item_id': contentItemId,
@@ -684,8 +684,7 @@ class FeedRepository {
           if (messageId != null) 'message_id': messageId,
         },
       );
-      final body = response.data;
-      if (body is Map && body['success'] == true) return true;
+      if (body['success'] == true) return true;
       logger.warning(
         'Report endpoint returned success:false',
         category: LogCategory.network,
