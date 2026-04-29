@@ -43,6 +43,7 @@ class FeedCardFrame extends StatelessWidget {
     this.onMediaTap,
     this.onContentTap,
     this.onLongPress,
+    this.onMoreOptions,
     this.onShare,
     this.onChat,
     this.onSaveToggle,
@@ -72,6 +73,9 @@ class FeedCardFrame extends StatelessWidget {
   final VoidCallback? onMediaTap;
   final VoidCallback? onContentTap;
   final VoidCallback? onLongPress;
+  /// When set, a small flag icon button is shown in the card header that
+  /// opens the report/block action sheet.
+  final VoidCallback? onMoreOptions;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
   final VoidCallback? onSaveToggle;
@@ -136,6 +140,7 @@ class FeedCardFrame extends StatelessWidget {
         freshnessInfo: freshnessInfo,
         readTime: readTime,
         showActions: showActions,
+        onMoreOptions: onMoreOptions,
         onShare: onShare,
         onChat: onChat,
         onSaveToggle: onSaveToggle,
@@ -270,6 +275,7 @@ class _ContentSection extends StatelessWidget {
     required this.showActions,
     required this.colorScheme,
     required this.textTheme,
+    this.onMoreOptions,
     this.onShare,
     this.onChat,
     this.onSaveToggle,
@@ -287,6 +293,7 @@ class _ContentSection extends StatelessWidget {
   final bool showActions;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
+  final VoidCallback? onMoreOptions;
   final VoidCallback? onShare;
   final VoidCallback? onChat;
   final VoidCallback? onSaveToggle;
@@ -307,6 +314,7 @@ class _ContentSection extends StatelessWidget {
           _Header(
             category: category,
             showActions: showActions,
+            onMoreOptions: onMoreOptions,
             onShare: onShare,
             onSaveToggle: onSaveToggle,
             isSaved: isSaved,
@@ -354,6 +362,7 @@ class _Header extends StatelessWidget {
     required this.showActions,
     required this.colorScheme,
     required this.textTheme,
+    this.onMoreOptions,
     this.onShare,
     this.onSaveToggle,
     required this.isSaved,
@@ -363,6 +372,7 @@ class _Header extends StatelessWidget {
   final bool showActions;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
+  final VoidCallback? onMoreOptions;
   final VoidCallback? onShare;
   final VoidCallback? onSaveToggle;
   final bool isSaved;
@@ -373,6 +383,18 @@ class _Header extends StatelessWidget {
       children: [
         _CategoryBadge(category: category, colorScheme: colorScheme),
         const Spacer(),
+        if (onMoreOptions != null)
+          IconButton(
+            icon: Icon(
+              Icons.flag_outlined,
+              size: AppSizes.iconSm,
+              color: colorScheme.onSurface.withValues(alpha: 0.35),
+            ),
+            onPressed: onMoreOptions,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Report or block',
+          ),
         if (showActions) ...[
           const SizedBox(width: AppSpacing.sm),
           _HeaderActions(

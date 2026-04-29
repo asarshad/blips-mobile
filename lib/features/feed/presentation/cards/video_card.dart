@@ -283,6 +283,7 @@ class VideoCard extends HookConsumerWidget {
                     playbackUrl: playbackUrl,
                   ),
                   onLongPress: () => _showActionsSheet(context, ref, feedRepository),
+                  onMoreOptions: () => _showActionsSheet(context, ref, feedRepository),
                   onContentTap: () => _openInBrowser(
                     repository: feedRepository,
                     sessionStore: sessionStore,

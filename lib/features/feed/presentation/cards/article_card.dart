@@ -78,8 +78,8 @@ class ArticleCard extends HookConsumerWidget {
             repository,
             sessionStore,
           ),
-          onLongPress: () =>
-              _showActionsSheet(context, ref, repository),
+          onLongPress: () => _showActionsSheet(context, ref, repository),
+          onMoreOptions: () => _showActionsSheet(context, ref, repository),
           onChat: () => showBubbles.value = !showBubbles.value,
           onShare: () => _shareArticle(context, repository, sessionStore),
           onSaveToggle: () => unawaited(
