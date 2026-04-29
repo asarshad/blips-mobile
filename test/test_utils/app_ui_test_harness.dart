@@ -8,6 +8,7 @@ import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager.dart';
 import 'package:blips_mobile/features/feed/providers/video/youtube_player_manager_base.dart';
 import 'package:blips_mobile/features/onboarding/providers/interests_provider.dart';
+import 'package:blips_mobile/features/onboarding/providers/terms_provider.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -19,6 +20,7 @@ import 'fake_youtube_player_manager.dart';
 Widget buildAppUiHarness({
   required FakeBackendApiClient api,
   bool onboardingDone = true,
+  bool termsAccepted = true,
   FakeFeedCache? cache,
   ChatRepository? chatRepository,
   YoutubePlayerManagerBase? youtubeManager,
@@ -27,6 +29,7 @@ Widget buildAppUiHarness({
   return ProviderScope(
     overrides: [
       onboardingDoneProvider.overrideWith((ref) async => onboardingDone),
+      termsAcceptedProvider.overrideWith((ref) async => termsAccepted),
       adsConfigProvider.overrideWith((ref) async => const AdsConfig()),
       feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
       feedCacheProvider.overrideWithValue(cache ?? FakeFeedCache()),

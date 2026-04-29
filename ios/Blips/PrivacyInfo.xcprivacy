@@ -7,7 +7,82 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<!-- User ID: server-issued anonymous account identifier minted by
+		     /auth/session and stored in the keychain. Sent on every request
+		     so it is "linked" to the user, but never used for cross-app
+		     tracking. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
+			</array>
+		</dict>
+		<!-- Product Interaction: article/video views, saves, dismisses,
+		     less-from-creator signals. Persisted server-side per User ID
+		     and used to personalize the feed ranking. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
+			</array>
+		</dict>
+		<!-- Other Usage Data: standard ad-request context sent to AdMob.
+		     Non-personalized only (npa=1) so it is neither linked to the
+		     user nor used for tracking. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+		<!-- Crash Data: captured by Sentry. No PII attached. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Performance Data: Sentry performance traces (sample rate 0.02). -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePerformanceData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

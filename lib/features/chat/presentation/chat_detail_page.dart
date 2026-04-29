@@ -4,6 +4,8 @@ import 'package:blips_mobile/features/chat/domain/chat_models.dart';
 import 'package:blips_mobile/features/chat/providers/chat_providers.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 import 'package:blips_mobile/features/feed/presentation/widgets/article_image.dart';
+import 'package:blips_mobile/features/feed/presentation/widgets/content_report_sheet.dart';
+import 'package:blips_mobile/features/feed/providers/feed_providers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -375,37 +377,64 @@ class ChatDetailPage extends HookConsumerWidget {
                   final listIndex = showQuotaBanner ? index - 1 : index;
                   final msg = messages.value[listIndex];
                   final isUser = msg.role == 'user';
+                  final bubble = Container(
+                    margin: EdgeInsets.only(bottom: AppSpacing.md),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.md,
+                    ),
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? colorScheme.primary
+                          : colorScheme.surfaceContainerHighest,
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.xl).copyWith(
+                        bottomRight: isUser ? Radius.zero : null,
+                        bottomLeft: !isUser ? Radius.zero : null,
+                      ),
+                    ),
+                    child: Text(
+                      msg.content,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isUser
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                  );
                   return Align(
                     alignment:
                         isUser ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: EdgeInsets.only(bottom: AppSpacing.md),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                        vertical: AppSpacing.md,
-                      ),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isUser
-                            ? colorScheme.primary
-                            : colorScheme.surfaceContainerHighest,
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.xl).copyWith(
-                          bottomRight: isUser ? Radius.zero : null,
-                          bottomLeft: !isUser ? Radius.zero : null,
-                        ),
-                      ),
-                      child: Text(
-                        msg.content,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isUser
-                              ? colorScheme.onPrimary
-                              : colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
+                    child: isUser
+                        ? bubble
+                        : GestureDetector(
+                            onLongPress: () async {
+                              final feedRepo =
+                                  ref.read(feedRepositoryProvider);
+                              final reason =
+                                  await ContentReportSheet.show(context);
+                              if (reason == null || !context.mounted) return;
+                              await feedRepo.reportContent(
+                                contentItemId: article.id,
+                                surface: 'chat',
+                                reason: reason,
+                                messageId: msg.id,
+                              );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Thanks — we\'ll review this response.'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                            child: bubble,
+                          ),
                   );
                 },
               ),

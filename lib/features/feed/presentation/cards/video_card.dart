@@ -21,7 +21,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 const _videoFallbackImage =
     'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800';
 
-enum _VideoCardAction { lessFromCreator }
+enum _VideoCardAction { lessFromCreator, report }
 
 /// Card widget for displaying video feed entries.
 /// Includes inline video playback with thumbnail fallback.
@@ -464,7 +464,7 @@ class VideoCard extends HookConsumerWidget {
     final action = await showModalBottomSheet<_VideoCardAction>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -474,7 +474,13 @@ class VideoCard extends HookConsumerWidget {
               subtitle:
                   const Text('De-prioritize this creator in future ranking.'),
               onTap: () =>
-                  Navigator.of(context).pop(_VideoCardAction.lessFromCreator),
+                  Navigator.of(ctx).pop(_VideoCardAction.lessFromCreator),
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: const Text('Report'),
+              subtitle: const Text('Flag this video for review.'),
+              onTap: () => Navigator.of(ctx).pop(_VideoCardAction.report),
             ),
           ],
         ),
@@ -493,8 +499,21 @@ class VideoCard extends HookConsumerWidget {
             'source': entry.source,
           },
         );
-        _showFeedback(context, 'We will show less from ${entry.source}.');
-        break;
+        if (context.mounted) {
+          _showFeedback(context, 'We will show less from ${entry.source}.');
+        }
+      case _VideoCardAction.report:
+        if (!context.mounted) return;
+        final reason = await ContentReportSheet.show(context);
+        if (reason == null || !context.mounted) return;
+        await repository.reportContent(
+          contentItemId: entry.id,
+          surface: 'videos',
+          reason: reason,
+        );
+        if (context.mounted) {
+          _showFeedback(context, 'Thanks — we\'ll review this content.');
+        }
     }
   }
 

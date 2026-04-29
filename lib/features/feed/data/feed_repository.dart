@@ -85,6 +85,7 @@ abstract final class FeedInteractionEvent {
   static const videoShare = 'VIDEO_SHARE';
   static const lessFromCreator = 'LESS_FROM_CREATOR';
   static const caughtUp = 'CAUGHT_UP';
+  static const report = 'REPORT';
 }
 
 /// Repository responsible for loading feed items from the backend.
@@ -97,6 +98,7 @@ class FeedRepository {
   static const String _sessionPlaylistPath = '/session/playlist';
   static const String _sessionPlaylistMetaPath = '/session/playlist/meta';
   static const String _interactionPath = '/session/interactions';
+  static const String _reportsPath = '/session/reports';
   static const String _freshnessEventPath = '/events/track';
 
   // Session snapshot state for cursor-based continuation.
@@ -649,6 +651,46 @@ class FeedRepository {
     } catch (e, stack) {
       logger.warning(
         'Failed to record feed interaction ($eventType)',
+        category: LogCategory.app,
+        error: e,
+        stackTrace: stack,
+      );
+    }
+  }
+
+  /// Reports a piece of content to the moderation queue.
+  ///
+  /// [contentItemId] is the feed entry ID.
+  /// [surface] is one of 'articles', 'videos', 'reels', 'chat'.
+  /// [reason] is a short machine key, e.g. 'hateful', 'spam', 'explicit',
+  ///   'violence', 'misinformation', 'other'.
+  /// [messageId] optionally identifies a specific AI chat response.
+  Future<void> reportContent({
+    required int contentItemId,
+    required String surface,
+    required String reason,
+    String? messageId,
+  }) async {
+    try {
+      await _api.post(
+        _reportsPath,
+        data: {
+          'content_item_id': contentItemId,
+          'surface': surface,
+          'reason': reason,
+          if (messageId != null) 'message_id': messageId,
+        },
+      );
+    } on DioException catch (e, stack) {
+      logger.warning(
+        'Failed to submit content report',
+        category: LogCategory.network,
+        error: e,
+        stackTrace: stack,
+      );
+    } catch (e, stack) {
+      logger.warning(
+        'Failed to submit content report',
         category: LogCategory.app,
         error: e,
         stackTrace: stack,

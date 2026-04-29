@@ -299,6 +299,9 @@ class ReelItem extends HookConsumerWidget {
                           ),
                   onShare: () => _shareReel(repository, sessionStore),
                   onOpen: () => _openReel(repository, sessionStore),
+                  onLessFromCreator: () =>
+                      _lessFromCreator(context, repository),
+                  onReport: () => _reportReel(context, repository),
                 ),
 
                 // Info Layer
@@ -493,6 +496,46 @@ class ReelItem extends HookConsumerWidget {
     }
   }
 
+  Future<void> _lessFromCreator(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    await repository.recordInteraction(
+      contentItemId: entry.id,
+      eventType: FeedInteractionEvent.lessFromCreator,
+      extraData: {'surface': 'reels', 'source': entry.source},
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('We will show less from ${entry.source}.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _reportReel(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    final reason = await ContentReportSheet.show(context);
+    if (reason == null || !context.mounted) return;
+    await repository.reportContent(
+      contentItemId: entry.id,
+      surface: 'reels',
+      reason: reason,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thanks — we\'ll review this content.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<bool> _recordEarlySkipIfNeeded({
     required FeedRepository repository,
     required bool sentStart,
@@ -637,12 +680,16 @@ class _ActionButtons extends StatelessWidget {
     required this.onSaveToggle,
     required this.onShare,
     required this.onOpen,
+    required this.onLessFromCreator,
+    required this.onReport,
   });
 
   final bool isSaved;
   final Future<void> Function() onSaveToggle;
   final Future<void> Function() onShare;
   final Future<void> Function() onOpen;
+  final Future<void> Function() onLessFromCreator;
+  final Future<void> Function() onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -670,6 +717,18 @@ class _ActionButtons extends StatelessWidget {
             icon: Icons.open_in_new,
             label: 'Open',
             onTap: () => unawaited(onOpen()),
+          ),
+          const SizedBox(height: 12),
+          ReelActionButton(
+            icon: Icons.visibility_off_outlined,
+            label: 'Less',
+            onTap: () => unawaited(onLessFromCreator()),
+          ),
+          const SizedBox(height: 12),
+          ReelActionButton(
+            icon: Icons.flag_outlined,
+            label: 'Report',
+            onTap: () => unawaited(onReport()),
           ),
         ],
       ),

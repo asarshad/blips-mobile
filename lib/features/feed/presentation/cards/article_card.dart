@@ -12,6 +12,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+enum _ArticleCardAction { lessFromCreator, report }
+
 /// Card widget for displaying article feed entries.
 /// Includes media preview, metadata, and action buttons.
 class ArticleCard extends HookConsumerWidget {
@@ -75,6 +77,8 @@ class ArticleCard extends HookConsumerWidget {
             repository,
             sessionStore,
           ),
+          onLongPress: () =>
+              _showActionsSheet(context, repository),
           onChat: () => showBubbles.value = !showBubbles.value,
           onShare: () => _shareArticle(context, repository, sessionStore),
           onSaveToggle: () => unawaited(
@@ -216,5 +220,70 @@ class ArticleCard extends HookConsumerWidget {
     if (days == 1) return 'Yesterday';
     if (days < 7) return '${days}d ago';
     return '${local.month}/${local.day}/${local.year}';
+  }
+
+  Future<void> _showActionsSheet(
+    BuildContext context,
+    FeedRepository repository,
+  ) async {
+    final action = await showModalBottomSheet<_ArticleCardAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.visibility_off_outlined),
+              title: Text('Less from ${entry.source}'),
+              subtitle: const Text(
+                  'De-prioritize this source in future ranking.'),
+              onTap: () => Navigator.of(ctx)
+                  .pop(_ArticleCardAction.lessFromCreator),
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: const Text('Report'),
+              subtitle: const Text('Flag this article for review.'),
+              onTap: () =>
+                  Navigator.of(ctx).pop(_ArticleCardAction.report),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || !context.mounted) return;
+
+    switch (action) {
+      case _ArticleCardAction.lessFromCreator:
+        await repository.recordInteraction(
+          contentItemId: entry.id,
+          eventType: FeedInteractionEvent.lessFromCreator,
+          extraData: {'surface': 'articles', 'source': entry.source},
+        );
+        if (context.mounted) {
+          _showFeedback(
+              context, 'We will show less from ${entry.source}.');
+        }
+      case _ArticleCardAction.report:
+        if (!context.mounted) return;
+        final reason = await ContentReportSheet.show(context);
+        if (reason == null || !context.mounted) return;
+        await repository.reportContent(
+          contentItemId: entry.id,
+          surface: 'articles',
+          reason: reason,
+        );
+        if (context.mounted) {
+          _showFeedback(context, 'Thanks — we\'ll review this content.');
+        }
+    }
+  }
+
+  void _showFeedback(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 }
