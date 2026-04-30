@@ -167,7 +167,7 @@ class NetworkException extends AppException {
       404 => ('Content not found.', ExceptionSeverity.warning, false),
       >= 500 && < 600 => (
           'Server is having issues. Please try later.',
-          ExceptionSeverity.error,
+          ExceptionSeverity.warning, // transient — not a client bug
           true,
         ),
       _ => ('Something went wrong.', ExceptionSeverity.warning, true),

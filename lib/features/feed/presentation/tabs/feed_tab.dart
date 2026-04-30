@@ -298,11 +298,11 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) {
+          // Log locally only — transient refresh failures are not actionable
+          // and should not generate Sentry noise.
           logger.warning(
-            'Feed refresh failed — not shown to user',
+            'Feed refresh failed (not shown to user): $error',
             category: LogCategory.network,
-            error: error,
-            stackTrace: stackTrace,
           );
           return FeedMessageState(
             message: emptyLabel,
