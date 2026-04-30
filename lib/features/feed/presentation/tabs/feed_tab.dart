@@ -297,10 +297,19 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
           currentPage,
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => ErrorView(
-          error: error,
-          onRetry: onRefresh,
-        ),
+        error: (error, stackTrace) {
+          logger.warning(
+            'Feed refresh failed — not shown to user',
+            category: LogCategory.network,
+            error: error,
+            stackTrace: stackTrace,
+          );
+          return FeedMessageState(
+            message: emptyLabel,
+            actionLabel: 'Refresh',
+            onAction: onRefresh,
+          );
+        },
       ),
     );
   }
