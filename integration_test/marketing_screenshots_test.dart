@@ -35,14 +35,24 @@ const _articleSummaryLong =
     'OpenAI\'s latest memory controls matter because they turn AI from a disposable prompt box into a tool people can trust throughout the workday. Instead of forcing users to restate preferences, projects, and context every time, the assistant can now feel more continuous, more personalized, and less repetitive. That shift changes retention, changes workflow design, and raises the bar for every product competing to become the interface people open first each morning.';
 const _videoSummaryLong =
     'This video connects the dots between Nvidia\'s platform momentum, OpenAI\'s product cadence, and Apple\'s device strategy to explain why the next AI cycle may spread faster than the last one. It shows how hardware, distribution, and interface design are finally aligning in a way that makes mainstream adoption easier to imagine. For viewers, that means fewer isolated launches and a much clearer picture of where attention, consumer behavior, and product value are moving next.';
+// MacBook opening with colorful glow — sleek, dark-mode-friendly
 const _articleImage =
-    'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1600&q=80';
+    'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=1600&q=80';
+// AI brain circuit board illustration — instantly reads as tech/AI news
 const _articleImageSecondary =
-    'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80';
+    'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?auto=format&fit=crop&w=1600&q=80';
+// Tech conference audience — feels like watchable video content
 const _videoThumbnailPrimary =
-    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1600&q=80';
+    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1600&q=80';
+// ChatGPT / AI logo 3D render — very recognisable tech-news visual
 const _videoThumbnailSecondary =
-    'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?auto=format&fit=crop&w=1600&q=80';
+    'https://images.unsplash.com/photo-1679083216051-aa510a1a2c0e?auto=format&fit=crop&w=1600&q=80';
+// Earth at night from space — dramatic, cinematic; great for short-clip feel
+const _reelThumbnailPrimary =
+    'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1600&q=80';
+// Dark server-room cables — moody infrastructure / tech backdrop
+const _reelThumbnailSecondary =
+    'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized()
@@ -211,6 +221,7 @@ Future<Map<String, dynamic>> _resolveResponse(
     return switch (type) {
       'ARTICLE' => _buildArticlePlaylistResponse(),
       'VIDEO' => _buildVideoPlaylistResponse(),
+      'REEL' => _buildReelsResponse(),
       _ => const <String, dynamic>{'items': <Map<String, dynamic>>[]},
     };
   }
@@ -348,6 +359,7 @@ Map<String, dynamic> _buildReelsResponse() {
     'items': [
       {
         'id': 10101,
+        'type': 'REEL',
         'title': _reelTitle,
         'video_url': 'https://www.youtube.com/shorts/jcxgwl9NYFE',
         'source_url': 'https://blips.tech/story/meeting-clips',
@@ -355,26 +367,30 @@ Map<String, dynamic> _buildReelsResponse() {
         'summary':
             'Short takes on AI launches, chips, and creator tools, cut for '
                 'the first minute of your day.',
-        'thumbnail_url': _videoThumbnailPrimary,
+        'thumbnail_url': _reelThumbnailPrimary,
         'duration_seconds': 34,
         'published_at': '2026-04-08T09:36:00Z',
         'created_at': '2026-04-08T09:36:00Z',
+        'topics': ['Technology'],
       },
       {
         'id': 10102,
+        'type': 'REEL',
         'title': 'New models are cheap. Distribution is not.',
         'video_url': 'https://www.youtube.com/shorts/aqz-KE-bpKQ',
         'source_url': 'https://blips.tech/story/distribution-cost',
         'source': 'Blips Clips',
         'summary': 'The fastest take on where attention still compounds.',
-        'thumbnail_url': _videoThumbnailSecondary,
+        'thumbnail_url': _reelThumbnailSecondary,
         'duration_seconds': 26,
         'published_at': '2026-04-08T09:12:00Z',
         'created_at': '2026-04-08T09:12:00Z',
+        'topics': ['Technology'],
       },
     ],
+    'session_id': 'marketing-reels',
+    'cursor': 2,
     'has_more': false,
-    'next_cursor': null,
   };
 }
 

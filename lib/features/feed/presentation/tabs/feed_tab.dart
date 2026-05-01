@@ -243,6 +243,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       // Preload article hero images for the next 2 entries so they are ready
       // before the user swipes to them.
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
         final end = (currentPage.value + 3).clamp(0, entries.length);
         for (var i = currentPage.value + 1; i < end; i++) {
           final entry = entries[i];
@@ -280,6 +281,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
         onLoadMore?.call();
       });
       return null;
