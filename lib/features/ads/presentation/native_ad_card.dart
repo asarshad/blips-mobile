@@ -5,6 +5,7 @@ import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/ads/domain/admob_config.dart';
 import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
+import 'package:blips_mobile/features/ads/providers/failed_ad_slots_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -91,10 +92,12 @@ class NativeAdCard extends HookConsumerWidget {
             ad.dispose();
             adState.value = _NativeAdRenderState.failed;
             logger.warning(
-              'Native ad failed for ${slot.surface.name} slot ${slot.slotIndex}',
+              'Native ad no-fill for ${slot.surface.name} slot ${slot.slotIndex}',
               category: LogCategory.network,
-              error: error,
             );
+            // Remove this slot from the feed list so the user never sees
+            // a blank or placeholder page.
+            ref.read(failedAdSlotsProvider.notifier).markFailed(slot.stableId);
           },
           onAdImpression: (_) {
             eventService.recordImpression(
@@ -146,6 +149,8 @@ class NativeAdCard extends HookConsumerWidget {
       );
     }
 
+    // Still loading — show a subtle placeholder while the request is in flight.
+    // On no-fill, markFailed() above removes this slot from the feed list.
     return _NativeAdPlaceholderCard(
       surfaceName: slot.surface.name,
       state: adState.value,
@@ -323,31 +328,12 @@ class _NativeAdPlaceholderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final copy = switch (state) {
-      _NativeAdRenderState.loading => (
-          eyebrow: 'Sponsored',
-          headline: 'Loading sponsor story',
-          body:
-              'This placement is reserved for a full-page sponsored card and remains fully swipeable while the ad request completes.',
-        ),
-      _NativeAdRenderState.failed => (
-          eyebrow: 'Sponsored',
-          headline: 'Sponsored story unavailable',
-          body:
-              'No fill came back for this $surfaceName slot, so the card stays lightweight and swipeable instead of blocking the feed.',
-        ),
-      _NativeAdRenderState.unsupported => (
-          eyebrow: 'Sponsored',
-          headline: 'Sponsored card unavailable',
-          body:
-              'This platform cannot render native feed ads, so this slot falls back to a neutral placeholder.',
-        ),
-      _NativeAdRenderState.loaded => (
-          eyebrow: 'Sponsored',
-          headline: '',
-          body: '',
-        ),
-    };
+    // Only shown during the brief loading window before fill/no-fill resolves.
+    const copy = (
+      eyebrow: 'Sponsored',
+      headline: '',
+      body: '',
+    );
 
     return ColoredBox(
       color: theme.scaffoldBackgroundColor,

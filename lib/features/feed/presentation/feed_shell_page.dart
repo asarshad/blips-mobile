@@ -8,6 +8,7 @@ import 'package:blips_mobile/core/theme/theme.dart';
 import 'package:blips_mobile/features/ads/domain/feed_page_item.dart';
 import 'package:blips_mobile/features/ads/presentation/native_ad_card.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
+import 'package:blips_mobile/features/ads/providers/failed_ad_slots_provider.dart';
 import 'package:blips_mobile/features/feed/data/feed_repository.dart';
 import 'package:blips_mobile/features/feed/data/feed_session_store.dart';
 import 'package:blips_mobile/features/ads/presentation/ad_card.dart';
@@ -1249,13 +1250,16 @@ class _ArticlesFeedTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rawFeed = ref.watch(articleFeedWithAdsProvider);
     final blocked = ref.watch(blockedSourcesProvider);
-    final feed = blocked.isEmpty
-        ? rawFeed
-        : rawFeed.whenData(
-            (items) => items
-                .where((item) => !blocked.contains(item.organicEntry?.source))
-                .toList(growable: false),
-          );
+    final failedSlots = ref.watch(failedAdSlotsProvider);
+    final feed = rawFeed.whenData(
+      (items) => items.where((item) {
+        if (item is NativeAdSlotFeedPageItem &&
+            failedSlots.contains(item.stableId)) return false;
+        if (blocked.isNotEmpty &&
+            blocked.contains(item.organicEntry?.source)) return false;
+        return true;
+      }).toList(growable: false),
+    );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
 
     return FeedTab<FeedPageItem>(
@@ -1316,13 +1320,16 @@ class _VideosFeedTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rawFeed = ref.watch(videoFeedWithAdsProvider);
     final blocked = ref.watch(blockedSourcesProvider);
-    final feed = blocked.isEmpty
-        ? rawFeed
-        : rawFeed.whenData(
-            (items) => items
-                .where((item) => !blocked.contains(item.organicEntry?.source))
-                .toList(growable: false),
-          );
+    final failedSlots = ref.watch(failedAdSlotsProvider);
+    final feed = rawFeed.whenData(
+      (items) => items.where((item) {
+        if (item is NativeAdSlotFeedPageItem &&
+            failedSlots.contains(item.stableId)) return false;
+        if (blocked.isNotEmpty &&
+            blocked.contains(item.organicEntry?.source)) return false;
+        return true;
+      }).toList(growable: false),
+    );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
     return FeedTab<FeedPageItem>(
