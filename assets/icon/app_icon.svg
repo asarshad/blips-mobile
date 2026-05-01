@@ -1,26 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="edgeLight" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28"/>
-      <stop offset="36%" stop-color="#FFFFFF" stop-opacity="0.08"/>
-      <stop offset="64%" stop-color="#FFFFFF" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="edgeShade" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="52%" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#0E1527" stop-opacity="0.18"/>
-    </linearGradient>
-    <filter id="tileShadow" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0E1527" flood-opacity="0.10"/>
-    </filter>
     <filter id="logoEmboss" x="-20%" y="-20%" width="140%" height="160%" color-interpolation-filters="sRGB">
       <feDropShadow dx="-1.4" dy="-1.4" stdDeviation="1.7" flood-color="#FFFFFF" flood-opacity="0.56"/>
       <feDropShadow dx="0" dy="4.2" stdDeviation="4.8" flood-color="#0E1527" flood-opacity="0.12"/>
     </filter>
-    <clipPath id="tileClip">
-      <rect x="24" y="24" width="976" height="976" rx="220"/>
-    </clipPath>
     <clipPath id="barsClip">
       <rect x="-256" y="-50" width="44" height="100" rx="22"/>
       <rect x="-178" y="-118" width="44" height="236" rx="22"/>
@@ -35,14 +18,8 @@
     </clipPath>
   </defs>
 
-  <rect width="1024" height="1024" fill="#DDE3EB"/>
-  <g filter="url(#tileShadow)">
-    <rect x="24" y="24" width="976" height="976" rx="220" fill="#FFFFFF"/>
-  </g>
-  <g clip-path="url(#tileClip)">
-    <rect x="29" y="29" width="966" height="966" rx="215" fill="none" stroke="url(#edgeLight)" stroke-width="10"/>
-    <rect x="31" y="31" width="962" height="962" rx="213" fill="none" stroke="url(#edgeShade)" stroke-width="10"/>
-  </g>
+  <!-- Full-bleed white background — no pre-applied rounded corners -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
 
   <g filter="url(#logoEmboss)">
     <g transform="translate(512 390)">
