@@ -8,8 +8,9 @@ class MemoryConfig {
   /// Maximum number of video player instances in the pool.
   ///
   /// Lower values save memory but may cause buffering when scrolling fast.
-  /// Recommended: 3 for most devices, 2 for low-memory devices.
-  static const int playerPoolSize = 3;
+  /// Keep this conservative on iOS: each YouTube webview controller is heavy,
+  /// and App Store/TestFlight builds have hit watchdog memory termination.
+  static const int playerPoolSize = 2;
 
   /// Maximum number of images to keep in memory cache.
   static const int imageCacheMaxImages = 100;
@@ -22,7 +23,7 @@ class MemoryConfig {
   /// Number of reels to preload ahead and behind current position.
   ///
   /// Higher values provide smoother scrolling but use more memory.
-  static const int reelPreloadCount = 2;
+  static const int reelPreloadCount = 1;
 
   /// Number of long-form videos to preload ahead of current position.
   ///

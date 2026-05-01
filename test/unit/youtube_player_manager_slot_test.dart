@@ -87,9 +87,8 @@ void main() {
       // 4th URL must evict one, not create a 4th WebView permanently.
       await m.initController(_u3);
 
-      final live = [_u0, _u1, _u2, _u3]
-          .where((u) => m.getController(u) != null)
-          .length;
+      final live =
+          [_u0, _u1, _u2, _u3].where((u) => m.getController(u) != null).length;
       expect(live, lessThanOrEqualTo(YoutubePlayerManager.maxControllers));
     });
 
@@ -114,9 +113,8 @@ void main() {
       await m.initController(_u2);
       await m.initController(_u3); // evicts one of 0-2
 
-      final evicted = [_u0, _u1, _u2]
-          .where((u) => m.getController(u) == null)
-          .toList();
+      final evicted =
+          [_u0, _u1, _u2].where((u) => m.getController(u) == null).toList();
       expect(evicted, isNotEmpty);
       for (final url in evicted) {
         expect(m.getState(url), YTPlayerState.idle);
@@ -214,10 +212,16 @@ void main() {
       await m.retryVideo(_u0);
       await Future<void>.delayed(const Duration(milliseconds: 30));
 
-      expect(t.created[0].disposeCount, 1,
-          reason: 'old controller must be disposed on retry');
-      expect(t.created.length, 2,
-          reason: 'a fresh controller must be created');
+      expect(
+        t.created[0].disposeCount,
+        1,
+        reason: 'old controller must be disposed on retry',
+      );
+      expect(
+        t.created.length,
+        2,
+        reason: 'a fresh controller must be created',
+      );
     });
 
     test('works on URL that was never initialised', () async {
@@ -233,10 +237,8 @@ void main() {
   });
 
   group('onPageChanged — keep window', () {
-    test(
-        'index=2, preloadAhead=2, pool=3 → urls[0] and [1] evicted synchronously',
-        () async {
-      // keepBehind = 3 - 2 - 1 = 0 → keep {u2, u3, u4}
+    test('index=2, pool=2 evicts urls[0] and [1] synchronously', () async {
+      // preloadAhead clamps to 1; keepBehind = 2 - 1 - 1 = 0, so keep u2/u3.
       final t = _Tracker();
       final m = _manager(t);
       addTearDown(m.dispose);
@@ -252,15 +254,25 @@ void main() {
       );
 
       // Out-of-window URLs should be released synchronously.
-      expect(m.getController(_u0), isNull,
-          reason: 'urls[0] is outside keep window');
-      expect(m.getController(_u1), isNull,
-          reason: 'urls[1] is outside keep window');
-      expect(m.getController(_u2), isNotNull,
-          reason: 'current url must stay alive');
+      expect(
+        m.getController(_u0),
+        isNull,
+        reason: 'urls[0] is outside keep window',
+      );
+      expect(
+        m.getController(_u1),
+        isNull,
+        reason: 'urls[1] is outside keep window',
+      );
+      expect(
+        m.getController(_u2),
+        isNotNull,
+        reason: 'current url must stay alive',
+      );
     });
 
-    test('pauses non-current in-window controller', () async {
+    test('releases previous controller when only keeping current and next',
+        () async {
       final t = _Tracker();
       final m = _manager(t);
       addTearDown(m.dispose);
@@ -276,8 +288,8 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 30));
 
-      // keepBehind = 3 - 1 - 1 = 1, so _u0 stays in window but is paused.
-      expect(m.getController(_u0), isNotNull);
+      // keepBehind = 2 - 1 - 1 = 0, so _u0 leaves the memory window.
+      expect(m.getController(_u0), isNull);
       expect(m.getState(_u1), YTPlayerState.playing);
     });
 
