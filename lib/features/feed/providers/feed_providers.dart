@@ -2149,7 +2149,12 @@ AsyncValue<List<FeedPageItem>>
 }
 
 /// Loads the articles feed.
-final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
+// Not autoDispose: these notifiers must survive tab switches so that scroll
+// position, loaded pages, and session state are never lost mid-session.
+// autoDispose caused the notifier to be torn down when the user briefly left
+// the tab, resetting the feed to AsyncValue.loading() and losing the
+// PageController position.
+final articlesFeedProvider = StateNotifierProvider<ArticlesNotifier,
     AsyncValue<List<ArticleFeedEntry>>>(
   (ref) => ArticlesNotifier(
     ref.watch(feedRepositoryProvider),
@@ -2162,7 +2167,7 @@ final articlesFeedProvider = StateNotifierProvider.autoDispose<ArticlesNotifier,
 );
 
 /// Loads the videos feed.
-final videosFeedProvider = StateNotifierProvider.autoDispose<VideosNotifier,
+final videosFeedProvider = StateNotifierProvider<VideosNotifier,
     AsyncValue<List<VideoFeedEntry>>>(
   (ref) => VideosNotifier(
     ref.watch(feedRepositoryProvider),
@@ -3143,7 +3148,8 @@ class ReelsNotifier extends StateNotifier<AsyncValue<List<ReelFeedEntry>>> {
 }
 
 /// Loads the reels feed with pagination support.
-final reelsFeedProvider = StateNotifierProvider.autoDispose<ReelsNotifier,
+// Not autoDispose — same reasoning as articlesFeedProvider above.
+final reelsFeedProvider = StateNotifierProvider<ReelsNotifier,
     AsyncValue<List<ReelFeedEntry>>>(
   (ref) => ReelsNotifier(
     ref.watch(feedRepositoryProvider),
