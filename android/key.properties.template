@@ -1,0 +1,4 @@
+storePassword=<your-keystore-password>
+keyPassword=<your-key-password>
+keyAlias=blips
+storeFile=<absolute-path-to-blips-release.keystore>
