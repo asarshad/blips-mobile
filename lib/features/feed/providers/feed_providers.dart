@@ -2179,8 +2179,11 @@ final videosFeedProvider = StateNotifierProvider<VideosNotifier,
 );
 
 /// Articles feed with device-local native ad slots.
+// Not autoDispose: keeping this alive avoids any window where the derived
+// feed briefly has zero listeners, which could cause a spurious recompute
+// that coincides with the scroll-position restore on tab re-entry.
 final articleFeedWithAdsProvider =
-    Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
+    Provider<AsyncValue<List<FeedPageItem>>>((ref) {
   final feedState = ref.watch(articlesFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
@@ -2199,8 +2202,9 @@ final articleFeedWithAdsProvider =
 });
 
 /// Videos feed with device-local native ad slots.
+// Not autoDispose: same reasoning as articleFeedWithAdsProvider above.
 final videoFeedWithAdsProvider =
-    Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
+    Provider<AsyncValue<List<FeedPageItem>>>((ref) {
   final feedState = ref.watch(videosFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();
@@ -2219,8 +2223,9 @@ final videoFeedWithAdsProvider =
 });
 
 /// Reels feed with device-local native ad slots.
+// Not autoDispose: same reasoning as articleFeedWithAdsProvider above.
 final reelsFeedWithAdsProvider =
-    Provider.autoDispose<AsyncValue<List<FeedPageItem>>>((ref) {
+    Provider<AsyncValue<List<FeedPageItem>>>((ref) {
   final feedState = ref.watch(reelsFeedProvider);
   final adsConfig =
       ref.watch(adsConfigProvider).valueOrNull ?? const AdsConfig();

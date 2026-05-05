@@ -44,6 +44,7 @@ void main() {
       child: MaterialApp(
         home: Scaffold(
           body: FeedTab<FeedPageItem>(
+            pageStorageKey: 'test-feed-tab',
             feed: AsyncValue.data(
               items ?? <FeedPageItem>[OrganicFeedPageItem(buildVideo())],
             ),

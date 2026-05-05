@@ -287,6 +287,70 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
+  testWidgets(
+    'switching to Videos and back preserves deep article position',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final api = FakeBackendApiClient(
+        responseResolver: (method, path, queryParameters, body) {
+          if (method == 'GET' && path == '/session/playlist') {
+            final type = queryParameters?['type'] as String?;
+            return switch (type) {
+              'ARTICLE' => buildArticlePlaylistResponseForIds(
+                  List<int>.generate(15, (index) => index + 1),
+                ),
+              'VIDEO' => buildVideoPlaylistResponse(),
+              'REEL' => buildReelsResponse(),
+              _ => <String, dynamic>{'items': const <Map<String, dynamic>>[]},
+            };
+          }
+          if (method == 'GET' && path == '/videos/reels') {
+            return buildReelsResponse();
+          }
+          if (method == 'POST' && path == '/session/interactions') {
+            return const <String, dynamic>{};
+          }
+          return const <String, dynamic>{};
+        },
+      );
+
+      await tester.pumpWidget(
+        buildNavigationHarness(
+          api: api,
+        ),
+      );
+      await pumpUi(tester, const Duration(seconds: 2));
+      await pumpUntilFound(tester, find.text('App shell article 1'));
+
+      await tester.drag(
+          findVerticalFeedPageView().first, const Offset(0, -850));
+      await pumpUi(tester, const Duration(milliseconds: 500));
+      await tester.drag(
+          findVerticalFeedPageView().first, const Offset(0, -850));
+      await pumpUi(tester, const Duration(milliseconds: 500));
+      await pumpUntilFound(tester, find.text('App shell article 3'));
+
+      expect(find.text('App shell article 3'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.play_circle_outline));
+      await pumpTabTransition(tester);
+      await pumpUntilFound(tester, find.text('App shell video'));
+
+      expect(find.text('App shell video'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('nav-Feed')));
+      await pumpTabTransition(tester);
+      await pumpUntilFound(tester, find.text('App shell article 3'));
+
+      expect(find.text('App shell article 3'), findsOneWidget);
+      expect(find.text('App shell article 1'), findsNothing);
+    },
+  );
+
   testWidgets('swiping Reels activates new reel and pauses previous audio',
       (tester) async {
     tester.view.physicalSize = const Size(430, 932);

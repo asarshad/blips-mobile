@@ -1255,14 +1255,15 @@ class _ArticlesFeedTab extends ConsumerWidget {
       (items) => items.where((item) {
         if (item is NativeAdSlotFeedPageItem &&
             failedSlots.contains(item.stableId)) return false;
-        if (blocked.isNotEmpty &&
-            blocked.contains(item.organicEntry?.source)) return false;
+        if (blocked.isNotEmpty && blocked.contains(item.organicEntry?.source))
+          return false;
         return true;
       }).toList(growable: false),
     );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.articles));
 
     return FeedTab<FeedPageItem>(
+      pageStorageKey: 'articles-feed-page-view',
       feed: feed,
       emptyLabel: 'Articles are warming up.',
       controller: controller,
@@ -1325,14 +1326,15 @@ class _VideosFeedTab extends ConsumerWidget {
       (items) => items.where((item) {
         if (item is NativeAdSlotFeedPageItem &&
             failedSlots.contains(item.stableId)) return false;
-        if (blocked.isNotEmpty &&
-            blocked.contains(item.organicEntry?.source)) return false;
+        if (blocked.isNotEmpty && blocked.contains(item.organicEntry?.source))
+          return false;
         return true;
       }).toList(growable: false),
     );
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
     return FeedTab<FeedPageItem>(
+      pageStorageKey: 'videos-feed-page-view',
       feed: feed,
       emptyLabel: 'Videos are warming up.',
       containsVideos: true,

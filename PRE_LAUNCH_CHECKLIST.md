@@ -83,30 +83,33 @@ Complete all items before submitting to app stores.
 - [ ] Category: News & Magazines
 
 ### Signing
-- [ ] Upload keystore generated (see `android/app/signing.md`)
-- [ ] `android/key.properties` created locally
-- [ ] `build.gradle.kts` updated with release signing config
-- [ ] Test release build: `flutter build appbundle --release`
+- [ ] Generate keystore: `keytool -genkey -v -keystore ~/blips-release.keystore -alias blips -keyalg RSA -keysize 2048 -validity 10000`
+- [ ] Copy `android/key.properties.template` → `android/key.properties` and fill in paths/passwords
+- [x] `build.gradle.kts` updated with release signing config (reads `key.properties` if present)
+- [ ] Back up keystore somewhere safe (losing it = can never update the app)
+- [ ] `google-services.json` present at `android/app/google-services.json` ✓
 
 ### Screenshots
-- [ ] Phone screenshots — min 2
-- [ ] Feature graphic 1024×500
-- [ ] App icon auto-generated from Flutter config
+- [x] Phone screenshots processed for Play Store → `store_metadata/screenshots/play_store/` (1320×2640, RGB)
+- [x] Feature graphic 1024×500 → `store_metadata/play_store/feature_graphic.png`
+- [ ] App icon auto-generated from Flutter config (already set via `mipmap-*` resources)
 
 ### Content Rating
-- [ ] IARC questionnaire completed
+- [ ] IARC questionnaire completed in Play Console
 - [ ] Rating received (expected: Everyone)
 
 ### Privacy & Legal
 - [ ] Privacy policy URL: https://blips.tech/privacy
-- [ ] Data safety section completed
-- [ ] Ads and SDK data collection disclosures match the shipped build
+- [ ] Data safety section completed in Play Console
+- [ ] Declare: no user data collected, AdMob serves ads (advertising ID used)
+- [ ] Ads declaration: app contains ads ✓
 
 ### Build
-- [ ] Version bumped in `pubspec.yaml` (currently 1.0.3+14)
+- [ ] Version bumped in `pubspec.yaml` if needed (currently 1.0.4+1)
 - [ ] Run `flutter build appbundle --release`
-- [ ] Upload AAB to internal testing track
-- [ ] Internal testing track reviewed and published
+- [ ] Upload AAB to internal testing track first
+- [ ] Smoke test on a physical Android device from internal track
+- [ ] Promote to production once stable
 
 ---
 

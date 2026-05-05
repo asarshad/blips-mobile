@@ -26,6 +26,7 @@ const _loadMoreOrganicRemainingThreshold = 10;
 class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   const FeedTab({
     super.key,
+    required this.pageStorageKey,
     required this.feed,
     required this.builder,
     required this.emptyLabel,
@@ -47,6 +48,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     this.topActionDark = false,
   });
 
+  final String pageStorageKey;
   final AsyncValue<List<T>> feed;
   final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
@@ -105,27 +107,46 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     final lastCaughtUpEntryId = useRef<int?>(null);
     final videoManager = ref.watch(youtubePlayerManagerProvider);
 
+    // Restore the controller position whenever this surface becomes visible.
+    // While the tab is off-screen the scroll listener below is detached, so
+    // currentPage.value is frozen at the user's last position.  If the
+    // PageController was silently reset to 0 during the tab transition this
+    // effect snaps it back before the user can see the wrong article.
+    //
+    // This effect MUST be registered before the listener effect below so that
+    // its addPostFrameCallback fires first (callbacks run in insertion order).
     useEffect(() {
+      if (!isActive) return null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        if (!effectiveController.hasClients) return;
+        final target = currentPage.value;
+        if (target > 0 && effectiveController.page?.round() != target) {
+          effectiveController.jumpToPage(target);
+        }
+      });
+      return null;
+    }, [isActive]);
+
+    // Track the controller's page position — but only while this surface is
+    // active (visible).  Keeping the listener detached while off-screen
+    // ensures that a silent controller reset to 0 during a tab switch cannot
+    // overwrite currentPage.value and defeat the restore above.
+    useEffect(() {
+      if (!isActive) return null;
       void syncCurrentPage() {
-        final nextIndex = (() {
-          if (!effectiveController.hasClients) {
-            return effectiveController.initialPage;
-          }
-          final page = effectiveController.page;
-          if (page == null) {
-            return effectiveController.initialPage;
-          }
-          return page.round();
-        })();
-        if (nextIndex != currentPage.value) {
-          currentPage.value = nextIndex;
+        if (!effectiveController.hasClients) return;
+        final page = effectiveController.page;
+        if (page == null) return;
+        final rounded = page.round();
+        if (rounded != currentPage.value) {
+          currentPage.value = rounded;
         }
       }
 
       effectiveController.addListener(syncCurrentPage);
-      WidgetsBinding.instance.addPostFrameCallback((_) => syncCurrentPage());
       return () => effectiveController.removeListener(syncCurrentPage);
-    }, [effectiveController]);
+    }, [effectiveController, isActive]);
 
     // Preload first videos when data loads
     final hasVideos = containsVideos;
@@ -362,6 +383,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     return Stack(
       children: [
         PageView.builder(
+          key: PageStorageKey<String>(pageStorageKey),
           controller: controller,
           scrollDirection: Axis.vertical,
           dragStartBehavior: DragStartBehavior.down,
