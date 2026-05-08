@@ -3,6 +3,7 @@ library image_starters_regression_test;
 
 import 'package:blips_mobile/features/feed/data/dto/article_dto.dart';
 import 'package:blips_mobile/features/feed/data/dto/video_dto.dart';
+import 'package:blips_mobile/features/feed/data/mappers/feed_mappers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Regression tests for two production incidents:
@@ -59,6 +60,30 @@ void main() {
       });
 
       expect(dto.imageUrl, equals('https://example.com/img.jpg'));
+    });
+
+    test('relative backend placeholder image_url becomes absolute', () {
+      final dto = ArticleDto.fromJson(const {
+        'id': 6,
+        'title': 'Article with backend placeholder',
+        'source_url': 'https://example.com/article',
+        'image_url': '/api/v1/placeholder/source?source=Example',
+        'tags': <dynamic>[],
+      });
+
+      expect(
+        dto.imageUrl,
+        equals(
+          'https://api.blips.tech/api/v1/placeholder/source?source=Example',
+        ),
+      );
+    });
+
+    test('normalizeBackendMediaUrl leaves absolute media URLs unchanged', () {
+      expect(
+        normalizeBackendMediaUrl('https://cdn.example.com/image.jpg'),
+        equals('https://cdn.example.com/image.jpg'),
+      );
     });
 
     test('ArticleDto.toDomain() preserves null image_url for the UI renderer',

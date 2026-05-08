@@ -1,3 +1,4 @@
+import 'package:blips_mobile/core/config/app_config.dart';
 import 'package:blips_mobile/features/feed/domain/feed_entry.dart';
 
 /// Extracts a readable source name from the provided [url].
@@ -8,6 +9,29 @@ String deriveSource(String url) {
   } catch (_) {
     return 'Tech Whisperer';
   }
+}
+
+/// Resolves backend media URLs into URLs Flutter can request directly.
+///
+/// The backend may emit relative URLs for generated placeholders when the
+/// public API origin is not configured server-side. Dio resolves those for API
+/// calls, but `Image.network` does not know the API base URL, so normalize here
+/// before the value reaches the UI/cache layer.
+String? normalizeBackendMediaUrl(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+    return trimmed;
+  }
+
+  if (!trimmed.startsWith('/')) {
+    return trimmed;
+  }
+
+  final base = Uri.parse(AppConfig.backendBaseUrl);
+  return base.resolve(trimmed).toString();
 }
 
 /// Estimates reading time in minutes for the given [summary].
