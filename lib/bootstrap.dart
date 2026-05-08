@@ -2,7 +2,9 @@ import 'package:blips_mobile/app.dart';
 import 'package:blips_mobile/core/config/firebase_bootstrap_options.dart';
 import 'package:blips_mobile/core/error/error.dart';
 import 'package:blips_mobile/features/feed/data/feed_cache.dart';
+import 'package:device_preview/device_preview.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -48,8 +50,9 @@ Future<void> bootstrap() async {
     final splashStart = DateTime.now();
 
     runApp(
-      const ProviderScope(
-        child: BlipsApp(),
+      DevicePreview(
+        enabled: kDebugMode,
+        builder: (_) => const ProviderScope(child: BlipsApp()),
       ),
     );
 
@@ -81,9 +84,12 @@ Future<void> bootstrapWithOverrides({
 
     await _initializeFirebase();
     runApp(
-      ProviderScope(
-        overrides: overrides,
-        child: const BlipsApp(),
+      DevicePreview(
+        enabled: kDebugMode,
+        builder: (_) => ProviderScope(
+          overrides: overrides,
+          child: const BlipsApp(),
+        ),
       ),
     );
 
