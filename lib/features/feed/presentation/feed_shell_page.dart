@@ -1264,6 +1264,7 @@ class _ArticlesFeedTab extends ConsumerWidget {
 
     return FeedTab<FeedPageItem>(
       pageStorageKey: 'articles-feed-page-view',
+      preserveOffscreenPage: true,
       feed: feed,
       emptyLabel: 'Articles are warming up.',
       controller: controller,
@@ -1334,7 +1335,6 @@ class _VideosFeedTab extends ConsumerWidget {
     final uiState = ref.watch(feedSurfaceUiStateProvider(FeedSurface.videos));
 
     return FeedTab<FeedPageItem>(
-      pageStorageKey: 'videos-feed-page-view',
       feed: feed,
       emptyLabel: 'Videos are warming up.',
       containsVideos: true,

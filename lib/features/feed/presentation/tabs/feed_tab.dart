@@ -26,11 +26,11 @@ const _loadMoreOrganicRemainingThreshold = 10;
 class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   const FeedTab({
     super.key,
-    required this.pageStorageKey,
     required this.feed,
     required this.builder,
     required this.emptyLabel,
     required this.onRefresh,
+    this.pageStorageKey,
     this.controller,
     this.onLoadMore,
     this.onPageChanged,
@@ -45,10 +45,11 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     this.topActionLabel,
     this.onTopAction,
     this.isActive = true,
+    this.preserveOffscreenPage = false,
     this.topActionDark = false,
   });
 
-  final String pageStorageKey;
+  final String? pageStorageKey;
   final AsyncValue<List<T>> feed;
   final Widget Function(T entry, bool isCurrentPage) builder;
   final String emptyLabel;
@@ -96,6 +97,12 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
   /// Whether this surface is currently visible to the user.
   final bool isActive;
 
+  /// Keeps an off-screen tab's page index frozen and restores it on re-entry.
+  ///
+  /// This exists for article continuity only. Video tabs intentionally keep the
+  /// May 1 behavior because their visible-page bookkeeping drives playback.
+  final bool preserveOffscreenPage;
+
   /// Whether the top pill should use the dark visual style.
   final bool topActionDark;
 
@@ -116,7 +123,7 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     // This effect MUST be registered before the listener effect below so that
     // its addPostFrameCallback fires first (callbacks run in insertion order).
     useEffect(() {
-      if (!isActive) return null;
+      if (!preserveOffscreenPage || !isActive) return null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
         if (!effectiveController.hasClients) return;
@@ -126,27 +133,34 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
         }
       });
       return null;
-    }, [isActive]);
+    }, [isActive, preserveOffscreenPage]);
 
     // Track the controller's page position — but only while this surface is
     // active (visible).  Keeping the listener detached while off-screen
     // ensures that a silent controller reset to 0 during a tab switch cannot
     // overwrite currentPage.value and defeat the restore above.
     useEffect(() {
-      if (!isActive) return null;
       void syncCurrentPage() {
-        if (!effectiveController.hasClients) return;
-        final page = effectiveController.page;
-        if (page == null) return;
-        final rounded = page.round();
-        if (rounded != currentPage.value) {
-          currentPage.value = rounded;
+        final nextIndex = () {
+          if (!effectiveController.hasClients) {
+            return effectiveController.initialPage;
+          }
+          final page = effectiveController.page;
+          if (page == null) {
+            return effectiveController.initialPage;
+          }
+          return page.round();
+        }();
+        if (nextIndex != currentPage.value) {
+          currentPage.value = nextIndex;
         }
       }
 
+      if (preserveOffscreenPage && !isActive) return null;
       effectiveController.addListener(syncCurrentPage);
+      WidgetsBinding.instance.addPostFrameCallback((_) => syncCurrentPage());
       return () => effectiveController.removeListener(syncCurrentPage);
-    }, [effectiveController, isActive]);
+    }, [effectiveController, isActive, preserveOffscreenPage]);
 
     // Preload first videos when data loads
     final hasVideos = containsVideos;
@@ -383,7 +397,9 @@ class FeedTab<T extends FeedPageItem> extends HookConsumerWidget {
     return Stack(
       children: [
         PageView.builder(
-          key: PageStorageKey<String>(pageStorageKey),
+          key: pageStorageKey == null
+              ? null
+              : PageStorageKey<String>(pageStorageKey!),
           controller: controller,
           scrollDirection: Axis.vertical,
           dragStartBehavior: DragStartBehavior.down,
