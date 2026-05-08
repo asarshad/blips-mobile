@@ -23,16 +23,32 @@ import '../test/test_utils/fake_feed_cache.dart';
 import '../test/test_utils/fake_youtube_player_manager.dart';
 import '../test/test_utils/recording_chat_repository.dart';
 
-const _feedTitle =
+// When BLIPS_MAX_LENGTH=true is passed via --dart-define, the feed article card
+// fixture is swapped for a stress-test variant: title sized to fill its 2-line
+// max, summary sized to the 70-word backend cap (ARTICLE_SUMMARY_MAX_OUTPUT_WORDS).
+// Used for layout review across device sizes — does not affect live marketing
+// screenshots on blips.tech (those run with BLIPS_MAX_LENGTH unset).
+const _isMaxLength = bool.fromEnvironment('BLIPS_MAX_LENGTH');
+
+const _feedTitleStandard =
     'OpenAI ships sharper memory controls as AI assistants move into daily work.';
+const _feedTitleMax =
+    'OpenAI ships sharper memory controls and personalization as AI assistants move into daily workflows.';
+const _feedTitle = _isMaxLength ? _feedTitleMax : _feedTitleStandard;
+
 const _videoTitle =
     'Nvidia, OpenAI, and Apple all just made the next AI device cycle easier to see.';
 const _reelTitle =
     'Three clips that explain where AI products, chips, and distribution are heading.';
 const _chatReply =
     'Here is the fast read: AI infrastructure, shipping cadence, and distribution economics are driving the story.';
-const _articleSummaryLong =
+// 70-word stress fixture (matches backend ARTICLE_SUMMARY_MAX_OUTPUT_WORDS cap).
+const _articleSummaryMax =
+    'OpenAI\'s new memory controls turn AI from a disposable prompt box into a tool people trust throughout the workday. Users no longer restate preferences, projects, and context each session, so assistants feel continuous, personal, and less repetitive. That shift reshapes retention, redesigns onboarding flows, and raises the bar for every product racing to become the interface people open first each morning before email, browser, or any traditional productivity software tool.';
+const _articleSummaryStandard =
     'OpenAI\'s latest memory controls matter because they turn AI from a disposable prompt box into a tool people can trust throughout the workday. Instead of forcing users to restate preferences, projects, and context every time, the assistant can now feel more continuous, more personalized, and less repetitive. That shift changes retention, changes workflow design, and raises the bar for every product competing to become the interface people open first each morning.';
+const _articleSummaryLong =
+    _isMaxLength ? _articleSummaryMax : _articleSummaryStandard;
 const _videoSummaryLong =
     'This video connects the dots between Nvidia\'s platform momentum, OpenAI\'s product cadence, and Apple\'s device strategy to explain why the next AI cycle may spread faster than the last one. It shows how hardware, distribution, and interface design are finally aligning in a way that makes mainstream adoption easier to imagine. For viewers, that means fewer isolated launches and a much clearer picture of where attention, consumer behavior, and product value are moving next.';
 // MacBook opening with colorful glow — sleek, dark-mode-friendly
