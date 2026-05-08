@@ -9,7 +9,7 @@ enum ArticleImageLayout {
 ///
 /// The data layer keeps `imageUrl` nullable. This widget is the single place
 /// that decides how to render missing or failed article images.
-class ArticleImage extends StatelessWidget {
+class ArticleImage extends StatefulWidget {
   const ArticleImage.hero({
     super.key,
     required this.imageUrl,
@@ -38,40 +38,138 @@ class ArticleImage extends StatelessWidget {
   bool get _isCompact => layout == ArticleImageLayout.thumbnail;
 
   @override
-  Widget build(BuildContext context) {
-    final mediaUrl = imageUrl?.trim();
+  State<ArticleImage> createState() => _ArticleImageState();
+}
+
+class _ArticleImageState extends State<ArticleImage> {
+  static const _minHeroWidth = 480;
+  static const _minHeroHeight = 240;
+  static const _minThumbnailWidth = 72;
+  static const _minThumbnailHeight = 72;
+
+  ImageProvider? _imageProvider;
+  ImageStream? _imageStream;
+  ImageStreamListener? _imageListener;
+  String? _resolvedUrl;
+  bool _lowResolution = false;
+  bool _loadFailed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolveImageIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant ArticleImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.layout != widget.layout) {
+      _resolveImageIfNeeded(force: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribeImageStream();
+    super.dispose();
+  }
+
+  void _resolveImageIfNeeded({bool force = false}) {
+    final mediaUrl = widget.imageUrl?.trim();
     if (mediaUrl == null || mediaUrl.isEmpty) {
+      _unsubscribeImageStream();
+      _imageProvider = null;
+      _resolvedUrl = null;
+      _lowResolution = false;
+      _loadFailed = false;
+      return;
+    }
+
+    if (!force && _resolvedUrl == mediaUrl && _imageProvider != null) {
+      return;
+    }
+
+    _unsubscribeImageStream();
+    _resolvedUrl = mediaUrl;
+    _lowResolution = false;
+    _loadFailed = false;
+
+    final provider = NetworkImage(mediaUrl);
+    _imageProvider = provider;
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    _imageStream = stream;
+    _imageListener = ImageStreamListener(
+      (info, _) {
+        final tooSmall = _isTooSmall(info.image.width, info.image.height);
+        if (!mounted || tooSmall == _lowResolution) return;
+        setState(() => _lowResolution = tooSmall);
+      },
+      onError: (_, __) {
+        if (!mounted || _loadFailed) return;
+        setState(() => _loadFailed = true);
+      },
+    );
+    stream.addListener(_imageListener!);
+  }
+
+  void _unsubscribeImageStream() {
+    final listener = _imageListener;
+    final stream = _imageStream;
+    if (listener != null && stream != null) {
+      stream.removeListener(listener);
+    }
+    _imageListener = null;
+    _imageStream = null;
+  }
+
+  bool _isTooSmall(int width, int height) {
+    if (widget._isCompact) {
+      return width < _minThumbnailWidth || height < _minThumbnailHeight;
+    }
+    return width < _minHeroWidth || height < _minHeroHeight;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaUrl = widget.imageUrl?.trim();
+    final provider = _imageProvider;
+    if (mediaUrl == null ||
+        mediaUrl.isEmpty ||
+        provider == null ||
+        _loadFailed ||
+        _lowResolution) {
       return _ArticleImagePlaceholder(
-        category: category,
-        source: source,
-        width: width,
-        height: height,
-        compact: _isCompact,
+        category: widget.category,
+        source: widget.source,
+        width: widget.width,
+        height: widget.height,
+        compact: widget._isCompact,
       );
     }
 
-    return Image.network(
-      mediaUrl,
-      width: width,
-      height: height,
+    return Image(
+      image: provider,
+      width: widget.width,
+      height: widget.height,
       fit: BoxFit.cover,
       loadingBuilder: (_, child, progress) {
         if (progress == null) return child;
         return _ArticleImagePlaceholder(
-          category: category,
-          source: source,
-          width: width,
-          height: height,
-          compact: _isCompact,
+          category: widget.category,
+          source: widget.source,
+          width: widget.width,
+          height: widget.height,
+          compact: widget._isCompact,
           loading: true,
         );
       },
       errorBuilder: (_, __, ___) => _ArticleImagePlaceholder(
-        category: category,
-        source: source,
-        width: width,
-        height: height,
-        compact: _isCompact,
+        category: widget.category,
+        source: widget.source,
+        width: widget.width,
+        height: widget.height,
+        compact: widget._isCompact,
       ),
     );
   }
