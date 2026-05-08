@@ -265,6 +265,11 @@ class VideoCard extends HookConsumerWidget {
                     controller: controller,
                     overlayState: overlayState,
                     playerError: playerError,
+                    onTap: () => _handleTap(
+                      showBubbles: showBubbles,
+                      videoManager: videoManager,
+                      playbackUrl: playbackUrl,
+                    ),
                   ),
                   category: entry.category,
                   title: entry.title,
@@ -277,13 +282,10 @@ class VideoCard extends HookConsumerWidget {
                     isNewSinceLastSeen: isNewSinceLastSeen,
                   ),
                   readTime: watchLabel,
-                  onMediaTap: () => _handleTap(
-                    showBubbles: showBubbles,
-                    videoManager: videoManager,
-                    playbackUrl: playbackUrl,
-                  ),
-                  onLongPress: () => _showActionsSheet(context, ref, feedRepository),
-                  onMoreOptions: () => _showActionsSheet(context, ref, feedRepository),
+                  onLongPress: () =>
+                      _showActionsSheet(context, ref, feedRepository),
+                  onMoreOptions: () =>
+                      _showActionsSheet(context, ref, feedRepository),
                   onContentTap: () => _openInBrowser(
                     repository: feedRepository,
                     sessionStore: sessionStore,
@@ -338,16 +340,17 @@ class VideoCard extends HookConsumerWidget {
       return;
     }
 
+    if (freshPlayerState == YTPlayerState.playing ||
+        freshController?.value.isPlaying == true ||
+        controllerState == PlayerState.playing) {
+      videoManager.pauseVideo(playbackUrl);
+      return;
+    }
+
     if (freshOverlayState == YTPlaybackOverlayState.manualPause ||
         freshOverlayState == YTPlaybackOverlayState.autoplayStalled ||
         freshOverlayState == YTPlaybackOverlayState.autoplayPending) {
       unawaited(videoManager.ensurePlayback(playbackUrl));
-      return;
-    }
-
-    if (freshPlayerState == YTPlayerState.playing ||
-        controllerState == PlayerState.playing) {
-      videoManager.pauseVideo(playbackUrl);
       return;
     }
 
@@ -610,12 +613,14 @@ class _VideoMedia extends StatelessWidget {
     required this.controller,
     required this.overlayState,
     required this.playerError,
+    required this.onTap,
   });
 
   final String thumbnailUrl;
   final YoutubePlayerController? controller;
   final YTPlaybackOverlayState overlayState;
   final YTPlayerError? playerError;
+  final VoidCallback onTap;
 
   /// Checks if controller exists and can render the underlying WebView.
   bool get _isControllerValid {
@@ -705,6 +710,17 @@ class _VideoMedia extends StatelessWidget {
 
           // Play button only appears after a user pause or a genuine autoplay stall.
           if (showPlayButton) _PlayButton(),
+
+          // The YouTube player is a native PlatformView on iOS. Parent
+          // GestureDetectors do not reliably receive taps through it, so the
+          // media region owns playback taps above the WebView, matching Reels.
+          Positioned.fill(
+            child: GestureDetector(
+              key: const ValueKey('video_playback_tap_overlay'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+            ),
+          ),
         ],
       ),
     );

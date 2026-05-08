@@ -234,6 +234,49 @@ void main() {
       expect(mockManager.calls, isNot(contains('pause:${videoEntry.link}')));
     });
 
+    testWidgets('tap overlay pauses currently playing video', (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.playing);
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      mockManager.calls.clear();
+
+      await tester
+          .tap(find.byKey(const ValueKey('video_playback_tap_overlay')));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls,
+        contains('pause:${videoEntry.videoUrl}'),
+        reason: 'Video media taps must be captured above the iOS WebView.',
+      );
+    });
+
+    testWidgets('tap overlay pauses even with stale pending overlay',
+        (tester) async {
+      mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.playing);
+      mockManager.setMockOverlayState(
+        videoEntry.videoUrl,
+        YTPlaybackOverlayState.autoplayPending,
+      );
+
+      await tester
+          .pumpWidget(buildTestWidget(entry: videoEntry, isVisible: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      mockManager.calls.clear();
+
+      await tester
+          .tap(find.byKey(const ValueKey('video_playback_tap_overlay')));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        mockManager.calls,
+        contains('pause:${videoEntry.videoUrl}'),
+        reason: 'Real playback state must win over stale overlay state.',
+      );
+    });
+
     testWidgets('error state shows message and tap retries playback URL',
         (tester) async {
       mockManager.setMockState(videoEntry.videoUrl, YTPlayerState.error);
@@ -248,7 +291,8 @@ void main() {
 
       expect(find.text('Video unavailable'), findsOneWidget);
 
-      await tester.tap(find.text('Video unavailable'));
+      await tester
+          .tap(find.byKey(const ValueKey('video_playback_tap_overlay')));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
@@ -323,7 +367,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       mockManager.calls.clear();
 
-      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester
+          .tap(find.byKey(const ValueKey('video_playback_tap_overlay')));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(
@@ -355,11 +400,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       mockManager.calls.clear();
 
-      // No play button or spinner is visible during autoplayPending — the
-      // thumbnail covers the media area. Tap the media region directly so
-      // the underlying onMediaTap handler fires.
-      final card = tester.getTopLeft(find.byType(VideoCard));
-      await tester.tapAt(card.translate(200, 80));
+      // No play button or spinner is visible during autoplayPending, but the
+      // explicit media overlay still owns play/pause taps above the WebView.
+      await tester
+          .tap(find.byKey(const ValueKey('video_playback_tap_overlay')));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(

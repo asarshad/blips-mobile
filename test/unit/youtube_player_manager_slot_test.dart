@@ -198,6 +198,50 @@ void main() {
 
       expect(m.getPlaybackOverlayState(_u0), YTPlaybackOverlayState.none);
     });
+
+    test(
+        'manualPause overlay persists when position > 250 ms (device regression)',
+        () async {
+      // Regression: on a real device the YouTube iframe advances position
+      // while playing. After pauseVideo() is called, position stays > 250 ms.
+      // The old code cleared _userPausedUrls whenever position > 250, so the
+      // play button never appeared and tapping did nothing visible.
+      final t = _Tracker();
+      final m = _manager(t);
+      addTearDown(m.dispose);
+
+      await m.playVideo(_u0);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      // Simulate the controller reporting that 5 s of video has elapsed.
+      final ctrl = t.created.first;
+      ctrl.updateValue(
+        ctrl.value.copyWith(
+          playerState: PlayerState.playing,
+          position: const Duration(milliseconds: 5000),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      // Now the user pauses.
+      m.pauseVideo(_u0);
+
+      // Controller acknowledges the pause (position stays at 5 s).
+      ctrl.updateValue(
+        ctrl.value.copyWith(
+          playerState: PlayerState.paused,
+          position: const Duration(milliseconds: 5000),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(
+        m.getPlaybackOverlayState(_u0),
+        YTPlaybackOverlayState.manualPause,
+        reason: 'play button must remain visible after tap-to-pause '
+            'even when video position is well past 250 ms',
+      );
+    });
   });
 
   group('retryVideo', () {

@@ -123,11 +123,22 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       if (_slotByUrl[url] != slot) return; // stale after release+recreate
 
       final playerState = controller.value.playerState;
-      final isPlaying = playerState == PlayerState.playing ||
+      // isActuallyPlaying uses only the iframe playerState — not position —
+      // so it is false when the video is paused at a non-zero position.
+      // position.inMilliseconds > 250 stays true after a pause, so if we
+      // used it here we would immediately re-clear the user-pause intent
+      // that pauseVideo() just set, making the play button vanish on device.
+      final isActuallyPlaying = playerState == PlayerState.playing;
+      // For stall detection we still use the position heuristic: a video
+      // whose position has advanced is not stalled, even if playerState lags.
+      final isPlaying = isActuallyPlaying ||
           controller.value.position.inMilliseconds > 250;
 
       if (isPlaying) {
         _stalledUrls.remove(url);
+      }
+
+      if (isActuallyPlaying) {
         _userPausedUrls.remove(url);
         // Unmute now that playback has started — we muted to satisfy iOS's
         // requirement that the first programmatic play be muted.
@@ -276,13 +287,17 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
     if (ctrl.value.errorCode != 0) return YTPlaybackOverlayState.error;
 
-    final playing = ctrl.value.playerState == PlayerState.playing ||
-        ctrl.value.position.inMilliseconds > 250;
-    if (playing) return YTPlaybackOverlayState.none;
-
+    // Check user-paused BEFORE the position heuristic. Once a video has
+    // played past 250 ms, position stays > 250 even while paused — if we
+    // checked position first we would skip the manualPause branch and the
+    // play button would never appear after a tap-to-pause on a real device.
     if (_userPausedUrls.contains(url)) {
       return YTPlaybackOverlayState.manualPause;
     }
+
+    final playing = ctrl.value.playerState == PlayerState.playing ||
+        ctrl.value.position.inMilliseconds > 250;
+    if (playing) return YTPlaybackOverlayState.none;
     if (_stalledUrls.contains(url)) {
       return YTPlaybackOverlayState.autoplayStalled;
     }
