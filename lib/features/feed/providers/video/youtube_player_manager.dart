@@ -409,6 +409,16 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (currentIndex < 0 || currentIndex >= videoUrls.length) return;
 
     final currentUrl = videoUrls[currentIndex];
+
+    // No-op when nothing has actually changed. The shell page watches this
+    // manager (so any pause notify rebuilds it), which causes the Videos
+    // FeedTab to recompute a new feed list and re-fire its preloading
+    // useEffect. Without this guard, every tap-to-pause would trigger
+    // onPageChanged → clear _userPausedUrls → playVideo → instant resume.
+    if (_userPausedUrls.contains(currentUrl)) {
+      return;
+    }
+
     _currentActiveUrl = currentUrl;
     _stallTimer?.cancel();
     _stalledUrls.remove(currentUrl);

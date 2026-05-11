@@ -42,10 +42,10 @@ class ArticleImage extends StatefulWidget {
 }
 
 class _ArticleImageState extends State<ArticleImage> {
-  static const _minHeroWidth = 480;
-  static const _minHeroHeight = 240;
-  static const _minThumbnailWidth = 72;
-  static const _minThumbnailHeight = 72;
+  static const _minHeroWidth = 320;
+  static const _minHeroHeight = 180;
+  static const _minThumbnailWidth = 48;
+  static const _minThumbnailHeight = 48;
 
   ImageProvider? _imageProvider;
   ImageStream? _imageStream;
@@ -137,14 +137,21 @@ class _ArticleImageState extends State<ArticleImage> {
     if (mediaUrl == null ||
         mediaUrl.isEmpty ||
         provider == null ||
-        _loadFailed ||
-        _lowResolution) {
+        _loadFailed) {
       return _ArticleImagePlaceholder(
         category: widget.category,
         source: widget.source,
         width: widget.width,
         height: widget.height,
         compact: widget._isCompact,
+      );
+    }
+
+    if (_lowResolution) {
+      return _TiledArticleImage(
+        imageProvider: provider,
+        width: widget.width,
+        height: widget.height,
       );
     }
 
@@ -170,6 +177,47 @@ class _ArticleImageState extends State<ArticleImage> {
         width: widget.width,
         height: widget.height,
         compact: widget._isCompact,
+      ),
+    );
+  }
+}
+
+class _TiledArticleImage extends StatelessWidget {
+  static const _tileWidth = 160.0;
+  static const _tileHeight = 90.0;
+
+  const _TiledArticleImage({
+    required this.imageProvider,
+    required this.width,
+    required this.height,
+  });
+
+  final ImageProvider imageProvider;
+  final double? width;
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          maxWidth: double.infinity,
+          maxHeight: double.infinity,
+          child: Image(
+            image: ResizeImage(
+              imageProvider,
+              width: _tileWidth.round(),
+              height: _tileHeight.round(),
+            ),
+            width: _tileWidth,
+            height: _tileHeight,
+            fit: BoxFit.cover,
+            repeat: ImageRepeat.repeat,
+          ),
+        ),
       ),
     );
   }

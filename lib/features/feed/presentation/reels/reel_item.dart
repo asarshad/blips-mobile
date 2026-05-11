@@ -216,14 +216,13 @@ class ReelItem extends HookConsumerWidget {
     }, const []);
 
     final isError = overlayState == YTPlaybackOverlayState.error;
-    final showPlayIndicator =
-        overlayState == YTPlaybackOverlayState.manualPause ||
-            overlayState == YTPlaybackOverlayState.autoplayStalled;
-
     // Mount the player whenever a controller exists so iframe initialization
     // can progress while state is still loading. Thumbnail/spinner overlays
     // remain on top until real playback starts.
     final showVideo = controller != null;
+    final showPlayIndicator =
+        (overlayState == YTPlaybackOverlayState.manualPause && !showVideo) ||
+            overlayState == YTPlaybackOverlayState.autoplayStalled;
 
     // While the iOS share sheet is open, the YouTube WebView (PlatformView)
     // sits in its own native UIView layer and intercepts taps that would
@@ -278,8 +277,8 @@ class ReelItem extends HookConsumerWidget {
                       ),
                     ),
 
-                    // Show the play affordance only after a user pause or when
-                    // autoplay recovery has genuinely stalled.
+                    // Show our play affordance only when the iframe does not
+                    // already draw one, or autoplay recovery genuinely stalls.
                     if (isActive && showPlayIndicator)
                       const IgnorePointer(child: _PlayIndicator()),
 

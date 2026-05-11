@@ -337,6 +337,32 @@ void main() {
       expect(m.getState(_u1), YTPlayerState.playing);
     });
 
+    test('same-page bookkeeping does not resume a manually paused video',
+        () async {
+      final t = _Tracker();
+      final m = _manager(t);
+      addTearDown(m.dispose);
+
+      await m.playVideo(_u0);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      m.pauseVideo(_u0);
+      final createdAfterPause = t.created.length;
+
+      m.onPageChanged(
+        currentIndex: 0,
+        videoUrls: [_u0, _u1],
+        preloadAhead: 1,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(t.created.length, createdAfterPause);
+      expect(m.getState(_u0), YTPlayerState.paused);
+      expect(
+        m.getPlaybackOverlayState(_u0),
+        YTPlaybackOverlayState.manualPause,
+      );
+    });
+
     test('out-of-bounds index is a no-op', () {
       final t = _Tracker();
       final m = _manager(t);

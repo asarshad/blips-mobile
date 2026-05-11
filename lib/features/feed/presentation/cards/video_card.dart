@@ -630,8 +630,9 @@ class _VideoMedia extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showPlayer = _isControllerValid;
-    final showPlayButton = overlayState == YTPlaybackOverlayState.manualPause ||
-        overlayState == YTPlaybackOverlayState.autoplayStalled;
+    final showPlayButton =
+        (overlayState == YTPlaybackOverlayState.manualPause && !showPlayer) ||
+            overlayState == YTPlaybackOverlayState.autoplayStalled;
     final showError = overlayState == YTPlaybackOverlayState.error;
 
     return ClipRect(
@@ -706,14 +707,10 @@ class _VideoMedia extends StatelessWidget {
             ),
           ),
 
-          if (showError) _VideoErrorOverlay(error: playerError),
-
-          // Play button only appears after a user pause or a genuine autoplay stall.
-          if (showPlayButton) _PlayButton(),
-
-          // The YouTube player is a native PlatformView on iOS. Parent
-          // GestureDetectors do not reliably receive taps through it, so the
-          // media region owns playback taps above the WebView, matching Reels.
+          // Tap capture overlay above the PlatformView so taps always reach
+          // our play/pause handler, even when WebView swallows them. Mirrors
+          // the Reels layout exactly — indicators sit ABOVE this layer and
+          // are wrapped in IgnorePointer so they don't compete for the tap.
           Positioned.fill(
             child: GestureDetector(
               key: const ValueKey('video_playback_tap_overlay'),
@@ -721,6 +718,12 @@ class _VideoMedia extends StatelessWidget {
               onTap: onTap,
             ),
           ),
+
+          // Play button only appears when the iframe does not already draw one.
+          if (showPlayButton) IgnorePointer(child: _PlayButton()),
+
+          if (showError)
+            IgnorePointer(child: _VideoErrorOverlay(error: playerError)),
         ],
       ),
     );
