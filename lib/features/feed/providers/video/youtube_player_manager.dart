@@ -86,6 +86,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
   String? _currentActiveUrl;
   final Set<String> _userPausedUrls = {};
   final Set<String> _stalledUrls = {};
+  final Set<String> _systemPausedUrls = {};
 
   Timer? _stallTimer;
   bool _isDisposed = false;
@@ -131,8 +132,35 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       final isActuallyPlaying = playerState == PlayerState.playing;
       // For stall detection we still use the position heuristic: a video
       // whose position has advanced is not stalled, even if playerState lags.
-      final isPlaying = isActuallyPlaying ||
-          controller.value.position.inMilliseconds > 250;
+      final isPlaying =
+          isActuallyPlaying || controller.value.position.inMilliseconds > 250;
+
+      if (_userPausedUrls.contains(url)) {
+        if (isActuallyPlaying || playerState == PlayerState.buffering) {
+          try {
+            controller.pause();
+          } catch (_) {}
+        }
+        _stalledUrls.remove(url);
+        _notifySafe();
+        return;
+      }
+
+      if (playerState == PlayerState.paused ||
+          playerState == PlayerState.ended) {
+        if (_systemPausedUrls.remove(url)) {
+          _notifySafe();
+          return;
+        }
+        if (url == _currentActiveUrl && !_userPausedUrls.contains(url)) {
+          _currentActiveUrl = null;
+          _stallTimer?.cancel();
+          _stalledUrls.remove(url);
+          _userPausedUrls.add(url);
+          _notifySafe();
+          return;
+        }
+      }
 
       if (isPlaying) {
         _stalledUrls.remove(url);
@@ -185,6 +213,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _slots.remove(slot);
     _userPausedUrls.remove(url);
     _stalledUrls.remove(url);
+    _systemPausedUrls.remove(url);
     if (_currentActiveUrl == url) _currentActiveUrl = null;
     if (kDebugMode) {
       debugPrint(
@@ -206,13 +235,12 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     if (_slots.isEmpty) return;
     // Prefer evicting non-active slots; fall back to the oldest slot overall
     // when all slots are the active URL (e.g. maxControllers == 1).
-    final nonActive =
-        _slots.where((s) => s.url != _currentActiveUrl).toList();
+    final nonActive = _slots.where((s) => s.url != _currentActiveUrl).toList();
     final candidate = nonActive.isNotEmpty
-        ? nonActive.reduce(
-            (a, b) => a.lastTouched.isBefore(b.lastTouched) ? a : b)
-        : _slots.reduce(
-            (a, b) => a.lastTouched.isBefore(b.lastTouched) ? a : b);
+        ? nonActive
+            .reduce((a, b) => a.lastTouched.isBefore(b.lastTouched) ? a : b)
+        : _slots
+            .reduce((a, b) => a.lastTouched.isBefore(b.lastTouched) ? a : b);
     if (kDebugMode) {
       debugPrint('YoutubePlayerManager: LRU evicting ${candidate.url}');
     }
@@ -250,21 +278,19 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
   @override
   YTPlayerState getState(String url) {
+    if (_userPausedUrls.contains(url)) return YTPlayerState.paused;
     final ctrl = _slotByUrl[url]?.controller;
     if (ctrl == null) return YTPlayerState.idle;
     if (ctrl.value.errorCode != 0) return YTPlayerState.error;
-    if (_userPausedUrls.contains(url)) return YTPlayerState.paused;
     return switch (ctrl.value.playerState) {
       PlayerState.playing => YTPlayerState.playing,
       PlayerState.paused => YTPlayerState.paused,
       PlayerState.ended => YTPlayerState.paused,
-      PlayerState.buffering => ctrl.value.isReady
-          ? YTPlayerState.ready
-          : YTPlayerState.loading,
+      PlayerState.buffering =>
+        ctrl.value.isReady ? YTPlayerState.ready : YTPlayerState.loading,
       PlayerState.unStarted => YTPlayerState.ready,
       PlayerState.cued => YTPlayerState.ready,
-      _ =>
-        ctrl.value.isReady ? YTPlayerState.ready : YTPlayerState.loading,
+      _ => ctrl.value.isReady ? YTPlayerState.ready : YTPlayerState.loading,
     };
   }
 
@@ -277,6 +303,10 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
   @override
   YTPlaybackOverlayState getPlaybackOverlayState(String url) {
+    if (_userPausedUrls.contains(url)) {
+      return YTPlaybackOverlayState.manualPause;
+    }
+
     final ctrl = _slotByUrl[url]?.controller;
 
     if (ctrl == null) {
@@ -291,10 +321,6 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // played past 250 ms, position stays > 250 even while paused — if we
     // checked position first we would skip the manualPause branch and the
     // play button would never appear after a tap-to-pause on a real device.
-    if (_userPausedUrls.contains(url)) {
-      return YTPlaybackOverlayState.manualPause;
-    }
-
     final playing = ctrl.value.playerState == PlayerState.playing ||
         ctrl.value.position.inMilliseconds > 250;
     if (playing) return YTPlaybackOverlayState.none;
@@ -334,6 +360,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
 
     _currentActiveUrl = url;
     _userPausedUrls.remove(url);
+    _systemPausedUrls.remove(url);
     _stalledUrls.remove(url);
     _armStallTimer(url);
 
@@ -361,6 +388,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
       _stallTimer?.cancel();
     }
     _userPausedUrls.add(url);
+    _systemPausedUrls.remove(url);
     _stalledUrls.remove(url);
     try {
       _slotByUrl[url]?.controller.pause();
@@ -374,6 +402,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _currentActiveUrl = null;
     for (final slot in _slots) {
       try {
+        _systemPausedUrls.add(slot.url);
         slot.controller.pause();
       } catch (_) {}
     }
@@ -385,6 +414,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     // Preserve _currentActiveUrl so the correct video resumes on foreground.
     for (final slot in _slots) {
       try {
+        _systemPausedUrls.add(slot.url);
         slot.controller.pause();
       } catch (_) {}
     }
@@ -423,6 +453,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
     _stallTimer?.cancel();
     _stalledUrls.remove(currentUrl);
     _userPausedUrls.remove(currentUrl);
+    _systemPausedUrls.remove(currentUrl);
 
     // Compute keep-window.
     final ahead = (preloadAhead ?? MemoryConfig.reelPreloadCount)
@@ -454,6 +485,7 @@ class YoutubePlayerManager extends YoutubePlayerManagerBase
           // media session has ever been established.
           if (ps == PlayerState.playing || ps == PlayerState.buffering) {
             try {
+              _systemPausedUrls.add(url);
               s.controller.pause();
             } catch (_) {}
           }

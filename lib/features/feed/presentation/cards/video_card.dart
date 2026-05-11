@@ -688,9 +688,11 @@ class _VideoMedia extends StatelessWidget {
           // Video player when ready and controller is valid
           if (showPlayer)
             Positioned.fill(
-              child: YoutubePlayer(
-                controller: controller!,
-                showVideoProgressIndicator: false,
+              child: IgnorePointer(
+                child: YoutubePlayer(
+                  controller: controller!,
+                  showVideoProgressIndicator: false,
+                ),
               ),
             ),
 

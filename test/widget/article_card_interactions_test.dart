@@ -127,7 +127,7 @@ void main() {
       (tester) async {
     await pumpHarness(tester);
 
-    await tester.tap(find.byType(Image).first);
+    await tester.tap(find.byKey(const Key('feed-card-media-tap-area')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -141,7 +141,7 @@ void main() {
   testWidgets('image viewer closes from the close button', (tester) async {
     await pumpHarness(tester);
 
-    await tester.tap(find.byType(Image).first);
+    await tester.tap(find.byKey(const Key('feed-card-media-tap-area')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const Key('article-image-viewer-close')));
@@ -153,7 +153,7 @@ void main() {
   testWidgets('image viewer closes on vertical swipe', (tester) async {
     await pumpHarness(tester);
 
-    await tester.tap(find.byType(Image).first);
+    await tester.tap(find.byKey(const Key('feed-card-media-tap-area')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     await tester.drag(

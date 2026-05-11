@@ -603,11 +603,13 @@ class _YoutubeVideoLayer extends StatelessWidget {
         child: SizedBox(
           width: MediaQuery.of(context).size.width,
           height: MediaQuery.of(context).size.width * 16 / 9,
-          child: YoutubePlayer(
-            controller: controller,
-            progressColors: const ProgressBarColors(
-              playedColor: Colors.white,
-              handleColor: Colors.white,
+          child: IgnorePointer(
+            child: YoutubePlayer(
+              controller: controller,
+              progressColors: const ProgressBarColors(
+                playedColor: Colors.white,
+                handleColor: Colors.white,
+              ),
             ),
           ),
         ),

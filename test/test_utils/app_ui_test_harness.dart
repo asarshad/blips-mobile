@@ -1,4 +1,5 @@
 import 'package:blips_mobile/app.dart';
+import 'package:blips_mobile/features/ads/data/app_config_repository.dart';
 import 'package:blips_mobile/features/ads/domain/ads_config.dart';
 import 'package:blips_mobile/features/ads/providers/ads_providers.dart';
 import 'package:blips_mobile/features/chat/data/chat_repository.dart';
@@ -31,6 +32,8 @@ Widget buildAppUiHarness({
       onboardingDoneProvider.overrideWith((ref) async => onboardingDone),
       termsAcceptedProvider.overrideWith((ref) async => termsAccepted),
       adsConfigProvider.overrideWith((ref) async => const AdsConfig()),
+      appConfigRepositoryProvider
+          .overrideWithValue(AppConfigRepository(api)),
       feedRepositoryProvider.overrideWithValue(FeedRepository(api)),
       feedCacheProvider.overrideWithValue(cache ?? FakeFeedCache()),
       chatRepositoryProvider

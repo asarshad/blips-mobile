@@ -181,6 +181,7 @@ class _AspectRatioLayout extends StatelessWidget {
               width: double.infinity,
               height: mediaHeight,
               child: _TapSection(
+                key: const Key('feed-card-media-tap-area'),
                 onTap: onMediaTap,
                 child: media,
               ),
@@ -222,6 +223,7 @@ class _FlexLayout extends StatelessWidget {
           flex: 39,
           child: SizedBox.expand(
             child: _TapSection(
+              key: const Key('feed-card-media-tap-area'),
               onTap: onMediaTap,
               child: media,
             ),
@@ -241,6 +243,7 @@ class _FlexLayout extends StatelessWidget {
 
 class _TapSection extends StatelessWidget {
   const _TapSection({
+    super.key,
     required this.child,
     this.onTap,
   });

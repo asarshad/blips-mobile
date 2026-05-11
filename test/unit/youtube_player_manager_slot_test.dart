@@ -177,8 +177,12 @@ void main() {
 
       await m.playVideo(_u0);
       await Future<void>.delayed(const Duration(milliseconds: 30));
+      final ctrl = t.created.first;
       m.pauseVideo(_u0);
 
+      expect(ctrl.disposeCount, 0);
+      expect(m.getController(_u0), same(ctrl));
+      expect(m.getState(_u0), YTPlayerState.paused);
       expect(
         m.getPlaybackOverlayState(_u0),
         YTPlaybackOverlayState.manualPause,
@@ -196,6 +200,7 @@ void main() {
       await m.playVideo(_u0);
       await Future<void>.delayed(const Duration(milliseconds: 30));
 
+      expect(t.created.length, 1);
       expect(m.getPlaybackOverlayState(_u0), YTPlaybackOverlayState.none);
     });
 
@@ -225,21 +230,43 @@ void main() {
 
       // Now the user pauses.
       m.pauseVideo(_u0);
-
-      // Controller acknowledges the pause (position stays at 5 s).
-      ctrl.updateValue(
-        ctrl.value.copyWith(
-          playerState: PlayerState.paused,
-          position: const Duration(milliseconds: 5000),
-        ),
-      );
       await Future<void>.delayed(const Duration(milliseconds: 30));
 
+      expect(ctrl.disposeCount, 0);
+      expect(m.getController(_u0), same(ctrl));
       expect(
         m.getPlaybackOverlayState(_u0),
         YTPlaybackOverlayState.manualPause,
         reason: 'play button must remain visible after tap-to-pause '
             'even when video position is well past 250 ms',
+      );
+    });
+
+    test('active iframe pause is treated as a manual pause', () async {
+      final t = _Tracker();
+      final m = _manager(t);
+      addTearDown(m.dispose);
+
+      await m.playVideo(_u0);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      final ctrl = t.created.first;
+      ctrl.updateValue(
+        ctrl.value.copyWith(
+          playerState: PlayerState.paused,
+          position: const Duration(seconds: 5),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(m.getState(_u0), YTPlayerState.paused);
+      expect(ctrl.disposeCount, 0);
+      expect(m.getController(_u0), same(ctrl));
+      expect(
+        m.getPlaybackOverlayState(_u0),
+        YTPlaybackOverlayState.manualPause,
+        reason: 'Android WebView taps can pause inside the iframe before '
+            'Flutter sees the tap; that pause must not be auto-resumed.',
       );
     });
   });
@@ -390,6 +417,24 @@ void main() {
       expect(m.getController(_u0), isNotNull);
       expect(m.getController(_u1), isNotNull);
       expect(t.disposeCount, 0);
+    });
+
+    test('system pause does not become manual pause', () async {
+      final t = _Tracker();
+      final m = _manager(t);
+      addTearDown(m.dispose);
+
+      await m.playVideo(_u0);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      m.pauseAll();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(m.getState(_u0), YTPlayerState.paused);
+      expect(
+        m.getPlaybackOverlayState(_u0),
+        isNot(YTPlaybackOverlayState.manualPause),
+      );
     });
   });
 
