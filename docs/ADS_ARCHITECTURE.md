@@ -1,13 +1,13 @@
 # Ads Architecture
 
-> **Status**: Ads-ready scaffold. No ad SDK is bundled. All surfaces are **disabled by default**.
+> **Status**: AdMob is **live and integrated** on both iOS and Android. Surfaces are server-feature-flagged — `ADS_ENABLED` on the backend controls whether ads are shown without requiring an app update.
 
 ## Guiding Principles
 
 | Principle | Detail |
 |-----------|--------|
-| **No ad SDK** | No AdMob, Google Ads, or third-party tracking SDK is included. |
-| **Off by default** | Every flag defaults to `false` / `0`. The app never shows ads unless the server explicitly enables them. |
+| **AdMob integrated** | `google_mobile_ads` SDK is bundled. AdMob App ID is declared in `AndroidManifest.xml` (`blipsAdMobAppId`) and `Info.plist`. |
+| **Server-controlled** | Every flag defaults to `false` / `0`. The app never shows ads unless the backend `GET /config` response enables them. |
 | **Single-swap integration** | A real ad provider can be enabled later by replacing **one** Riverpod provider (`adProviderProvider`). |
 | **Zero UX degradation** | When ads are disabled, the feed, performance, and UX are completely unaffected. |
 | **"Sponsored" label** | Every ad surface carries a clear `Sponsored` badge (or custom label). |
