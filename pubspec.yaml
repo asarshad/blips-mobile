@@ -56,7 +56,7 @@ dependencies:
   url_launcher: ^6.3.2
   uuid: ^4.2.1
   youtube_player_flutter: ^9.1.3
-  google_mobile_ads: ^7.0.0
+  google_mobile_ads: ^8.0.0
 
 dev_dependencies:
   analyzer: ^10.0.1
